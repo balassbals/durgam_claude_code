@@ -1,0 +1,210 @@
+name: CI
+
+on:
+  push:
+    branches: ["master", "main", "m0-*"]
+  pull_request:
+    branches: ["main"]
+
+env:
+  PYTHON_VERSION: "3.13"
+
+jobs:
+  lint:
+    name: Lint & format check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: ruff check
+        run: uv run ruff check .
+
+      - name: ruff format check
+        run: uv run ruff format --check .
+
+  type-check:
+    name: Type check (mypy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: mypy
+        run: uv run mypy durgam/
+        env:
+          DATABASE_URL: postgresql+psycopg://durgam:durgam@localhost:5432/durgam
+          DATABASE_URL_SYNC: postgresql+psycopg://durgam:durgam@localhost:5432/durgam
+          SECRET_KEY: ci-secret-key
+
+  test-unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Run unit tests
+        run: uv run pytest tests/unit/ -v --no-cov
+        env:
+          DATABASE_URL: postgresql+psycopg://durgam:durgam@localhost:5432/durgam
+          DATABASE_URL_SYNC: postgresql+psycopg://durgam:durgam@localhost:5432/durgam
+          SECRET_KEY: ci-secret-key
+
+  test-integration:
+    name: Integration tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: durgam
+          POSTGRES_PASSWORD: durgam
+          POSTGRES_DB: durgam
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U durgam"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Create test database
+        run: >-
+          PGPASSWORD=durgam psql -h localhost -U durgam -d postgres
+          -c "CREATE DATABASE durgam_test OWNER durgam;"
+        env:
+          PGPASSWORD: durgam
+
+      - name: Run Alembic migration (dev DB)
+        run: uv run alembic upgrade head
+        env:
+          DATABASE_URL: postgresql+psycopg://durgam:durgam@localhost:5432/durgam
+          DATABASE_URL_SYNC: postgresql+psycopg://durgam:durgam@localhost:5432/durgam
+          SECRET_KEY: ci-secret-key
+
+      - name: Run integration tests
+        run: uv run pytest tests/integration/ -v --no-cov
+        env:
+          DATABASE_URL: postgresql+psycopg://durgam:durgam@localhost:5432/durgam
+          DATABASE_URL_SYNC: postgresql+psycopg://durgam:durgam@localhost:5432/durgam
+          TEST_DATABASE_URL: postgresql+psycopg://durgam:durgam@localhost:5432/durgam_test
+          SECRET_KEY: ci-secret-key
+
+  migration-check:
+    name: Migration round-trip
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: durgam
+          POSTGRES_PASSWORD: durgam
+          POSTGRES_DB: durgam
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U durgam"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Upgrade to head
+        run: uv run alembic upgrade head
+        env:
+          DATABASE_URL: postgresql+psycopg://durgam:durgam@localhost:5432/durgam
+          DATABASE_URL_SYNC: postgresql+psycopg://durgam:durgam@localhost:5432/durgam
+          SECRET_KEY: ci-secret-key
+
+      - name: Downgrade -1
+        run: uv run alembic downgrade -1
+        env:
+          DATABASE_URL: postgresql+psycopg://durgam:durgam@localhost:5432/durgam
+          DATABASE_URL_SYNC: postgresql+psycopg://durgam:durgam@localhost:5432/durgam
+          SECRET_KEY: ci-secret-key
+
+      - name: Upgrade back to head
+        run: uv run alembic upgrade head
+        env:
+          DATABASE_URL: postgresql+psycopg://durgam:durgam@localhost:5432/durgam
+          DATABASE_URL_SYNC: postgresql+psycopg://durgam:durgam@localhost:5432/durgam
+          SECRET_KEY: ci-secret-key
+
+  docker-build:
+    name: Docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build --target app -t durgam:ci .
