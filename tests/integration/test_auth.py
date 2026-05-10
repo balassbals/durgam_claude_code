@@ -1,0 +1,116 @@
+"""Integration tests for can() and write_audit_row() against real PostgreSQL."""
+
+from uuid import uuid4
+
+from sqlmodel import Session
+
+from durgam.audit.log import write_audit_row
+from durgam.auth.permissions import can
+from durgam.models.identity import Permission, Role, RolePermission, User, UserRole
+
+
+def _make_user(session: Session, *, active: bool = True, deleted: bool = False) -> User:
+    user = User(
+        username=f"u_{uuid4().hex[:8]}",
+        email=f"u_{uuid4().hex[:8]}@test.com",
+        password_hash="x",
+        is_active=active,
+        is_deleted=deleted,
+    )
+    session.add(user)
+    session.flush()
+    return user
+
+
+def _grant(session: Session, user: User, action: str, resource: str, scope: str) -> None:
+    role = Role(code=f"R_{uuid4().hex[:8]}", name="R", level=1)
+    perm = Permission(resource=resource, action=action, scope=scope)
+    session.add_all([role, perm])
+    session.flush()
+    session.add(RolePermission(role_id=role.id, permission_id=perm.id))
+    session.add(UserRole(user_id=user.id, role_id=role.id))
+    session.flush()
+
+
+class TestCan:
+    def test_permitted_principal_returns_true(self, db_session):
+        user = _make_user(db_session)
+        _grant(db_session, user, "read", "report", "*")
+        assert can(user.id, "read", "report", "*", None, db_session) is True
+
+    def test_denied_principal_returns_false(self, db_session):
+        user = _make_user(db_session)
+        assert can(user.id, "delete", "report", "*", None, db_session) is False
+
+    def test_inactive_user_denied(self, db_session):
+        user = _make_user(db_session, active=False)
+        _grant(db_session, user, "read", "report", "*")
+        assert can(user.id, "read", "report", "*", None, db_session) is False
+
+    def test_soft_deleted_user_denied(self, db_session):
+        user = _make_user(db_session, deleted=True)
+        _grant(db_session, user, "read", "report", "*")
+        assert can(user.id, "read", "report", "*", None, db_session) is False
+
+    def test_wildcard_scope_grants_any_scope_type(self, db_session):
+        user = _make_user(db_session)
+        _grant(db_session, user, "approve", "leave_request", "*")
+        assert can(user.id, "approve", "leave_request", "department", None, db_session) is True
+
+    def test_scoped_permission_denied_for_different_scope(self, db_session):
+        user = _make_user(db_session)
+        _grant(db_session, user, "approve", "leave_request", "department")
+        assert can(user.id, "approve", "leave_request", "campus", None, db_session) is False
+
+
+class TestWriteAuditRow:
+    def test_creates_row_with_diff(self, db_session):
+        actor = uuid4()
+        row = write_audit_row(
+            actor_user_id=actor,
+            actor_role_code="ADMIN",
+            action="update",
+            resource="user",
+            resource_id="user-123",
+            request_id="req-1",
+            ip="127.0.0.1",
+            user_agent="pytest",
+            before={"name": "Alice"},
+            after={"name": "Bob"},
+            session=db_session,
+        )
+        assert row.id is not None
+        assert row.diff_json == {"name": ["Alice", "Bob"]}
+        assert row.actor_user_id == actor
+
+    def test_creation_diff_is_all_none_to_value(self, db_session):
+        row = write_audit_row(
+            actor_user_id=None,
+            actor_role_code=None,
+            action="create",
+            resource="role",
+            resource_id="role-1",
+            request_id=None,
+            ip=None,
+            user_agent=None,
+            before=None,
+            after={"code": "DEAN"},
+            session=db_session,
+        )
+        assert row.diff_json == {"code": [None, "DEAN"]}
+
+    def test_no_diff_if_nothing_changed(self, db_session):
+        row = write_audit_row(
+            actor_user_id=None,
+            actor_role_code=None,
+            action="noop",
+            resource="x",
+            resource_id=None,
+            request_id=None,
+            ip=None,
+            user_agent=None,
+            before={"a": 1},
+            after={"a": 1},
+            session=db_session,
+        )
+        assert row.diff_json == {}

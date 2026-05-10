@@ -8,3 +8,27 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Reflex frontend build
+.web/
+node_modules/
+
+# Environment — never commit secrets
+.env
+
+# Test / coverage artefacts
+.pytest_cache/
+.coverage
+htmlcov/
+.hypothesis/
+
+# Mypy / ruff caches
+.mypy_cache/
+.ruff_cache/
+
+# Editor
+.idea/
+.vscode/
+
+# macOS
+.DS_Store
