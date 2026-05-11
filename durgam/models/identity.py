@@ -7,9 +7,9 @@ from uuid import UUID
 import sqlalchemy as sa
 from sqlmodel import Field, Relationship, SQLModel
 
-_TIMESTAMPTZ: type[Any] = cast(type[Any], sa.DateTime(timezone=True))
-
 from .base import TimestampedSoftDelete
+
+_TIMESTAMPTZ: type[Any] = cast(type[Any], sa.DateTime(timezone=True))
 
 
 class User(TimestampedSoftDelete, table=True):
