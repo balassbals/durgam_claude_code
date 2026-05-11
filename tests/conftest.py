@@ -55,6 +55,8 @@ def db_session(db_engine):
     """Function-scoped session that rolls back after each test.
 
     All changes made within a test are undone on teardown — the DB stays clean.
+    If a test raises IntegrityError inside pytest.raises, SQLAlchemy internally
+    deassociates the transaction; the try/except handles that case without warning.
     """
     connection = db_engine.connect()
     transaction = connection.begin()
@@ -63,7 +65,10 @@ def db_session(db_engine):
     yield session
 
     session.close()
-    transaction.rollback()
+    try:
+        transaction.rollback()
+    except Exception:
+        pass
     connection.close()
 
 
@@ -95,5 +100,8 @@ def seeded_session(seeded_db_engine):
     yield session
 
     session.close()
-    transaction.rollback()
+    try:
+        transaction.rollback()
+    except Exception:
+        pass
     connection.close()

@@ -20,6 +20,7 @@ class TimestampedSoftDelete(SQLModel):
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
 
+    # TODO(tech-debt-utcnow): see docs/tech_debt.md
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC),
         sa_type=_TIMESTAMPTZ,
