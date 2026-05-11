@@ -2,46 +2,55 @@
 
 ## Active
 
-### TD-002 — SAWarning: transaction already deassociated from connection
+### TD-003 — apply_theme() return type widened to dict[Any, Any]
 
-**Location:** `tests/conftest.py:66` (`transaction.rollback()` in `db_session` fixture)
+**Location:** `durgam/theme.py:23` (`def apply_theme() -> dict[Any, Any]`)
 
-**Full warning text:**
-```
-SAWarning: transaction already deassociated from connection
-```
+**What it is:** `TOKENS` is `dict[str, str]` but `rx.App(style=...)` is typed to
+accept `dict[str | type[BaseComponent] | Callable[..., Any] | ComponentNamespace, Any]`.
+Because `dict` is invariant in its key type, mypy rejects `dict[str, str]` as
+incompatible with that wider union key. The return annotation was widened to
+`dict[Any, Any]` to satisfy the call site without a `# type: ignore`.
 
-**Code path that produces it:**
-The `db_session` fixture wraps each test in an explicit SQLAlchemy transaction
-(`connection.begin()` → `Session(bind=connection)`). When a test uses
-`pytest.raises(sa.exc.IntegrityError)` and calls `db_session.flush()`, SQLAlchemy
-internally marks the connection's transaction as rolled-back the moment the
-`IntegrityError` propagates (it calls `connection._handle_dbapi_exception`). The
-transaction object is now "deassociated" — it no longer controls the connection.
-When fixture teardown then calls `transaction.rollback()` on line 66, SQLAlchemy
-warns because `transaction` is already dead.
+**Why this is not a production issue:** The dict's actual keys are always CSS variable
+strings (e.g. `"--color-primary"`). The wider annotation does not change runtime
+behaviour; it only weakens mypy's ability to catch a type error if a non-string key
+were accidentally added to `TOKENS`.
 
-Affected tests (all four intentionally raise `IntegrityError`):
-- `TestIdentityModels::test_role_unique_code_enforced`
-- `TestConfigAnchorModels::test_academic_year_unique_code`
-- `TestConfigAnchorModels::test_holiday_unique_date_per_ay`
-- `TestConfigAnchorModels::test_student_category_count_unique_per_ay`
+**Trigger to re-open:** Reflex ships corrected type stubs for `rx.App.style` that
+accept `dict[str, str]`; at that point the return annotation can be tightened back.
 
-**Why this is not a production issue:** `BaseRepository` never wraps calls in a
-shared test-style connection/transaction pair. In production, `IntegrityError` bubbles
-out of the repository, rolls back the ORM session automatically, and is handled by the
-page state as a user-visible error. The test-only pattern (bind a `Session` to a
-pre-begun `Connection`) is the source of the mismatch, not the repository logic.
+---
 
-**Reproduces under `-W error`?** Yes. Running `pytest -W error` without a
-`filterwarnings` exception for `SAWarning` would turn these four warnings into errors
-and fail the integration tests. The fix is to wrap `transaction.rollback()` in a
-try/except in the `db_session` and `seeded_session` fixtures, or to use SQLAlchemy's
-`begin_nested` pattern instead. Deferred to M1; does not affect production behaviour.
+### TD-004 — type: ignore[attr-defined] on _exec_insert in scripts/seed.py
+
+**Location:** `scripts/seed.py:46` (`stmt.returning(...)  # type: ignore[attr-defined]`)
+
+**What it is:** `_exec_insert` accepts `stmt: object` (the narrowest safe type for a
+function that does not know the exact Insert subtype). Calling `.returning()` on
+`object` is not known to mypy, so `[attr-defined]` must be suppressed. The runtime
+type is always a `sqlalchemy.dialects.postgresql.Insert` which does have `.returning()`.
+
+**Why this is not a production issue:** `_exec_insert` is only called by `scripts/seed.py`
+during dev and CI seeding — it never runs on a production request path. A wrong stmt
+type would cause an `AttributeError` at seed-run time, not a silent data corruption.
+
+**Trigger to re-open:** SQLAlchemy ships stubs that expose `.returning()` on a shared
+base type; at that point the parameter can be narrowed and the ignore removed.
 
 ---
 
 ## Resolved
+
+### TD-002 — SAWarning: transaction already deassociated from connection (resolved in m0-cleanup)
+
+**Status: closed.** Both `db_session` and `seeded_session` fixtures now wrap
+`transaction.rollback()` in a try/except. When `IntegrityError` is raised inside
+`pytest.raises`, SQLAlchemy internally deassociates the transaction before teardown
+runs; the try/except silences the spurious warning without suppressing it globally.
+Verified: `pytest -W error tests/integration/` passes with 0 SAWarnings.
+
+---
 
 ### TD-001 — datetime.utcnow() deprecation (resolved in 445ec9e)
 
