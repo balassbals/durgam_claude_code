@@ -1,6 +1,6 @@
 """Audit row writer — called by @audit_action decorator."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -45,7 +45,7 @@ def write_audit_row(
         }
 
     row = AuditLog(
-        occurred_at=datetime.utcnow(),
+        occurred_at=datetime.now(UTC),
         actor_user_id=actor_user_id,
         actor_role_code=actor_role_code,
         action=action,

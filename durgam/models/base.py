@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from sqlmodel import Field, SQLModel
@@ -13,8 +13,8 @@ class TimestampedSoftDelete(SQLModel):
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
 
-    created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
-    updated_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), nullable=False)
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC), nullable=False)
     created_by: UUID | None = Field(default=None)
     updated_by: UUID | None = Field(default=None)
 
