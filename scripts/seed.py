@@ -44,7 +44,7 @@ def _exec_insert(session: Session, stmt: object) -> int:
     import sqlalchemy as sa
 
     returning = stmt.returning(sa.literal(1).label("inserted"))  # type: ignore[attr-defined]
-    result = session.execute(returning)  # type: ignore[arg-type]
+    result = session.execute(returning)
     return len(result.fetchall())
 
 

@@ -4,6 +4,8 @@ All colour values are verbatim from the RFP. Font families are system
 placeholders pending the §17.3 institutional-font sign-off.
 """
 
+from typing import Any
+
 TOKENS: dict[str, str] = {
     # Colours
     "--color-primary": "#1F3A6E",  # indigo — structural elements
@@ -18,6 +20,6 @@ TOKENS: dict[str, str] = {
 }
 
 
-def apply_theme() -> dict[str, str]:
+def apply_theme() -> dict[Any, Any]:
     """Return a Reflex-compatible style dict that injects CSS variables onto body."""
     return dict(TOKENS)
