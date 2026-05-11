@@ -1,7 +1,14 @@
 from datetime import UTC, datetime
+from typing import Any, cast
 from uuid import UUID, uuid4
 
+import sqlalchemy as sa
 from sqlmodel import Field, SQLModel
+
+# SQLModel 0.0.38 stubs declare sa_type as type[Any], but the implementation
+# also accepts SQLAlchemy type instances (e.g. DateTime(timezone=True)).
+# cast() satisfies mypy without any type: ignore comment.
+_TIMESTAMPTZ: type[Any] = cast(type[Any], sa.DateTime(timezone=True))
 
 
 class TimestampedSoftDelete(SQLModel):
@@ -13,11 +20,23 @@ class TimestampedSoftDelete(SQLModel):
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
 
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), nullable=False)
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC), nullable=False)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=_TIMESTAMPTZ,
+        nullable=False,
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=_TIMESTAMPTZ,
+        nullable=False,
+    )
     created_by: UUID | None = Field(default=None)
     updated_by: UUID | None = Field(default=None)
 
     is_deleted: bool = Field(default=False, nullable=False)
-    deleted_at: datetime | None = Field(default=None)
+    deleted_at: datetime | None = Field(
+        default=None,
+        sa_type=_TIMESTAMPTZ,
+        nullable=True,
+    )
     deleted_by: UUID | None = Field(default=None)

@@ -1,7 +1,7 @@
 """Cross-cutting infrastructure models: audit, files, notifications, approvals (§8.4)."""
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -9,6 +9,8 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Column, Field, SQLModel
 
 from .base import TimestampedSoftDelete
+
+_TIMESTAMPTZ: type[Any] = cast(type[Any], sa.DateTime(timezone=True))
 
 
 class AuditLog(SQLModel, table=True):
@@ -22,7 +24,11 @@ class AuditLog(SQLModel, table=True):
     )
 
     id: int = Field(default=None, primary_key=True)
-    occurred_at: datetime = Field(default_factory=lambda: datetime.now(UTC), nullable=False)
+    occurred_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_type=_TIMESTAMPTZ,
+        nullable=False,
+    )
     actor_user_id: UUID | None = Field(default=None)
     actor_role_code: str | None = Field(default=None, max_length=64)
     action: str = Field(max_length=64, nullable=False)
@@ -63,8 +69,12 @@ class Notification(TimestampedSoftDelete, table=True):
     payload_json: dict[str, Any] | None = Field(
         default=None, sa_column=Column(JSONB, nullable=True)
     )
-    sent_at: datetime | None = Field(default=None)
-    read_at: datetime | None = Field(default=None)
+    sent_at: datetime | None = Field(
+        default=None, sa_type=_TIMESTAMPTZ, nullable=True
+    )
+    read_at: datetime | None = Field(
+        default=None, sa_type=_TIMESTAMPTZ, nullable=True
+    )
     delivery_status: str | None = Field(default=None, max_length=32)
 
 
@@ -105,7 +115,9 @@ class ApprovalRequest(TimestampedSoftDelete, table=True):
         default="submitted", max_length=32, nullable=False
     )  # submitted|in_review|approved|rejected|withdrawn|cancelled
     current_stage: int = Field(default=1, nullable=False)
-    decided_at: datetime | None = Field(default=None)
+    decided_at: datetime | None = Field(
+        default=None, sa_type=_TIMESTAMPTZ, nullable=True
+    )
 
 
 class ApprovalStep(SQLModel, table=True):
@@ -120,4 +132,6 @@ class ApprovalStep(SQLModel, table=True):
     approver_user_id: UUID | None = Field(default=None, foreign_key="users.id")
     decision: str | None = Field(default=None, max_length=16)  # approved|rejected|forwarded
     comment: str | None = Field(default=None)
-    decided_at: datetime | None = Field(default=None)
+    decided_at: datetime | None = Field(
+        default=None, sa_type=_TIMESTAMPTZ, nullable=True
+    )

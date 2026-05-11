@@ -1,10 +1,13 @@
 """Identity, roles, and permission models (§8.1)."""
 
 from datetime import datetime
+from typing import Any, cast
 from uuid import UUID
 
 import sqlalchemy as sa
 from sqlmodel import Field, Relationship, SQLModel
+
+_TIMESTAMPTZ: type[Any] = cast(type[Any], sa.DateTime(timezone=True))
 
 from .base import TimestampedSoftDelete
 
@@ -21,7 +24,9 @@ class User(TimestampedSoftDelete, table=True):
     password_hash: str = Field(max_length=256, nullable=False)
     is_active: bool = Field(default=True, nullable=False)
     must_change_password: bool = Field(default=False, nullable=False)
-    last_login_at: datetime | None = Field(default=None)
+    last_login_at: datetime | None = Field(
+        default=None, sa_type=_TIMESTAMPTZ, nullable=True
+    )
     profile_completed: bool = Field(default=False, nullable=False)
     aadhaar_enc: str | None = Field(default=None, max_length=512)
     pan_enc: str | None = Field(default=None, max_length=128)
