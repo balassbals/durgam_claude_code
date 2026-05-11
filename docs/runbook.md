@@ -52,7 +52,9 @@ uv run pytest tests/unit/ -v
 ### Integration tests (require Postgres)
 
 Integration tests use `TEST_DATABASE_URL` which defaults to `durgam_test`.
-The test DB is created fresh at session start and dropped at session end.
+The conftest creates `durgam_test` automatically if it doesn't exist, then
+creates all tables at session start and drops them at session end.
+The only prerequisite is that the `db` service is running.
 
 ```bash
 # Make sure docker compose db is running

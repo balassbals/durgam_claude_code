@@ -8,7 +8,7 @@ point to a live PostgreSQL instance:
 """
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text as _text
 from sqlmodel import Session, SQLModel
 
 # Import all models so SQLModel metadata is populated.
@@ -16,13 +16,33 @@ import durgam.models  # noqa: F401
 from durgam.config import settings
 
 
+def _ensure_test_db(url: str) -> None:
+    """Create the test database if it does not exist yet.
+
+    Connects to the 'postgres' maintenance database (always present) with
+    AUTOCOMMIT so the CREATE DATABASE DDL is not wrapped in a transaction.
+    """
+    base, db_name = url.rsplit("/", 1)
+    maint_engine = create_engine(f"{base}/postgres", isolation_level="AUTOCOMMIT")
+    with maint_engine.connect() as conn:
+        exists = conn.scalar(
+            _text("SELECT 1 FROM pg_database WHERE datname = :n"),
+            {"n": db_name},
+        )
+        if not exists:
+            conn.execute(_text(f'CREATE DATABASE "{db_name}"'))
+    maint_engine.dispose()
+
+
 @pytest.fixture(scope="session")
 def db_engine():
     """Session-scoped engine pointing at the TEST database.
 
-    Creates all tables at session start, drops at session end.
-    Uses a DIFFERENT database from the dev database (durgam_test).
+    Creates the database (if absent) and all tables at session start,
+    drops tables at session end. Uses a DIFFERENT database from the dev
+    database (durgam_test).
     """
+    _ensure_test_db(settings.test_database_url)
     engine = create_engine(settings.test_database_url, echo=False)
     SQLModel.metadata.create_all(engine)
     yield engine
@@ -52,6 +72,7 @@ def seeded_db_engine():
     """Session-scoped engine with seed data applied once for the session."""
     from scripts.seed import seed
 
+    _ensure_test_db(settings.test_database_url)
     engine = create_engine(settings.test_database_url, echo=False)
     SQLModel.metadata.drop_all(engine)
     SQLModel.metadata.create_all(engine)
