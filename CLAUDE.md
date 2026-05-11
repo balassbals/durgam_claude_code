@@ -80,6 +80,28 @@ to the append-only `auditlog` table; the application DB role has INSERT+SELECT o
   - `docs/milestones/<MN>.md` with the gate checklist as actually demonstrated.
 - A version bump on Reflex, SQLModel, or any other framework dependency is itself a milestone-boundary activity; never inside an in-flight milestone.
 
+## Known patterns and workarounds
+
+### `_TIMESTAMPTZ` cast for SQLModel datetime columns
+
+```python
+_TIMESTAMPTZ: type[Any] = cast(type[Any], sa.DateTime(timezone=True))
+```
+
+**Why it exists:** SQLModel 0.0.38 stubs declare `sa_type` as `type[Any]` (a class),
+but the implementation also accepts SQLAlchemy type instances such as
+`sa.DateTime(timezone=True)`. Passing an instance directly causes a mypy
+`[call-overload]` error. `cast(type[Any], ...)` satisfies the stub without a
+`# type: ignore` comment.
+
+**When to use it:** Any model file that defines a field with `sa_type=` pointing to an
+SQLAlchemy type that requires constructor arguments. Currently used in
+`durgam/models/base.py` (created_at, updated_at, deleted_at),
+`durgam/models/crosscutting.py` (occurred_at, sent_at, read_at, decided_at), and
+`durgam/models/identity.py` (last_login_at).
+All new `datetime` fields must use `sa_type=_TIMESTAMPTZ` (not bare `DateTime`) so
+psycopg3 returns timezone-aware values after `session.refresh()`.
+
 ## What NOT to do
 - Don't generate UI mockups in lieu of real Reflex code.
 - Don't write SQL strings inline anywhere outside Alembic migrations.
