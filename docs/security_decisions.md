@@ -5,6 +5,8 @@ Each entry explains the decision, the alternatives considered, the residual risk
 compensating controls, and the conditions under which the decision should be re-evaluated.
 The intent is that future auditors can see these decisions were considered and not overlooked.
 
+**Date format:** YYYY-MM-DD throughout this file. SD-003 onward must use the same format.
+
 ---
 
 ## SD-001 — Session storage model: rx.Cookie() with opaque token (Path A)
@@ -111,7 +113,8 @@ overlooked.
 - Reflex 1.0+ ships a server-side cookie API (at which point SD-001 becomes moot and
   this decision is vindicated).
 - A security audit or penetration test classifies the residual risk as unacceptable.
-- Project scope changes require OWASP ASVS Level 2 full compliance before M20.
+- The M20 hardening review determines that compensating controls are insufficient to meet
+  the OWASP ASVS Level 2 baseline (§6) before production launch.
 
 ### Pre-production requirement
 
