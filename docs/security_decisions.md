@@ -1,0 +1,118 @@
+# Security Decisions Log
+
+This file records deliberate security design decisions made during DURGAM development.
+Each entry explains the decision, the alternatives considered, the residual risk, the
+compensating controls, and the conditions under which the decision should be re-evaluated.
+The intent is that future auditors can see these decisions were considered and not overlooked.
+
+---
+
+## SD-001 — Session storage model: rx.Cookie() with opaque token (Path A)
+
+**Milestone:** M1 — Authentication  
+**Date:** 2026-05-12  
+**Decision makers:** Project architect (recorded via OQ-9 verification process)
+
+### Context
+
+RFP §6.1 requires: "Session: signed, HTTP-only, Secure, SameSite=Lax cookie; 7-day
+sliding inactivity expiry."
+
+Reflex 0.9.2 stores its CLIENT_TOKEN in `window.sessionStorage` (not an HTTP cookie)
+and offers `rx.Cookie()` as the only state-var cookie API. Cookies set via `rx.Cookie()`
+are written by the JavaScript `universal-cookie` library; the `HttpOnly` flag cannot
+be set by JavaScript. See `docs/tech_debt.md` → TD-005 for the full technical analysis.
+
+### Decision
+
+**Path A chosen:** Store an opaque server-generated UUID v4 session token in an
+`rx.Cookie()` with the following settings:
+
+```python
+session_token: str = rx.Cookie(
+    name="dsession",
+    same_site="lax",
+    secure=True,
+    max_age=7 * 24 * 3600,
+    path="/",
+)
+```
+
+The token maps to `UserSession` in the database (which holds `user_id`, `expires_at`,
+`last_active_at`, `is_invalidated`). Server-side invalidation is authoritative: even
+if an attacker holds the cookie value, a logged-out or admin-revoked session is rejected.
+Sliding expiry: `max_age` is refreshed on every authenticated request and
+`UserSession.last_active_at` is updated.
+
+### Alternatives considered
+
+**Path B — Custom Starlette middleware for real HttpOnly cookie:**  
+Reflex's Starlette base accepts `api_transformer` callables. A middleware could intercept
+the initial HTTP response and set a `Set-Cookie: dsession=...; HttpOnly; Secure; SameSite=Lax`
+header. The WebSocket upgrade handler would then read this cookie to populate
+`current_user_id`. This fully meets §6.1 but requires a non-trivial hybrid
+HTTP+WebSocket session handshake, a custom Starlette route outside the Reflex page model,
+and ongoing maintenance as Reflex evolves. Path B remains available as an escalation path.
+
+### Residual risk
+
+An XSS vulnerability anywhere in DURGAM could read `document.cookie` and steal the
+session token.
+
+### Compensating controls
+
+1. Token is opaque (UUID v4, not the user's UUID or any PII).
+2. `SameSite=Lax` blocks cross-site request forgery via cookie injection.
+3. `Secure=True` ensures the cookie is only sent over HTTPS in production.
+4. React's JSX engine HTML-escapes all rendered values by default.
+5. CLAUDE.md prohibits `rx.html()` with user-controlled strings; CI lint enforces.
+6. All user-supplied content is rendered through Reflex component primitives.
+
+### Escalation triggers
+
+- Reflex 1.0+ ships a server-side `HttpOnly` cookie API.
+- M20 security hardening review determines the residual risk is unacceptable.
+- An XSS surface is discovered anywhere in DURGAM.
+- A penetration test is conducted before production launch.
+
+### Pre-production requirement
+
+Before any production deployment, SD-001 must be explicitly re-evaluated and
+signed off by the system administrator as part of the M20 hardening milestone.
+
+---
+
+## SD-002 — Framework choice: Reflex retained despite §6.1 cookie-model mismatch
+
+**Milestone:** M1 — Authentication  
+**Date:** 2026-05-12  
+**Decision makers:** Project architect (recorded via OQ-9 verification process)
+
+### Context
+
+During OQ-9 verification it was confirmed that Reflex 0.9.2's session model uses
+`sessionStorage` rather than an HTTP cookie. This creates a structural gap against
+RFP §6.1's HttpOnly requirement (detailed in SD-001).
+
+### Decision
+
+**Retain Reflex at M1.** The gap is mitigable with the compensating controls in SD-001.
+The cost of switching to an alternative framework (FastAPI + Jinja2, Django, etc.) would
+require rewriting the entire M0 foundation. Path B (Starlette middleware) exists as an
+incremental upgrade path that does not require a framework switch.
+
+This decision is recorded deliberately so that it is visible to future auditors. The
+gap was identified, analysed, and accepted with compensating controls — it was not
+overlooked.
+
+### Escalation triggers
+
+- A critical XSS vulnerability is discovered in DURGAM.
+- Reflex 1.0+ ships a server-side cookie API (at which point SD-001 becomes moot and
+  this decision is vindicated).
+- A security audit or penetration test classifies the residual risk as unacceptable.
+- Project scope changes require OWASP ASVS Level 2 full compliance before M20.
+
+### Pre-production requirement
+
+SD-001 and SD-002 must both be reviewed and signed off in the M20 hardening milestone.
