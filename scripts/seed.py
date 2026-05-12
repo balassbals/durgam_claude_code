@@ -175,7 +175,17 @@ def seed(session: Session) -> dict[str, int]:
         role_code = u.pop("role_code")
         plain = u.pop("plain_password")
         is_active = u.pop("is_active", True)
-        new_hash = hash_password(plain)
+
+        # Skip re-hashing on idempotent re-runs: if the stored hash is already bcrypt,
+        # reuse it. This avoids ~0.4s per user on every seed call after the first.
+        existing = session.exec(select(User).where(User.email == u["email"])).first()
+        if existing and existing.password_hash.startswith("$2b$"):
+            new_hash = existing.password_hash
+        else:
+            new_hash = hash_password(plain)
+
+        import sqlalchemy as sa
+
         stmt = (
             pg_insert(User)
             .values(
@@ -188,8 +198,6 @@ def seed(session: Session) -> dict[str, int]:
                 set_={"password_hash": new_hash, "is_active": is_active},
             )
         )
-        import sqlalchemy as sa
-
         result = session.execute(stmt.returning(sa.literal(1).label("x")))
         user_inserted += len(result.fetchall())
         user = session.exec(select(User).where(User.email == u["email"])).one()
