@@ -30,6 +30,8 @@ class User(TimestampedSoftDelete, table=True):
     profile_completed: bool = Field(default=False, nullable=False)
     aadhaar_enc: str | None = Field(default=None, max_length=512)
     pan_enc: str | None = Field(default=None, max_length=128)
+    failed_login_count: int = Field(default=0, nullable=False)
+    locked_until: datetime | None = Field(default=None, sa_type=_TIMESTAMPTZ, nullable=True)
 
     roles: list["UserRole"] = Relationship(back_populates="user")
 
