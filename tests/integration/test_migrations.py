@@ -1,15 +1,28 @@
-"""Integration tests: forward and reverse migration against real PostgreSQL."""
+"""Integration tests: forward and reverse migration against real PostgreSQL.
 
+Migrations run against the TEST database (settings.test_database_url),
+not the dev database. This avoids wiping seed data from the dev DB when
+running 'alembic downgrade base'.
+"""
+
+import os
 import subprocess
 import sys
 
+from durgam.config import settings
+
 
 def _alembic(*args: str) -> subprocess.CompletedProcess[str]:
+    """Run an alembic command against the TEST database."""
+    env = os.environ.copy()
+    # Override the database URLs so alembic/env.py targets the test database.
+    env["DATABASE_URL"] = settings.test_database_url
+    env["DATABASE_URL_SYNC"] = settings.test_database_url
     return subprocess.run(
         [sys.executable, "-m", "alembic", *args],
         capture_output=True,
         text=True,
-        cwd=None,  # runs in CWD (repo root)
+        env=env,
     )
 
 
