@@ -16,6 +16,7 @@ See docs/modules/auth.md for the full contract description.
 
 from __future__ import annotations
 
+import asyncio
 import functools
 from collections.abc import Callable
 from contextlib import contextmanager
@@ -149,27 +150,36 @@ def audit_action(
 
             result = await func(*args, **kwargs)
 
-            # Audit write is best-effort: a failure must never block the return
-            # value (e.g. rx.redirect) from reaching Reflex.
+            # Audit write runs in a thread-pool executor so it never blocks
+            # the asyncio event loop.  Blocking here would prevent Reflex from
+            # dispatching the second socket.io message that carries rx.redirect.
+            audit_data: dict[str, Any] = result if isinstance(result, dict) else {}
+            _audit_kwargs = dict(
+                actor_user_id=user_id,
+                actor_role_code=actor_role,
+                action=action,
+                resource=resource,
+                resource_id=audit_data.get("resource_id"),
+                request_id=request_id,
+                ip=ip,
+                user_agent=user_agent,
+                before=audit_data.get("before"),
+                after=audit_data.get("after"),
+            )
+
+            def _do_audit() -> None:
+                try:
+                    with _db_session() as session:
+                        write_audit_row(**_audit_kwargs, session=session)
+                        session.commit()
+                except Exception:
+                    log.error("audit_write_failed", action=action, resource=resource)
+
             try:
-                with _db_session() as session:
-                    audit_data: dict[str, Any] = result if isinstance(result, dict) else {}
-                    write_audit_row(
-                        actor_user_id=user_id,
-                        actor_role_code=actor_role,
-                        action=action,
-                        resource=resource,
-                        resource_id=audit_data.get("resource_id"),
-                        request_id=request_id,
-                        ip=ip,
-                        user_agent=user_agent,
-                        before=audit_data.get("before"),
-                        after=audit_data.get("after"),
-                        session=session,
-                    )
-                    session.commit()
+                loop = asyncio.get_event_loop()
+                loop.run_in_executor(None, _do_audit)
             except Exception:
-                log.error("audit_write_failed", action=action, resource=resource)
+                log.error("audit_executor_failed", action=action, resource=resource)
 
             return result
 
