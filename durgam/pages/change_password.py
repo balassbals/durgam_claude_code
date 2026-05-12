@@ -130,12 +130,7 @@ def change_password() -> rx.Component:
                         align_items="stretch",
                         gap="1rem",
                     ),
-                    on_submit=lambda data: [
-                        AuthState.set_password(data["password"]),
-                        AuthState.set_new_password(data["new_password"]),
-                        AuthState.set_confirm_password(data["confirm_password"]),
-                        AuthState.change_password(),
-                    ],
+                    on_submit=AuthState.change_password,
                     width="100%",
                 ),
                 rx.cond(
@@ -169,7 +164,3 @@ def change_password() -> rx.Component:
         background="var(--color-surface)",
         padding="1rem",
     )
-
-
-def on_load() -> None:
-    return AuthState._resolve_session()

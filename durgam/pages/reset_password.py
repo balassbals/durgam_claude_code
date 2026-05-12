@@ -95,11 +95,7 @@ def reset_password() -> rx.Component:
                         align_items="stretch",
                         gap="1rem",
                     ),
-                    on_submit=lambda data: [
-                        AuthState.set_new_password(data["new_password"]),
-                        AuthState.set_confirm_password(data["confirm_password"]),
-                        AuthState.reset_password(),
-                    ],
+                    on_submit=AuthState.reset_password,
                     width="100%",
                 ),
                 rx.link(

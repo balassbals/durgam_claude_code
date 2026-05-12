@@ -82,10 +82,7 @@ def forgot_password() -> rx.Component:
                         align_items="stretch",
                         gap="1rem",
                     ),
-                    on_submit=lambda data: [
-                        AuthState.set_email(data["email"]),
-                        AuthState.request_password_reset(),
-                    ],
+                    on_submit=AuthState.request_password_reset,
                     width="100%",
                 ),
                 rx.link(

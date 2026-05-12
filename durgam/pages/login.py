@@ -36,36 +36,17 @@ def _card(*children) -> rx.Component:
     )
 
 
-def _flash_box(state: type) -> rx.Component:
+def _flash_box() -> rx.Component:
     return rx.cond(
-        state.flash != "",
+        AuthState.flash != "",
         rx.box(
-            rx.text(state.flash, color="var(--color-accent)", font_size="0.9rem"),
+            rx.text(AuthState.flash, color="var(--color-accent)", font_size="0.9rem"),
             padding="0.75rem",
             background="rgba(183, 110, 0, 0.08)",
             border="1px solid var(--color-accent)",
             border_radius="4px",
         ),
         rx.fragment(),
-    )
-
-
-def _field(label: str, placeholder: str, name: str, input_type: str = "text") -> rx.Component:
-    return rx.vstack(
-        rx.text(label, font_size="0.85rem", color="var(--color-body)", font_weight="500"),
-        rx.input(
-            placeholder=placeholder,
-            name=name,
-            type=input_type,
-            width="100%",
-            border="1px solid var(--color-rule)",
-            border_radius="4px",
-            padding="0.5rem 0.75rem",
-            font_family="var(--font-sans)",
-        ),
-        align_items="flex-start",
-        gap="0.25rem",
-        width="100%",
     )
 
 
@@ -78,11 +59,51 @@ def login() -> rx.Component:
                 color="var(--color-body)",
                 font_family="var(--font-sans)",
             ),
-            _flash_box(AuthState),
+            _flash_box(),
             rx.form(
                 rx.vstack(
-                    _field("Username", "your.username", "username"),
-                    _field("Password", "••••••••••••", "password", "password"),
+                    rx.vstack(
+                        rx.text(
+                            "Username",
+                            font_size="0.85rem",
+                            color="var(--color-body)",
+                            font_weight="500",
+                        ),
+                        rx.input(
+                            placeholder="your.username",
+                            name="username",
+                            type="text",
+                            width="100%",
+                            border="1px solid var(--color-rule)",
+                            border_radius="4px",
+                            padding="0.5rem 0.75rem",
+                            font_family="var(--font-sans)",
+                        ),
+                        align_items="flex-start",
+                        gap="0.25rem",
+                        width="100%",
+                    ),
+                    rx.vstack(
+                        rx.text(
+                            "Password",
+                            font_size="0.85rem",
+                            color="var(--color-body)",
+                            font_weight="500",
+                        ),
+                        rx.input(
+                            placeholder="••••••••••••",
+                            name="password",
+                            type="password",
+                            width="100%",
+                            border="1px solid var(--color-rule)",
+                            border_radius="4px",
+                            padding="0.5rem 0.75rem",
+                            font_family="var(--font-sans)",
+                        ),
+                        align_items="flex-start",
+                        gap="0.25rem",
+                        width="100%",
+                    ),
                     rx.button(
                         rx.cond(AuthState.is_loading, "Signing in…", "Sign in"),
                         type="submit",
@@ -98,11 +119,7 @@ def login() -> rx.Component:
                     align_items="stretch",
                     gap="1rem",
                 ),
-                on_submit=lambda data: [
-                    AuthState.set_username(data["username"]),
-                    AuthState.set_password(data["password"]),
-                    AuthState.login(),
-                ],
+                on_submit=AuthState.login,
                 width="100%",
             ),
             rx.link(
@@ -121,7 +138,3 @@ def login() -> rx.Component:
         background="var(--color-surface)",
         padding="1rem",
     )
-
-
-def on_load() -> None:
-    return AuthState._resolve_session()

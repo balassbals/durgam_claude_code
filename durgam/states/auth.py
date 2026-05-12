@@ -2,9 +2,14 @@
 
 States must not import SQLModel, SQLAlchemy, or any model (CLAUDE.md).
 Database sessions are obtained via durgam.db.open_session().
+
+Form handlers accept form_data: dict (Reflex's on_submit contract).
+Page on_load handlers take no arguments and read URL params from self.router.
 """
 
 from __future__ import annotations
+
+from uuid import UUID
 
 import reflex as rx
 
@@ -33,20 +38,16 @@ def _pw_svc(session) -> PasswordService:  # type: ignore[no-untyped-def]
 
 
 class AuthState(BaseState):
-    """Auth page state — login form fields and auth flow orchestration."""
+    """Auth page state."""
 
-    username: str = ""
-    password: str = ""
-    new_password: str = ""
-    confirm_password: str = ""
-    email: str = ""
+    # Populated from URL query param ?token=... on the reset-password page.
     reset_token: str = ""
     is_loading: bool = False
     must_change_password: bool = False
     profile_incomplete: bool = False
 
-    def _resolve_session(self) -> None:
-        """Resolve session_token → current_user_id. Called on every page on_load."""
+    def resolve_session(self) -> None:
+        """Resolve session_token → current_user_id. Use as on_load on every auth-aware page."""
         if not self.session_token:
             self.current_user_id = ""
             self.must_change_password = False
@@ -62,16 +63,22 @@ class AuthState(BaseState):
                 self.must_change_password = user.must_change_password
                 self.profile_incomplete = not user.profile_completed
 
+    def load_reset_token(self) -> None:
+        """Read ?token= query param from the URL. Use as on_load on the reset-password page."""
+        self.reset_token = self.router._page.params.get("token", "")  # type: ignore[attr-defined]
+
     @public_handler
     @audit_action(action="login", resource="session")
-    async def login(self) -> None:
+    async def login(self, form_data: dict) -> None:
+        username = form_data.get("username", "").strip()
+        password = form_data.get("password", "")
         self.is_loading = True
         self.flash = ""
         try:
             with open_session() as session:
                 user, _, raw_token = _auth_svc(session).login(
-                    self.username.strip(),
-                    self.password,
+                    username,
+                    password,
                     ip=self.client_ip or None,
                     user_agent=self.client_user_agent or None,
                 )
@@ -80,8 +87,6 @@ class AuthState(BaseState):
             self.current_user_id = str(user.id)
             self.must_change_password = user.must_change_password
             self.profile_incomplete = not user.profile_completed
-            self.username = ""
-            self.password = ""
             if self.must_change_password:
                 return rx.redirect("/change-password")  # type: ignore[return-value]
             return rx.redirect("/")  # type: ignore[return-value]
@@ -105,23 +110,20 @@ class AuthState(BaseState):
 
     @public_handler
     @audit_action(action="change_password", resource="session")
-    async def change_password(self) -> None:
+    async def change_password(self, form_data: dict) -> None:
+        current = form_data.get("password", "")
+        new_pw = form_data.get("new_password", "")
+        confirm = form_data.get("confirm_password", "")
         self.flash = ""
-        if self.new_password != self.confirm_password:
+        if new_pw != confirm:
             self.flash = "New passwords do not match."
             return
         try:
-            from uuid import UUID
-
             with open_session() as session:
                 _pw_svc(session).change_password_for_user(
-                    UUID(self.current_user_id), self.password, self.new_password
+                    UUID(self.current_user_id), current, new_pw
                 )
                 session.commit()
-            self.flash = "Password changed successfully."
-            self.password = ""
-            self.new_password = ""
-            self.confirm_password = ""
             self.must_change_password = False
             return rx.redirect("/")  # type: ignore[return-value]
         except AuthError as exc:
@@ -131,13 +133,14 @@ class AuthState(BaseState):
 
     @public_handler
     @audit_action(action="request_password_reset", resource="session")
-    async def request_password_reset(self) -> None:
+    async def request_password_reset(self, form_data: dict) -> None:
+        email = form_data.get("email", "").strip()
         self.flash = ""
         self.is_loading = True
         try:
             with open_session() as session:
                 await _pw_svc(session).request_reset(
-                    self.email.strip(),
+                    email,
                     ip=self.client_ip or None,
                     reset_url_base=settings.app_base_url,
                 )
@@ -148,29 +151,24 @@ class AuthState(BaseState):
             )
         finally:
             self.is_loading = False
-            self.email = ""
 
     @public_handler
     @audit_action(action="reset_password", resource="session")
-    async def reset_password(self) -> None:
+    async def reset_password(self, form_data: dict) -> None:
+        new_pw = form_data.get("new_password", "")
+        confirm = form_data.get("confirm_password", "")
         self.flash = ""
-        if self.new_password != self.confirm_password:
+        if new_pw != confirm:
             self.flash = "Passwords do not match."
             return
         try:
             with open_session() as session:
-                _pw_svc(session).consume_reset_token(self.reset_token, self.new_password)
+                _pw_svc(session).consume_reset_token(self.reset_token, new_pw)
                 session.commit()
             self.flash = "Password reset successfully. You can now log in."
-            self.new_password = ""
-            self.confirm_password = ""
             self.reset_token = ""
             return rx.redirect("/login")  # type: ignore[return-value]
         except InvalidTokenError as exc:
             self.flash = str(exc)
         except WeakPasswordError as exc:
             self.flash = exc.reason
-
-    def set_reset_token_from_url(self, token: str) -> None:
-        """Called from page on_load to capture the token query param."""
-        self.reset_token = token
