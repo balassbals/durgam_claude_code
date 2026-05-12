@@ -133,6 +133,7 @@ psycopg3 returns timezone-aware values after `session.refresh()`.
 - Don't reorder fields in an existing migration; add a new migration.
 - Don't `@require_role` a handler with `'*'` to make a test pass; fix the test or the permission seed.
 - Don't catch broad exceptions in services. Let them bubble; the page state turns them into user-visible errors.
+- **Never access SQLModel object attributes after `session.commit()` or after an `open_session()` block closes.** `expire_on_commit=True` (the default) marks all attributes expired; accessing them on a detached instance raises `DetachedInstanceError`. Reflex catches this exception silently — the failure looks like `rx.redirect()` "didn't happen" with no visible error. Pattern: read all needed attributes into local variables INSIDE the `with open_session()` block, BEFORE `session.commit()`. See `docs/modules/auth.md` → "Known gotcha" for the full example.
 
 ## When stuck
 If a question can't be answered from this file, the RFP, or the codebase, **stop and ask in the PR description** rather than guessing. Specifically:

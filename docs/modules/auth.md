@@ -123,6 +123,81 @@ The inactive user is added at M1 for E2E lockout and inactive-user-rejection tes
 
 ---
 
+## Playwright + Reflex E2E testing patterns
+
+Two patterns that apply to ALL future milestones:
+
+### 1. wait_for_url, not networkidle, for redirect assertions
+
+Reflex dispatches all events — including state-changing form submits and
+`rx.redirect()` — exclusively over WebSocket. Playwright's
+`wait_for_load_state("networkidle")` fires immediately because no HTTP
+requests are made. Always use:
+
+- `page.wait_for_url(target, timeout=10000)` when a redirect is expected
+- `expect(locator).to_be_visible()` (polled) when only a state mutation (flash) is expected
+
+Never use `wait_for_load_state("networkidle")` followed by an immediate
+`assert page.url` check — the assertion will always fire before the
+WebSocket response arrives.
+
+### 2. Mailpit REST API, not SPA scraping, for inbox assertions
+
+Mailpit loads its message list via its own JavaScript SPA. Use its REST API:
+
+```python
+httpx.get("http://localhost:8025/api/v1/messages").json()["messages"]
+```
+
+Do not use `page.locator("text=Subject Line")` on the Mailpit URL — the SPA
+loads asynchronously and the locator is unreliable.
+
+---
+
+## Known gotcha: DetachedInstanceError and silent Reflex failures
+
+**Rule:** When a handler needs attributes from a SQLModel object after a
+service call that commits, read all required attributes into local variables
+BEFORE `session.commit()` (which expires all attributes) AND before the
+`with open_session()` block exits (which detaches the object).
+
+**Why:** SQLAlchemy's `expire_on_commit=True` (the default) marks every
+attribute as expired after `session.commit()`. Accessing any attribute on a
+detached, expired instance raises `DetachedInstanceError`. Reflex catches
+this exception silently in `_finish_task` — the failure looks like the
+redirect "didn't happen", not like an error occurred. There is no visible
+traceback in the browser and no flash message.
+
+**Pattern to avoid:**
+```python
+with open_session() as session:
+    user = some_service.do_thing(session)
+    session.commit()  # ← expires all attrs
+# session closed, user detached
+self.state_var = str(user.id)  # ← DetachedInstanceError! Silent failure.
+return rx.redirect("/")        # ← never dispatched
+```
+
+**Correct pattern:**
+```python
+with open_session() as session:
+    user = some_service.do_thing(session)
+    # Read all needed attrs BEFORE commit
+    user_id = str(user.id)
+    user_flag = user.some_flag
+    session.commit()
+# session closed — use local vars only
+self.state_var = user_id
+return rx.redirect("/")   # ← dispatched correctly
+```
+
+This bug class will recur in M3 (leave request handlers), M5 (profile
+update handlers), and any other milestone where a state handler reads
+User/model attributes after committing. Apply the pattern proactively
+whenever a handler accesses model attributes after a `session.commit()`.
+
+---
+
 ## Security Decisions Index
 
 See `docs/security_decisions.md` for:

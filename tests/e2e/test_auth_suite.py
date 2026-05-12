@@ -93,9 +93,10 @@ class TestLogin:
     def test_successful_login_redirects_to_home(self, page: Page):
         _clear_session(page)
         _login(page, _ADMIN_USER, _ADMIN_PASS)
-        # _login already waited for navigation away from /login
-        assert page.url.rstrip("/").endswith("/") or "/change-password" in page.url, (
-            f"Expected redirect to / or /change-password, got {page.url}"
+        # _login already waited for navigation away from /login.
+        # Compare against the full BASE_URL (page.url is a full URL, not a path).
+        assert page.url == f"{BASE_URL}/" or "/change-password" in page.url, (
+            f"Expected redirect to {BASE_URL}/ or .../change-password, got {page.url}"
         )
 
     def test_wrong_password_shows_error(self, page: Page):
