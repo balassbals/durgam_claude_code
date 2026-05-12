@@ -60,7 +60,7 @@ def change_password() -> rx.Component:
                                 color="var(--color-body)",
                                 font_weight="500",
                             ),
-                            rx.input(
+                            rx.el.input(
                                 placeholder="••••••••••••",
                                 name="password",
                                 type="password",
@@ -81,7 +81,7 @@ def change_password() -> rx.Component:
                                 color="var(--color-body)",
                                 font_weight="500",
                             ),
-                            rx.input(
+                            rx.el.input(
                                 placeholder="••••••••••••",
                                 name="new_password",
                                 type="password",
@@ -102,7 +102,7 @@ def change_password() -> rx.Component:
                                 color="var(--color-body)",
                                 font_weight="500",
                             ),
-                            rx.input(
+                            rx.el.input(
                                 placeholder="••••••••••••",
                                 name="confirm_password",
                                 type="password",

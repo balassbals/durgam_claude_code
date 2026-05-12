@@ -53,7 +53,7 @@ def forgot_password() -> rx.Component:
                                 color="var(--color-body)",
                                 font_weight="500",
                             ),
-                            rx.input(
+                            rx.el.input(
                                 placeholder="your.email@sssihl.edu.in",
                                 name="email",
                                 type="email",

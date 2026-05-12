@@ -69,7 +69,7 @@ def login() -> rx.Component:
                             color="var(--color-body)",
                             font_weight="500",
                         ),
-                        rx.input(
+                        rx.el.input(
                             placeholder="your.username",
                             name="username",
                             type="text",
@@ -90,7 +90,7 @@ def login() -> rx.Component:
                             color="var(--color-body)",
                             font_weight="500",
                         ),
-                        rx.input(
+                        rx.el.input(
                             placeholder="••••••••••••",
                             name="password",
                             type="password",
