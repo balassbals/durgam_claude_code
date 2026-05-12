@@ -30,15 +30,31 @@
   - **Replaceable**: when sponsor data arrives, the M5 bulk-import flow loads it via the same validation path that real ongoing additions use. The seed script gets wiped and replaced; never merged.
   - **Re-runnable in CI**: every CI run starts from the seed; tests must pass against it.
 
-## Permissions — `@require_role`
-Every Reflex state event handler and every page route is decorated:
+## Permissions — `@require_role` and `@public_handler`
+Every Reflex state event handler must wear EITHER `@require_role` OR `@public_handler`,
+PLUS `@audit_action`. A handler without one of these fails CI lint.
+
+**Authenticated handlers** (require a logged-in user):
 ```python
 @require_role(action="approve", resource="leave_request", scope="department")
+@audit_action(action="approve", resource="leave_request")
 async def approve_request(self, request_id: UUID): ...
 ```
-The decorator calls `auth.permissions.can(user, action, resource, target)` and
-raises `PermissionDenied` on failure. Every page additionally guards at mount
-time. A handler without the decorator fails CI lint.
+`@require_role` reads `self.current_user_id` from the Reflex State instance (M1 contract).
+Raises `PermissionDenied` if unauthenticated or the permission check fails.
+
+**Public handlers** (login, forgot_password, reset_password — no session required):
+```python
+@public_handler
+@audit_action(action="login", resource="session")
+async def login(self) -> None: ...
+```
+`@public_handler` marks the handler as intentionally unauthenticated. It does NOT
+introduce an anonymous principal with a universal permission. `@audit_action` is still
+required; the actor_user_id in the audit row will be None for unauthenticated actions.
+
+Do not decorate with `@require_role(action="*", resource="*", scope="*")` or similar
+wildcards to bypass access control. If an endpoint is genuinely public, use `@public_handler`.
 
 ## Audit — `@audit_action`
 Every state-changing handler is also decorated:
@@ -106,9 +122,11 @@ psycopg3 returns timezone-aware values after `session.refresh()`.
 - Don't generate UI mockups in lieu of real Reflex code.
 - Don't write SQL strings inline anywhere outside Alembic migrations.
 - Don't use `localStorage` / `sessionStorage` / browser cookies for **app state** — Reflex State is the source of truth. The two exceptions, both managed by the framework and not to be replicated or overridden:
-  - Reflex's own session cookie for authentication.
+  - Reflex's own CLIENT_TOKEN (stored in sessionStorage, not a cookie).
+  - The `dsession` auth cookie managed by `BaseState.session_token` (SD-001).
   - Reflex's CSRF token cookie.
   Anything beyond these two is a smell; surface it before adding.
+- **Never use `rx.html()` or any HTML-passthrough primitive for content that includes any user-controlled string.** The M1 session token is stored in a JS-accessible cookie (see TD-005); an XSS exposure leaks sessions. If a use case appears to require `rx.html()` with user content, stop and raise it as a design question. Lint enforces this.
 - Don't import from another service inside a service. If two services need each other, that's a design smell — surface it.
 - Don't add a third-party package without justifying it in the PR; new deps cost.
 - Don't skip the Mailpit / mock-data path "to save time"; both are first-class M0 deliverables.
