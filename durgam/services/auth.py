@@ -40,10 +40,6 @@ def _ip_rl_key(ip: str) -> str:
     return f"rl:login:ip:{ip}"
 
 
-def _user_rl_key(username: str) -> str:
-    return f"rl:login:user:{username}"
-
-
 def _reset_rl_key(ip: str) -> str:
     return f"rl:reset:ip:{ip}"
 

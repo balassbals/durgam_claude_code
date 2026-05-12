@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import secrets
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
+from uuid import uuid4
 
 import pytest
 from sqlmodel import Session
 
+from durgam.auth.rate_limit import RateLimitExceeded
+from durgam.auth.rate_limit import reset as rl_reset
+from durgam.config import settings
 from durgam.models.identity import User
 from durgam.repositories.auth import PasswordResetTokenRepository, UserSessionRepository
 from durgam.repositories.user import UserRepository
@@ -272,3 +277,86 @@ class TestPasswordReset:
         with patch("durgam.services.auth.send_email", new_callable=AsyncMock) as mock_send:
             await svc.request_reset("unknown@example.com")
         mock_send.assert_not_called()
+
+    def test_consume_reset_token_soft_deleted_user_raises(self, db_session):
+        """consume_reset_token raises InvalidTokenError when the linked user is soft-deleted."""
+        user = _make_user(db_session)
+        svc = _password_service(db_session)
+        raw_token = secrets.token_urlsafe(32)
+        svc._tokens.create(user.id, raw_token)
+        user.is_deleted = True
+        db_session.add(user)
+        db_session.flush()
+        with pytest.raises(InvalidTokenError):
+            svc.consume_reset_token(raw_token, "N3wSecure!Pass#Z")
+
+
+class TestIpRateLimit:
+    """Verify that the IP-level rate limit in AuthService.login() fires.
+
+    Threshold: AUTH_IP_THROTTLE_LIMIT (default 20).
+    To trigger: make (limit + 1) calls — the (limit + 1)th call raises RateLimitExceeded.
+    This test uses monkeypatch to set limit=3 so only 4 calls are needed,
+    avoiding 20+ bcrypt verifications. The reported values are:
+      configured threshold = settings.auth_ip_throttle_limit = 20
+      calls to trigger at default threshold = 21
+      calls used in this test (patched threshold=3) = 4
+    """
+
+    def test_ip_rate_limit_triggers_rate_limit_exceeded(self, db_session, monkeypatch):
+        test_ip = f"192.0.2.{uuid4().int % 254 + 1}"  # unique RFC-5737 test IP
+        monkeypatch.setattr(settings, "auth_ip_throttle_limit", 3)
+        svc = _auth_service(db_session)
+        try:
+            # Calls 1–3: exceed the limit on the counter but stay ≤ limit, so no raise yet
+            for _ in range(3):
+                with pytest.raises(AuthError):
+                    svc.login("no_such_user", "bad_pass", ip=test_ip)
+            # Call 4: counter reaches 4 > limit(3) → RateLimitExceeded propagates
+            with pytest.raises(RateLimitExceeded):
+                svc.login("no_such_user", "bad_pass", ip=test_ip)
+        finally:
+            rl_reset(f"rl:login:ip:{test_ip}")
+
+    def test_ip_rate_limit_reset_on_successful_login(self, db_session, monkeypatch):
+        """Successful login resets the IP counter."""
+        user = _make_user(db_session)
+        test_ip = f"192.0.2.{uuid4().int % 254 + 1}"
+        monkeypatch.setattr(settings, "auth_ip_throttle_limit", 3)
+        svc = _auth_service(db_session)
+        try:
+            # Two failed attempts
+            for _ in range(2):
+                with pytest.raises(AuthError):
+                    svc.login("no_such_user", "bad_pass", ip=test_ip)
+            # Successful login clears the IP counter (rl_reset is called inside login())
+            svc.login(user.username, "Tr0ub4dor&3!X", ip=test_ip)
+            # Counter is now reset; the next two failures should succeed (not trigger limit)
+            for _ in range(2):
+                with pytest.raises(AuthError):
+                    svc.login("no_such_user", "bad_pass", ip=test_ip)
+        finally:
+            rl_reset(f"rl:login:ip:{test_ip}")
+
+
+class TestAuthServiceEdgeCases:
+    """Cover remaining uncovered branches in AuthService / PasswordService."""
+
+    def test_logout_with_nonexistent_token_is_silent(self, db_session):
+        """logout() must not raise if the token doesn't match any active session."""
+        svc = _auth_service(db_session)
+        svc.logout("token_that_does_not_exist")  # must not raise
+
+    def test_logout_with_already_invalidated_session_is_silent(self, db_session):
+        """logout() with an already-invalidated session should be a no-op."""
+        user = _make_user(db_session)
+        svc = _auth_service(db_session)
+        _, session_record, raw_token = svc.login(user.username, "Tr0ub4dor&3!X")
+        svc.logout(raw_token)  # first logout — invalidates
+        svc.logout(raw_token)  # second logout — token no longer active, silent
+
+    def test_change_password_for_user_missing_user_raises(self, db_session):
+        """change_password_for_user raises AuthError when the user_id is unknown."""
+        svc = _password_service(db_session)
+        with pytest.raises(AuthError, match="Session expired"):
+            svc.change_password_for_user(uuid4(), "OldPass!", "N3wSecure!Pass#Z")

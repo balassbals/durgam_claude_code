@@ -60,42 +60,32 @@ class TestValidatePolicy:
             validate_policy("Tr0ub4dor3XXX")
 
     def test_common_password_rejected(self):
-        # "password" is in the top-10k list; must be ≥12 chars with policy chars
-        # Use a decorated version that is still in the list (bare "password" is too short)
-        # The list contains short entries; validate them with a padding to reach 12 chars
-        # but the bare lowercase match should still trigger for list members that ARE 12+.
-        # Test with exact list member "password" — it's 8 chars so fails min-length first.
-        # Use "Password1234!" — NOT in list, should pass.
-        validate_policy("Password1234!")  # fine
-        # "password" is in the list but shorter than 12; test a longer common one.
-        # "passw0rd" is 8 chars; test with "monkey" derivatives not in list.
-        # The real test: ensure the common-list check fires when length is ≥ 12.
-        # Construct a synthetic entry: if "password" is in list, "password12!A" is not.
-        # Instead verify a KNOWN long common password exists in the file.
-        from durgam.services.password import _COMMON
-        long_common = next((p for p in _COMMON if len(p) >= 12), None)
-        if long_common is not None:
-            # It exists in the list and is ≥12 chars — need to check if it passes
-            # complexity; if so it should be rejected by the common-list check.
-            # Build a version that passes complexity but matches the list exactly.
-            import re
-            has_all = (
-                re.search(r"[A-Z]", long_common)
-                and re.search(r"[a-z]", long_common)
-                and re.search(r"\d", long_common)
-                and re.search(r"[^A-Za-z0-9]", long_common)
-            )
-            if has_all:
-                with pytest.raises(WeakPasswordError, match="common"):
-                    validate_policy(long_common)
+        """Monkeypatch _COMMON to guarantee the common-password raise path is hit.
+
+        Most real common passwords are short and fail complexity first. We inject
+        a known complex string into the set to cover services/password.py line 73.
+        """
+        from unittest.mock import patch
+
+        injected = frozenset(["tr0ub4dor&3!x"])  # lowercased; satisfies complexity when cased
+        with patch("durgam.services.password._COMMON", injected):
+            with pytest.raises(WeakPasswordError, match="common"):
+                # "Tr0ub4dor&3!X".lower() == "tr0ub4dor&3!x" which is in the patched set
+                validate_policy("Tr0ub4dor&3!X")
 
     def test_common_password_check_is_case_insensitive(self):
-        from durgam.services.password import _COMMON
-        any_entry = next(iter(_COMMON))
-        if len(any_entry) >= 12:
-            # Upper-cased version should still match if list check is case-insensitive
-            # Our implementation uses plain.lower() in _COMMON, so upper works.
-            pass  # validated by the implementation — list check is lower-cased
+        """The check uses plain.lower() so casing variations of common passwords are caught.
+
+        The injected set contains the lowercase form; the candidate uses mixed case
+        so it passes complexity but still lowercases to the common entry.
+        """
+        from unittest.mock import patch
+
+        injected = frozenset(["tr0ub4dor&3!x"])
+        with patch("durgam.services.password._COMMON", injected):
+            # Mixed-case: passes all complexity checks, but .lower() matches injected entry.
+            with pytest.raises(WeakPasswordError, match="common"):
+                validate_policy("Tr0Ub4dOr&3!X")
 
     def test_email_local_part_rejected(self):
         with pytest.raises(WeakPasswordError, match="username"):
