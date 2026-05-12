@@ -9,8 +9,9 @@ Set BASE_URL to the app URL (default: http://localhost:3000).
 Set MAILPIT_URL to the Mailpit web UI (default: http://localhost:8025).
 
 The seed user credentials must match scripts/seed.py:
-  sys_admin / SysAdmin_Dev1!XZ
-  inactive_user / Inactive_Dev1!XZ
+  sys_admin / SysAdmin_Dev1!XZ           (active, normal)
+  inactive_user / Inactive_Dev1!XZ       (is_active=False)
+  firstlogin_user / FirstLogin_Dev1!XZ   (must_change_password=True)
 """
 
 import os
@@ -31,6 +32,9 @@ _ADMIN_USER = "sys_admin"
 _ADMIN_PASS = "SysAdmin_Dev1!XZ"
 _INACTIVE_USER = "inactive_user"
 _INACTIVE_PASS = "Inactive_Dev1!XZ"
+_FIRSTLOGIN_USER = "firstlogin_user"
+_FIRSTLOGIN_PASS = "FirstLogin_Dev1!XZ"
+_FIRSTLOGIN_NEW_PASS = "FirstLogin_New1!XZ"
 _LOCKOUT_THRESHOLD = 5
 
 
@@ -135,6 +139,52 @@ class TestBruteForce:
         page.get_by_role("button", name=re.compile(r"Sign in", re.IGNORECASE)).click()
         page.wait_for_load_state("networkidle")
         expect(page.locator("text=locked")).to_be_visible()
+
+
+class TestForcedPasswordChange:
+    def test_must_change_password_redirects_to_change_password_page(self, page: Page):
+        """Gate: Playwright auth suite green — forced first-login redirect.
+
+        A user with must_change_password=True is redirected to /change-password
+        immediately after successful login, before reaching the home page.
+        """
+        _clear_session(page)
+        _login(page, _FIRSTLOGIN_USER, _FIRSTLOGIN_PASS)
+        assert "/change-password" in page.url, (
+            f"Expected redirect to /change-password for must_change_password user, got {page.url}"
+        )
+        # The "must set a new password" banner must be visible
+        expect(page.locator("text=must set a new password")).to_be_visible()
+
+
+class TestChangePassword:
+    def test_authenticated_user_can_change_password(self, page: Page):
+        """Gate: Playwright auth suite green — change password (authenticated).
+
+        Uses sys_admin to avoid interfering with the forced-change-password seed user.
+        """
+        _clear_session(page)
+        _login(page, _ADMIN_USER, _ADMIN_PASS)
+        page.goto(f"{BASE_URL}/change-password")
+        page.wait_for_load_state("networkidle")
+
+        new_pass = "SysAdmin_New1!XZ"
+        page.get_by_placeholder("••••••••••••").nth(0).fill(_ADMIN_PASS)
+        page.get_by_placeholder("••••••••••••").nth(1).fill(new_pass)
+        page.get_by_placeholder("••••••••••••").nth(2).fill(new_pass)
+        page.get_by_role("button", name=re.compile(r"Update password", re.IGNORECASE)).click()
+        page.wait_for_load_state("networkidle")
+        # Successful change redirects to home
+        assert "/change-password" not in page.url
+
+        # Reset the password back to avoid breaking subsequent test runs
+        page.goto(f"{BASE_URL}/change-password")
+        page.wait_for_load_state("networkidle")
+        page.get_by_placeholder("••••••••••••").nth(0).fill(new_pass)
+        page.get_by_placeholder("••••••••••••").nth(1).fill(_ADMIN_PASS)
+        page.get_by_placeholder("••••••••••••").nth(2).fill(_ADMIN_PASS)
+        page.get_by_role("button", name=re.compile(r"Update password", re.IGNORECASE)).click()
+        page.wait_for_load_state("networkidle")
 
 
 class TestPasswordReset:

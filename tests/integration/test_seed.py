@@ -20,7 +20,7 @@ class TestSeed:
         assert counts["academic_years"] == 1
         assert counts["roles"] == 3
         assert counts["permissions"] == 7
-        assert counts["users"] == 4  # 3 active + 1 inactive (M1 E2E fixture)
+        assert counts["users"] == 5  # 3 active + 1 inactive + 1 must_change (M1 E2E fixtures)
         assert counts["holidays"] == 2
         assert counts["role_emails"] == 1
         assert counts["student_category_counts"] == 1
@@ -50,11 +50,13 @@ class TestSeed:
         all_users = seeded_session.exec(
             select(User).where(User.is_deleted == False)  # noqa: E712
         ).all()
-        assert len(all_users) >= 4
+        assert len(all_users) >= 5
         active = [u for u in all_users if u.is_active]
         inactive = [u for u in all_users if not u.is_active]
-        assert len(active) >= 3
-        assert len(inactive) >= 1  # inactive_user added at M1 for E2E lockout test
+        must_change = [u for u in all_users if u.must_change_password]
+        assert len(active) >= 4  # sys_admin, dean_sci, student_001, firstlogin_user
+        assert len(inactive) >= 1  # inactive_user
+        assert len(must_change) >= 1  # firstlogin_user
 
     def test_academic_year_is_not_locked(self, seeded_session):
         ay = seeded_session.exec(select(AcademicYear).where(AcademicYear.code == "2025-26")).first()

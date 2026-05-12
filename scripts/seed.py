@@ -169,12 +169,20 @@ def seed(session: Session) -> dict[str, int]:
             "plain_password": "Inactive_Dev1!XZ",
             "is_active": False,
         },
+        {
+            "email": "firstlogin.user@sssihl.edu.in",
+            "username": "firstlogin_user",
+            "role_code": "STUDENT",
+            "plain_password": "FirstLogin_Dev1!XZ",
+            "must_change_password": True,
+        },
     ]
     user_inserted = 0
     for u in users_data:
         role_code = u.pop("role_code")
         plain = u.pop("plain_password")
         is_active = u.pop("is_active", True)
+        must_change = u.pop("must_change_password", False)
 
         # Skip re-hashing on idempotent re-runs: if the stored hash is already bcrypt,
         # reuse it. This avoids ~0.4s per user on every seed call after the first.
@@ -192,10 +200,15 @@ def seed(session: Session) -> dict[str, int]:
                 **u,
                 password_hash=new_hash,
                 is_active=is_active,
+                must_change_password=must_change,
             )
             .on_conflict_do_update(
                 constraint="uq_users_email",
-                set_={"password_hash": new_hash, "is_active": is_active},
+                set_={
+                    "password_hash": new_hash,
+                    "is_active": is_active,
+                    "must_change_password": must_change,
+                },
             )
         )
         result = session.execute(stmt.returning(sa.literal(1).label("x")))
