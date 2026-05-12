@@ -76,12 +76,19 @@ class AuthState(BaseState):
         self.flash = ""
         try:
             with open_session() as session:
-                user, _, raw_token = _auth_svc(session).login(
-                    username,
-                    password,
-                    ip=self.client_ip or None,
-                    user_agent=self.client_user_agent or None,
-                )
+                try:
+                    user, _, raw_token = _auth_svc(session).login(
+                        username,
+                        password,
+                        ip=self.client_ip or None,
+                        user_agent=self.client_user_agent or None,
+                    )
+                except AuthError:
+                    # Commit before re-raising so failed_login_count and locked_until
+                    # are persisted despite the transaction rollback that would otherwise
+                    # discard them when open_session() exits on exception.
+                    session.commit()
+                    raise
                 session.commit()
             self.session_token = raw_token
             self.current_user_id = str(user.id)
