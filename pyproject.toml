@@ -24,6 +24,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "faker>=24.0",
+    "httpx>=0.28.1",
     "hypothesis>=6.100",
     "mypy>=1.10",
     "pre-commit>=3.7",

@@ -89,11 +89,18 @@ class AuthState(BaseState):
                     # discard them when open_session() exits on exception.
                     session.commit()
                     raise
+                # Read all user attributes BEFORE commit expires them and BEFORE
+                # the session context closes and detaches the object.
+                # Accessing expired attributes on a detached User raises
+                # DetachedInstanceError, which would silently swallow the redirect.
+                user_id = str(user.id)
+                must_change = user.must_change_password
+                profile_done = user.profile_completed
                 session.commit()
             self.session_token = raw_token
-            self.current_user_id = str(user.id)
-            self.must_change_password = user.must_change_password
-            self.profile_incomplete = not user.profile_completed
+            self.current_user_id = user_id
+            self.must_change_password = must_change
+            self.profile_incomplete = not profile_done
             if self.must_change_password:
                 return rx.redirect("/change-password")  # type: ignore[return-value]
             return rx.redirect("/")  # type: ignore[return-value]

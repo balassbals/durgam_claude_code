@@ -12,16 +12,27 @@ The seed user credentials must match scripts/seed.py:
   sys_admin / SysAdmin_Dev1!XZ           (active, normal)
   inactive_user / Inactive_Dev1!XZ       (is_active=False)
   firstlogin_user / FirstLogin_Dev1!XZ   (must_change_password=True)
+
+Playwright + Reflex testing patterns (see also docs/modules/auth.md):
+  - Reflex's all-WebSocket transport means wait_for_load_state("networkidle")
+    does NOT work for state-mutating actions (form submits, button clicks).
+    networkidle fires immediately because no HTTP requests are made.
+    Use wait_for_url() for redirect assertions; use polled expect() for
+    element/flash assertions.
+  - For Mailpit inbox assertions, use the Mailpit REST API directly rather
+    than scraping the SPA UI.
 """
 
 import os
 import re
 
+import httpx
 import pytest
 from playwright.sync_api import Page, expect
 
 BASE_URL = os.environ.get("BASE_URL", "http://localhost:3000")
 MAILPIT_URL = os.environ.get("MAILPIT_URL", "http://localhost:8025")
+MAILPIT_API = f"{MAILPIT_URL}/api/v1"
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("DURGAM_E2E") != "1",
@@ -39,12 +50,20 @@ _LOCKOUT_THRESHOLD = 5
 
 
 def _login(page: Page, username: str, password: str) -> None:
+    """Submit login form and wait for navigation away from /login.
+
+    Uses wait_for_url instead of wait_for_load_state("networkidle") because
+    Reflex dispatches all events including redirects over WebSocket. WebSocket
+    traffic does not affect Playwright's networkidle state, so networkidle
+    fires before the redirect is received from the backend.
+    """
     page.goto(f"{BASE_URL}/login")
-    page.wait_for_load_state("networkidle")
+    page.wait_for_load_state("networkidle")  # OK — initial page load is HTTP
     page.get_by_placeholder("your.username").fill(username)
     page.get_by_placeholder("••••••••••••").first.fill(password)
     page.get_by_role("button", name=re.compile(r"Sign in", re.IGNORECASE)).click()
-    page.wait_for_load_state("networkidle")
+    # Wait for URL to leave /login — redirect is WebSocket-based, not HTTP
+    page.wait_for_url(lambda url: "/login" not in url, timeout=10000)
 
 
 def _clear_session(page: Page) -> None:
@@ -52,10 +71,29 @@ def _clear_session(page: Page) -> None:
     page.context.clear_cookies()
 
 
+def _mailpit_latest_message_for(recipient: str) -> dict | None:
+    """Return the most recent Mailpit message sent to recipient, or None."""
+    resp = httpx.get(f"{MAILPIT_API}/messages", timeout=5)
+    resp.raise_for_status()
+    for msg in resp.json().get("messages", []):
+        for to in msg.get("To", []):
+            if recipient in to.get("Address", ""):
+                return msg
+    return None
+
+
+def _mailpit_message_body(message_id: str) -> str:
+    """Return the plain-text body of a Mailpit message."""
+    resp = httpx.get(f"{MAILPIT_API}/message/{message_id}", timeout=5)
+    resp.raise_for_status()
+    return resp.json().get("Text", "") or resp.json().get("HTML", "")
+
+
 class TestLogin:
     def test_successful_login_redirects_to_home(self, page: Page):
         _clear_session(page)
         _login(page, _ADMIN_USER, _ADMIN_PASS)
+        # _login already waited for navigation away from /login
         assert page.url.rstrip("/").endswith("/") or "/change-password" in page.url, (
             f"Expected redirect to / or /change-password, got {page.url}"
         )
@@ -150,6 +188,7 @@ class TestForcedPasswordChange:
         """
         _clear_session(page)
         _login(page, _FIRSTLOGIN_USER, _FIRSTLOGIN_PASS)
+        # _login waited for URL to leave /login; it should be /change-password now
         assert "/change-password" in page.url, (
             f"Expected redirect to /change-password for must_change_password user, got {page.url}"
         )
@@ -161,30 +200,29 @@ class TestChangePassword:
     def test_authenticated_user_can_change_password(self, page: Page):
         """Gate: Playwright auth suite green — change password (authenticated).
 
-        Uses sys_admin to avoid interfering with the forced-change-password seed user.
+        Uses dean_sci (not sys_admin, which is locked by TestBruteForce).
         """
         _clear_session(page)
-        _login(page, _ADMIN_USER, _ADMIN_PASS)
+        _login(page, "dean_sci", "DeanSci_Dev1!XZ")
         page.goto(f"{BASE_URL}/change-password")
-        page.wait_for_load_state("networkidle")
+        page.wait_for_load_state("networkidle")  # HTTP navigation — networkidle is fine
 
-        new_pass = "SysAdmin_New1!XZ"
-        page.get_by_placeholder("••••••••••••").nth(0).fill(_ADMIN_PASS)
+        new_pass = "DeanSci_Change1!XZ"
+        page.get_by_placeholder("••••••••••••").nth(0).fill("DeanSci_Dev1!XZ")
         page.get_by_placeholder("••••••••••••").nth(1).fill(new_pass)
         page.get_by_placeholder("••••••••••••").nth(2).fill(new_pass)
         page.get_by_role("button", name=re.compile(r"Update password", re.IGNORECASE)).click()
-        page.wait_for_load_state("networkidle")
-        # Successful change redirects to home
-        assert "/change-password" not in page.url
+        # Redirect to / is WebSocket-based; wait_for_url, not networkidle
+        page.wait_for_url(f"{BASE_URL}/", timeout=10000)
 
-        # Reset the password back to avoid breaking subsequent test runs
+        # Reset the password back so seed credentials remain valid for subsequent runs
         page.goto(f"{BASE_URL}/change-password")
         page.wait_for_load_state("networkidle")
         page.get_by_placeholder("••••••••••••").nth(0).fill(new_pass)
-        page.get_by_placeholder("••••••••••••").nth(1).fill(_ADMIN_PASS)
-        page.get_by_placeholder("••••••••••••").nth(2).fill(_ADMIN_PASS)
+        page.get_by_placeholder("••••••••••••").nth(1).fill("DeanSci_Dev1!XZ")
+        page.get_by_placeholder("••••••••••••").nth(2).fill("DeanSci_Dev1!XZ")
         page.get_by_role("button", name=re.compile(r"Update password", re.IGNORECASE)).click()
-        page.wait_for_load_state("networkidle")
+        page.wait_for_url(f"{BASE_URL}/", timeout=10000)
 
 
 class TestPasswordReset:
@@ -195,7 +233,12 @@ class TestPasswordReset:
         expect(page.get_by_placeholder("your.email@sssihl.edu.in")).to_be_visible()
 
     def test_password_reset_email_visible_in_mailpit(self, page: Page):
-        """Gate: 'password-reset email visible in Mailpit'."""
+        """Gate: 'password-reset email visible in Mailpit'.
+
+        Uses Mailpit's REST API (not SPA scraping) to verify email arrival.
+        The Mailpit web UI loads its inbox asynchronously via JavaScript;
+        the REST API is synchronous and more reliable for test assertions.
+        """
         _clear_session(page)
         page.goto(f"{BASE_URL}/forgot-password")
         page.wait_for_load_state("networkidle")
@@ -203,16 +246,18 @@ class TestPasswordReset:
         page.get_by_role("button", name=re.compile(r"Send reset link", re.IGNORECASE)).click()
         page.wait_for_load_state("networkidle")
 
-        # Confirm success message shown in UI
+        # Confirm success flash shown in the Reflex UI (polled — state mutation, no redirect)
         expect(page.locator("text=reset link has been sent")).to_be_visible(timeout=10000)
 
-        # Open Mailpit and verify the email arrived
-        page.goto(MAILPIT_URL)
-        page.wait_for_load_state("networkidle")
-        expect(page.locator("text=Reset your DURGAM password")).to_be_visible(timeout=15000)
+        # Verify email arrived via Mailpit REST API — no SPA scraping needed
+        msg = _mailpit_latest_message_for("sys.admin@sssihl.edu.in")
+        assert msg is not None, "No email found in Mailpit for sys.admin@sssihl.edu.in"
+        assert "Reset your DURGAM password" in msg.get("Subject", ""), (
+            f"Unexpected email subject: {msg.get('Subject')}"
+        )
 
     def test_password_reset_full_round_trip(self, page: Page):
-        """Request reset → follow link in Mailpit → set new password → login."""
+        """Request reset → follow link → set new password → login."""
         _clear_session(page)
         page.goto(f"{BASE_URL}/forgot-password")
         page.wait_for_load_state("networkidle")
@@ -220,15 +265,13 @@ class TestPasswordReset:
         page.get_by_role("button", name=re.compile(r"Send reset link", re.IGNORECASE)).click()
         page.wait_for_load_state("networkidle")
 
-        # Open Mailpit and click the reset link
-        page.goto(MAILPIT_URL)
-        page.wait_for_load_state("networkidle")
-        # Click the first email with matching subject
-        page.locator("text=Reset your DURGAM password").first.click()
-        page.wait_for_load_state("networkidle")
-        # Extract the reset link from the email body
-        reset_link = page.locator("a[href*='reset-password']").first.get_attribute("href")
-        assert reset_link, "No reset link found in email"
+        # Get the reset link directly from Mailpit REST API
+        msg = _mailpit_latest_message_for("dean.sci@sssihl.edu.in")
+        assert msg is not None, "No reset email found for dean.sci@sssihl.edu.in"
+        body = _mailpit_message_body(msg["ID"])
+        links = re.findall(r"http://[^\s<\"]+reset-password[^\s<\"]*", body)
+        assert links, "No reset link found in email body"
+        reset_link = links[0]
 
         page.goto(reset_link)
         page.wait_for_load_state("networkidle")
@@ -237,12 +280,12 @@ class TestPasswordReset:
         page.get_by_placeholder("••••••••••••").nth(0).fill(new_pass)
         page.get_by_placeholder("••••••••••••").nth(1).fill(new_pass)
         page.get_by_role("button", name=re.compile(r"Set new password", re.IGNORECASE)).click()
-        page.wait_for_load_state("networkidle")
-        assert "/login" in page.url
+        # Redirect to /login is WebSocket-based
+        page.wait_for_url("**login**", timeout=10000)
 
         # Log in with the new password
         page.get_by_placeholder("your.username").fill("dean_sci")
         page.get_by_placeholder("••••••••••••").first.fill(new_pass)
         page.get_by_role("button", name=re.compile(r"Sign in", re.IGNORECASE)).click()
-        page.wait_for_load_state("networkidle")
-        assert "/login" not in page.url
+        # Redirect to / after successful login
+        page.wait_for_url(lambda url: "/login" not in url, timeout=10000)
