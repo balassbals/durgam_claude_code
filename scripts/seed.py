@@ -10,7 +10,6 @@ Run:
 Safe to run multiple times. Second run shows 0 rows inserted.
 """
 
-import hashlib
 from datetime import date
 
 import structlog
@@ -22,17 +21,13 @@ from durgam.config import settings
 from durgam.logging import configure_logging
 from durgam.models.config_anchors import AcademicYear, Holiday, RoleEmail, StudentCategoryCount
 from durgam.models.identity import Permission, Role, RolePermission, User, UserRole
+from durgam.services.password import hash_password
 
 configure_logging(debug=True)
 log = structlog.get_logger(__name__)
 
 fake = Faker(locale="en_IN")
 fake.seed_instance(42)
-
-
-def _hash_password(plain: str) -> str:
-    """Deterministic dev-only hash — never use in production."""
-    return "sha256$dev$" + hashlib.sha256(plain.encode()).hexdigest()
 
 
 def _exec_insert(session: Session, stmt: object) -> int:
@@ -146,24 +141,57 @@ def seed(session: Session) -> dict[str, int]:
     counts["role_permissions"] = rp_inserted
 
     # ── Users ─────────────────────────────────────────────────────────────────
+    # Passwords are real bcrypt hashes (cost 12) — safe to use in dev and CI.
+    # Pattern: <username>_Dev1! satisfies the §6.1 policy.
     users_data = [
-        {"email": "sys.admin@sssihl.edu.in", "username": "sys_admin", "role_code": "SYSTEM_ADMIN"},
-        {"email": "dean.sci@sssihl.edu.in", "username": "dean_sci", "role_code": "DEAN"},
-        {"email": "student.001@sssihl.edu.in", "username": "student_001", "role_code": "STUDENT"},
+        {
+            "email": "sys.admin@sssihl.edu.in",
+            "username": "sys_admin",
+            "role_code": "SYSTEM_ADMIN",
+            "plain_password": "SysAdmin_Dev1!XZ",
+        },
+        {
+            "email": "dean.sci@sssihl.edu.in",
+            "username": "dean_sci",
+            "role_code": "DEAN",
+            "plain_password": "DeanSci_Dev1!XZ",
+        },
+        {
+            "email": "student.001@sssihl.edu.in",
+            "username": "student_001",
+            "role_code": "STUDENT",
+            "plain_password": "Student_Dev1!XZ",
+        },
+        {
+            "email": "inactive.user@sssihl.edu.in",
+            "username": "inactive_user",
+            "role_code": "STUDENT",
+            "plain_password": "Inactive_Dev1!XZ",
+            "is_active": False,
+        },
     ]
     user_inserted = 0
     for u in users_data:
         role_code = u.pop("role_code")
-        user_inserted += _exec_insert(
-            session,
+        plain = u.pop("plain_password")
+        is_active = u.pop("is_active", True)
+        new_hash = hash_password(plain)
+        stmt = (
             pg_insert(User)
             .values(
                 **u,
-                password_hash=_hash_password(u["username"] + "_dev"),
-                is_active=True,
+                password_hash=new_hash,
+                is_active=is_active,
             )
-            .on_conflict_do_nothing(constraint="uq_users_email"),
+            .on_conflict_do_update(
+                constraint="uq_users_email",
+                set_={"password_hash": new_hash, "is_active": is_active},
+            )
         )
+        import sqlalchemy as sa
+
+        result = session.execute(stmt.returning(sa.literal(1).label("x")))
+        user_inserted += len(result.fetchall())
         user = session.exec(select(User).where(User.email == u["email"])).one()
         _exec_insert(
             session,

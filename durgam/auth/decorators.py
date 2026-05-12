@@ -8,6 +8,9 @@ Rule (enforced by CI lint):
   Every Reflex state event handler must wear EITHER @require_role OR
   @public_handler, PLUS @audit_action. No handler may be undecorated.
 
+The decorators open their own SQLModel sessions independently of the State
+(States must not import SQLModel per CLAUDE.md layering rules).
+
 See docs/modules/auth.md for the full contract description.
 """
 
@@ -15,10 +18,12 @@ from __future__ import annotations
 
 import functools
 from collections.abc import Callable
+from contextlib import contextmanager
 from typing import Any
 from uuid import UUID
 
 import structlog
+from sqlalchemy import create_engine
 from sqlmodel import Session
 
 from durgam.audit.log import write_audit_row
@@ -26,15 +31,22 @@ from durgam.auth.permissions import PermissionDenied, can
 
 log = structlog.get_logger(__name__)
 
+_engine = None
 
-def _get_session_from_state(state: Any) -> Session:
-    """Extract a live DB session from a Reflex State instance.
 
-    Reflex State objects expose _get_db_session() once the service layer is
-    wired. At M1 this helper is called from within decorators; the session is
-    opened and closed by the decorator, never leaked to the handler.
-    """
-    return state._get_db_session()
+def _get_engine():
+    global _engine
+    if _engine is None:
+        from durgam.config import settings
+
+        _engine = create_engine(settings.database_url_sync, pool_pre_ping=True)
+    return _engine
+
+
+@contextmanager
+def _db_session():
+    with Session(_get_engine()) as session:
+        yield session
 
 
 def _extract_user_id(state: Any) -> UUID | None:
@@ -77,8 +89,8 @@ def require_role(
                 raise PermissionDenied(
                     user_id="<unauthenticated>", action=action, resource=resource
                 )
-            with _get_session_from_state(state) as session:
-                scope_id: UUID | None = getattr(state, "scope_id", None)
+            scope_id: UUID | None = getattr(state, "scope_id", None)
+            with _db_session() as session:
                 if not can(
                     user_id=user_id,
                     action=action,
@@ -137,7 +149,7 @@ def audit_action(
 
             result = await func(*args, **kwargs)
 
-            with _get_session_from_state(state) as session:
+            with _db_session() as session:
                 audit_data: dict[str, Any] = result if isinstance(result, dict) else {}
                 write_audit_row(
                     actor_user_id=user_id,
