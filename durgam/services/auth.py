@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import secrets
 from datetime import timedelta
+from uuid import UUID
 
 import structlog
 
@@ -176,6 +177,18 @@ class PasswordService:
         self._users._session.flush()
         log.info("password_changed", user_id=str(user.id))
         return user
+
+    def change_password_for_user(
+        self,
+        user_id: UUID,
+        current_password: str,
+        new_password: str,
+    ) -> None:
+        """Convenience method for States: look up user by id then change password."""
+        user = self._users._session.get(User, user_id)
+        if user is None or user.is_deleted:
+            raise AuthError("Session expired. Please log in again.")
+        self.change_password(user, current_password, new_password)
 
     def set_password(self, user: User, new_password: str) -> User:
         """Set password without verifying the current one (admin reset path)."""

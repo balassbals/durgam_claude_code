@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     smtp_port: int = Field(default=1025, alias="SMTP_PORT")
     smtp_from: str = Field(default="noreply@sssihl.edu.in", alias="SMTP_FROM")
 
+    app_base_url: str = Field(default="http://localhost:3000", alias="APP_BASE_URL")
+
     # Never ship the dev default to production — override via SECRET_KEY env var.
     secret_key: str = Field(default="dev-secret-key-change-in-production", alias="SECRET_KEY")
     debug: bool = Field(default=False, alias="DEBUG")
