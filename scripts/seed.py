@@ -184,13 +184,10 @@ def seed(session: Session) -> dict[str, int]:
         is_active = u.pop("is_active", True)
         must_change = u.pop("must_change_password", False)
 
-        # Skip re-hashing on idempotent re-runs: if the stored hash is already bcrypt,
-        # reuse it. This avoids ~0.4s per user on every seed call after the first.
-        existing = session.exec(select(User).where(User.email == u["email"])).first()
-        if existing and existing.password_hash.startswith("$2b$"):
-            new_hash = existing.password_hash
-        else:
-            new_hash = hash_password(plain)
+        # Always re-hash so seed is idempotent even after test runs have changed
+        # user passwords. The bcrypt cost (~0.3s per user) is acceptable for a
+        # dev/CI seed script that runs once at stack startup.
+        new_hash = hash_password(plain)
 
         import sqlalchemy as sa
 
@@ -208,6 +205,9 @@ def seed(session: Session) -> dict[str, int]:
                     "password_hash": new_hash,
                     "is_active": is_active,
                     "must_change_password": must_change,
+                    # Reset lockout state so re-seeding repairs test contamination.
+                    "failed_login_count": 0,
+                    "locked_until": None,
                 },
             )
         )
