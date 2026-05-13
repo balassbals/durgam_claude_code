@@ -96,6 +96,30 @@ to the append-only `auditlog` table; the application DB role has INSERT+SELECT o
   - `docs/milestones/<MN>.md` with the gate checklist as actually demonstrated.
 - A version bump on Reflex, SQLModel, or any other framework dependency is itself a milestone-boundary activity; never inside an in-flight milestone.
 
+## Testing rules
+
+- **E2E tests that mutate persistent state** (passwords, account flags, tokens, lockout)
+  must either (a) create per-test fresh users via a helper that also tears them down in
+  a `finally` block, or (b) reset mutated state at teardown. Option (a) is preferred —
+  it isolates tests from each other even when a test fails before teardown. Option (b)
+  fails silently if the test crashes mid-way and leaves dirty state for subsequent runs.
+  The seed is shared across runs and must not be assumed to be in any particular state.
+
+- **Every E2E suite run must be deterministic.** Run the suite three times in succession
+  as part of milestone gate verification. Non-determinism is a gate failure, not a flake
+  to retry. Timeout fixes and retry loops mask root causes; they are not acceptable fixes.
+
+- **Migration tests must target the test database** (`settings.test_database_url`), not
+  the dev database. `alembic downgrade base` wipes all data — running it against the dev
+  DB destroys seed data and breaks subsequent E2E runs silently.
+
+- **Reflex + Playwright**: `wait_for_load_state("networkidle")` is NOT safe for
+  assertions after state-mutating actions. Reflex is all-WebSocket; networkidle fires
+  immediately with no HTTP traffic. Use `wait_for_url()` for redirect assertions and
+  polled `expect(...).to_be_visible()` for flash/element assertions.
+
+These rules were learned at M1 and apply to M3, M5, and all subsequent milestones.
+
 ## Known patterns and workarounds
 
 ### `_TIMESTAMPTZ` cast for SQLModel datetime columns
