@@ -197,15 +197,25 @@ class TestLogin:
         )
 
     def test_wrong_password_shows_error(self, page: Page):
-        _clear_session(page)
-        page.goto(f"{BASE_URL}/login")
-        page.wait_for_load_state("networkidle")
-        page.get_by_placeholder("your.username").fill(_ADMIN_USER)
-        page.get_by_placeholder("••••••••••••").first.fill("WrongPass999!")
-        page.get_by_role("button", name=re.compile(r"Sign in", re.IGNORECASE)).click()
-        page.wait_for_load_state("networkidle")
-        expect(page.locator("text=Invalid username or password")).to_be_visible()
-        assert "/login" in page.url
+        """A wrong password for a valid user shows "Invalid username or password".
+
+        Uses an ephemeral user so the failed_login_count increment is not
+        accumulated against a seeded account. One increment per run would
+        lock sys_admin after 5 consecutive runs without re-seeding.
+        """
+        username, _ = _create_ephemeral_user()
+        try:
+            _clear_session(page)
+            page.goto(f"{BASE_URL}/login")
+            page.wait_for_load_state("networkidle")
+            page.get_by_placeholder("your.username").fill(username)
+            page.get_by_placeholder("••••••••••••").first.fill("WrongPass999!")
+            page.get_by_role("button", name=re.compile(r"Sign in", re.IGNORECASE)).click()
+            page.wait_for_load_state("networkidle")
+            expect(page.locator("text=Invalid username or password")).to_be_visible()
+            assert "/login" in page.url
+        finally:
+            _delete_ephemeral_user(username)
 
     def test_unknown_username_shows_error(self, page: Page):
         _clear_session(page)

@@ -98,12 +98,18 @@ to the append-only `auditlog` table; the application DB role has INSERT+SELECT o
 
 ## Testing rules
 
-- **E2E tests that mutate persistent state** (passwords, account flags, tokens, lockout)
-  must either (a) create per-test fresh users via a helper that also tears them down in
-  a `finally` block, or (b) reset mutated state at teardown. Option (a) is preferred —
-  it isolates tests from each other even when a test fails before teardown. Option (b)
-  fails silently if the test crashes mid-way and leaves dirty state for subsequent runs.
-  The seed is shared across runs and must not be assumed to be in any particular state.
+- **E2E tests that mutate persistent state** (passwords, account flags, tokens, lockout
+  counters, or any DB field written by a failing/succeeding auth operation) must either
+  (a) create per-test fresh users via a helper that tears them down in a `finally` block,
+  or (b) reset mutated state at teardown. Option (a) is preferred — it isolates tests from
+  each other even when a test fails before teardown. Option (b) fails silently if the test
+  crashes mid-way and leaves dirty state for subsequent runs. This applies to ALL persistent
+  mutations, including slow-burn ones: submitting one wrong password increments
+  `failed_login_count` by 1 per run. After N consecutive runs without re-seeding, a seeded
+  account locks. Use ephemeral users for ANY test that submits wrong credentials against a
+  known-good username. The seed is shared across runs and must not be assumed to be in any
+  particular state. Note: `alembic downgrade base` also counts as state mutation against the
+  dev DB — migration tests must target the test database.
 
 - **Every E2E suite run must be deterministic.** Run the suite three times in succession
   as part of milestone gate verification. Non-determinism is a gate failure, not a flake
