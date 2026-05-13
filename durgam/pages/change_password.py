@@ -2,11 +2,13 @@
 
 import reflex as rx
 
+from durgam.pages.components import nav_shell
 from durgam.states.auth import AuthState
 
 
 def change_password() -> rx.Component:
     return rx.box(
+        nav_shell(),
         rx.box(
             rx.vstack(
                 rx.heading(

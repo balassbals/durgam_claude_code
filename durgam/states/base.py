@@ -14,8 +14,9 @@ class BaseState(rx.State):
         path="/",
     )
 
-    # Populated by AuthState._resolve_session() on each page load.
+    # Populated by AuthState.resolve_session() on each page load.
     current_user_id: str = ""
+    current_username: str = ""
     current_role_code: str = ""
 
     flash: str = ""

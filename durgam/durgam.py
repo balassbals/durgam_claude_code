@@ -13,7 +13,14 @@ from durgam.theme import apply_theme
 configure_logging(debug=settings.debug)
 
 app = rx.App(style=apply_theme())
-app.add_page(index, route="/")
+app.add_page(
+    index,
+    route="/",
+    # resolve_session populates current_user_id and must_change_password;
+    # check_forced_redirect sends must_change_password users to /change-password
+    # so the home page is never reached before completing a forced change.
+    on_load=[AuthState.resolve_session, AuthState.check_forced_redirect],
+)
 app.add_page(login, route="/login", on_load=AuthState.resolve_session)
 app.add_page(forgot_password, route="/forgot-password")
 app.add_page(

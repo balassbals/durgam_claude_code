@@ -405,3 +405,52 @@ class TestPasswordReset:
             page.wait_for_url(lambda url: "/login" not in url, timeout=10000)
         finally:
             _delete_ephemeral_user(username)
+
+
+class TestAuthFlowFromHomePage:
+    def test_logout_button_visible_and_functional(self, page: Page):
+        """Nav shell is reachable from / — gate: Playwright auth suite green.
+
+        Logs in, lands on /, asserts the nav shell (logout button + username)
+        is visible, clicks logout, asserts redirect to /login. This proves the
+        auth flow is reachable through the application's own navigation, not
+        just by direct URL navigation — the class of gap the URL-only suite
+        misses.
+        """
+        _clear_session(page)
+        _login(page, _ADMIN_USER, _ADMIN_PASS)
+        # Should be on home page, not change-password (sys_admin has must_change=False)
+        assert page.url == f"{BASE_URL}/", (
+            f"Expected {BASE_URL}/ after login, got {page.url}"
+        )
+
+        # Nav shell must be visible without any direct URL navigation
+        logout_btn = page.get_by_role("button", name=re.compile(r"Log out", re.IGNORECASE))
+        expect(logout_btn).to_be_visible()
+        expect(page.locator(f"text={_ADMIN_USER}")).to_be_visible()
+
+        # Click the logout button and verify redirect to /login
+        logout_btn.click()
+        page.wait_for_url("**login**", timeout=10000)
+
+
+class TestForcedPasswordChangeFromHomePage:
+    def test_firstlogin_user_lands_on_change_password_not_home(self, page: Page):
+        """§9.1 first-login forced redirect — gate: Playwright auth suite green.
+
+        Logs in as firstlogin_user (must_change_password=True). Per §9.1,
+        "First-login forces password change." The user must be redirected to
+        /change-password, not to /. Proves the redirect is enforced end-to-end
+        through the UI, not just at the service layer.
+        """
+        _clear_session(page)
+        _login(page, _FIRSTLOGIN_USER, _FIRSTLOGIN_PASS)
+        # Must land on /change-password, NOT on /
+        assert "/change-password" in page.url, (
+            f"Expected /change-password for must_change_password user, got {page.url}"
+        )
+        assert page.url != f"{BASE_URL}/", (
+            f"firstlogin_user must not land on / — got {page.url}"
+        )
+        # The forced-change banner must be visible
+        expect(page.locator("text=must set a new password")).to_be_visible()

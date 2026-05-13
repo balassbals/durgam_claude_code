@@ -47,9 +47,14 @@ class AuthState(BaseState):
     profile_incomplete: bool = False
 
     def resolve_session(self) -> None:
-        """Resolve session_token → current_user_id. Use as on_load on every auth-aware page."""
+        """Resolve session_token → current_user_id. Use as on_load on every auth-aware page.
+
+        All user attributes are read inside the with-block so they are accessed
+        while the session is open (DetachedInstanceError prevention — see CLAUDE.md).
+        """
         if not self.session_token:
             self.current_user_id = ""
+            self.current_username = ""
             self.must_change_password = False
             return
         with open_session() as session:
@@ -57,11 +62,23 @@ class AuthState(BaseState):
             if user is None:
                 self.session_token = ""
                 self.current_user_id = ""
+                self.current_username = ""
                 self.must_change_password = False
             else:
                 self.current_user_id = str(user.id)
+                self.current_username = user.username
                 self.must_change_password = user.must_change_password
                 self.profile_incomplete = not user.profile_completed
+
+    def check_forced_redirect(self) -> None:
+        """Redirect to /change-password if must_change_password is set.
+
+        Call as a second on_load handler on pages an authenticated user
+        might land on before completing a forced password change. Not needed
+        on /change-password itself (would create an infinite redirect loop).
+        """
+        if self.current_user_id and self.must_change_password:
+            return rx.redirect("/change-password")  # type: ignore[return-value]
 
     def load_reset_token(self) -> None:
         """Read ?token= query param from the URL. Use as on_load on the reset-password page."""
@@ -94,11 +111,13 @@ class AuthState(BaseState):
                 # Accessing expired attributes on a detached User raises
                 # DetachedInstanceError, which would silently swallow the redirect.
                 user_id = str(user.id)
+                login_username = user.username
                 must_change = user.must_change_password
                 profile_done = user.profile_completed
                 session.commit()
             self.session_token = raw_token
             self.current_user_id = user_id
+            self.current_username = login_username
             self.must_change_password = must_change
             self.profile_incomplete = not profile_done
             if self.must_change_password:
@@ -119,6 +138,7 @@ class AuthState(BaseState):
                 session.commit()
         self.session_token = ""
         self.current_user_id = ""
+        self.current_username = ""
         self.must_change_password = False
         return rx.redirect("/login")  # type: ignore[return-value]
 

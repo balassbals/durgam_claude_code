@@ -119,6 +119,17 @@ to the append-only `auditlog` table; the application DB role has INSERT+SELECT o
   the dev database. `alembic downgrade base` wipes all data — running it against the dev
   DB destroys seed data and breaks subsequent E2E runs silently.
 
+- **Navigation reachability**: URL-based Playwright scenarios verify that pages work
+  when reached directly. They do NOT verify that pages are reachable through the
+  application's own navigation. Every module's E2E suite must include at least one
+  scenario per user journey that starts at a natural entry point (typically `/`) and
+  navigates to the feature the way a real user would. Specifically:
+  - Every module that adds authenticated UI must include a test that logs in and
+    verifies the relevant UI is reachable from the home page or the nav shell.
+  - Forced-redirect flows (e.g., `must_change_password`) must be tested end-to-end
+    through the login form, not just at the service or state layer.
+  This gap was discovered at M1 gate and must not recur at M2.
+
 - **Reflex + Playwright**: `wait_for_load_state("networkidle")` is NOT safe for
   assertions after state-mutating actions. Reflex is all-WebSocket; networkidle fires
   immediately with no HTTP traffic. Use `wait_for_url()` for redirect assertions and
