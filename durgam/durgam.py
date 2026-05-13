@@ -16,12 +16,17 @@ app = rx.App(style=apply_theme())
 app.add_page(
     index,
     route="/",
-    # resolve_session populates current_user_id and must_change_password;
-    # check_forced_redirect sends must_change_password users to /change-password
-    # so the home page is never reached before completing a forced change.
-    on_load=[AuthState.resolve_session, AuthState.check_forced_redirect],
+    # Single handler: resolve session + redirect unauthenticated to /login
+    # + redirect must_change_password to /change-password. Merged into one
+    # method to avoid Reflex 0.9.x multi-event sequencing issues.
+    on_load=AuthState.home_on_load,
 )
-app.add_page(login, route="/login", on_load=AuthState.resolve_session)
+app.add_page(
+    login,
+    route="/login",
+    # Resolve session only — no redirect (login page is accessible unauthenticated)
+    on_load=AuthState.resolve_session,
+)
 app.add_page(forgot_password, route="/forgot-password")
 app.add_page(
     reset_password,
@@ -31,5 +36,6 @@ app.add_page(
 app.add_page(
     change_password,
     route="/change-password",
-    on_load=AuthState.resolve_session,
+    # Resolve session + redirect unauthenticated to /login (no must_change loop)
+    on_load=AuthState.change_password_on_load,
 )

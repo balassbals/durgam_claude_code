@@ -46,11 +46,11 @@ class AuthState(BaseState):
     must_change_password: bool = False
     profile_incomplete: bool = False
 
-    def resolve_session(self) -> None:
-        """Resolve session_token → current_user_id. Use as on_load on every auth-aware page.
+    def _resolve_session_state(self) -> None:
+        """Internal: populate current_user_id / username / must_change_password from cookie.
 
-        All user attributes are read inside the with-block so they are accessed
-        while the session is open (DetachedInstanceError prevention — see CLAUDE.md).
+        All User attributes are read inside the with-block (before session.commit()
+        or context exit) to prevent DetachedInstanceError — see CLAUDE.md.
         """
         if not self.session_token:
             self.current_user_id = ""
@@ -70,15 +70,40 @@ class AuthState(BaseState):
                 self.must_change_password = user.must_change_password
                 self.profile_incomplete = not user.profile_completed
 
-    def check_forced_redirect(self) -> None:
-        """Redirect to /change-password if must_change_password is set.
+    def resolve_session(self) -> None:
+        """on_load for pages that show auth-aware UI but do NOT require login.
 
-        Call as a second on_load handler on pages an authenticated user
-        might land on before completing a forced password change. Not needed
-        on /change-password itself (would create an infinite redirect loop).
+        Resolves the session cookie and populates state vars. Does NOT redirect.
+        Use for /login, /forgot-password, /reset-password.
         """
-        if self.current_user_id and self.must_change_password:
+        self._resolve_session_state()
+
+    def home_on_load(self) -> None:
+        """on_load for /: resolve session, then enforce route protection in one handler.
+
+        (a) No session → redirect to /login.
+        (b) Session present + must_change_password → redirect to /change-password.
+        (c) Authenticated, no forced change → render normally.
+
+        Using a single handler avoids sequencing uncertainty across multiple enqueued
+        on_load events (the prior [resolve_session, check_forced_redirect] design
+        relied on the second event seeing mutations from the first, which is guaranteed
+        in theory but broke on fresh-compile server starts in Reflex 0.9.x).
+        """
+        self._resolve_session_state()
+        if not self.current_user_id:
+            return rx.redirect("/login")  # type: ignore[return-value]
+        if self.must_change_password:
             return rx.redirect("/change-password")  # type: ignore[return-value]
+
+    def change_password_on_load(self) -> None:
+        """on_load for /change-password: resolve session, redirect to /login if no session.
+
+        Does NOT redirect must_change_password users — they are already on the correct page.
+        """
+        self._resolve_session_state()
+        if not self.current_user_id:
+            return rx.redirect("/login")  # type: ignore[return-value]
 
     def load_reset_token(self) -> None:
         """Read ?token= query param from the URL. Use as on_load on the reset-password page."""
