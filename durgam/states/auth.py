@@ -97,13 +97,22 @@ class AuthState(BaseState):
             return rx.redirect("/change-password")  # type: ignore[return-value]
 
     def change_password_on_load(self) -> None:
-        """on_load for /change-password: resolve session, redirect to /login if no session.
+        """on_load for /change-password: protect the route without a second DB lookup.
 
-        Does NOT redirect must_change_password users — they are already on the correct page.
+        Uses current_user_id already set by the login handler delta or a prior
+        resolve_session call. Does NOT call _resolve_session_state() here because
+        a second DB lookup in the same event chain can race with the session record
+        being visible — _resolve_session_state() would then clear current_user_id and
+        redirect to /login, creating a redirect loop for firstlogin_user.
+
+        If current_user_id is empty (user arrived unauthenticated), redirect to /login.
+        Does NOT redirect must_change_password users — they are already on the right page.
         """
-        self._resolve_session_state()
         if not self.current_user_id:
-            return rx.redirect("/login")  # type: ignore[return-value]
+            # Session not yet resolved; resolve it now so the page has state.
+            self._resolve_session_state()
+            if not self.current_user_id:
+                return rx.redirect("/login")  # type: ignore[return-value]
 
     def load_reset_token(self) -> None:
         """Read ?token= query param from the URL. Use as on_load on the reset-password page."""
