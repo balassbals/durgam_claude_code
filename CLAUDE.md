@@ -4,7 +4,7 @@
 **Spec**: `docs/durgam_rfp_v3.pdf` — all section references (§8, §12, etc.) point to this file.
 **Python**: 3.13 (pinned via `.python-version`).
 **Theme**: Puttaparthi Saffron–Indigo–Ivory (§15.1). Single committed theme; no alternatives in v3.
-**Current milestone**: M1 — Authentication.
+**Current milestone**: M2 — Admin Module.
 
 ## Layering rules — strictly enforced
 - **States → Services**: states orchestrate, services own the rules. States must not import SQLModel, SQLAlchemy, or any model.
@@ -212,7 +212,7 @@ At the start of every coding session, Claude Code runs:
 If any of the above fails or surprises, stop and surface it before writing code.
 
 ## Current milestone
-**M1 — Authentication.**
+**M2 — Admin Module.**
 
 This line is the source of truth for "where are we." Before opening a milestone-completing PR, Claude Code MUST:
 1. Grep this file for "Current milestone" and update both occurrences (the top status line and this section).
