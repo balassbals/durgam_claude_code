@@ -30,10 +30,20 @@ class Settings(BaseSettings):
     smtp_port: int = Field(default=1025, alias="SMTP_PORT")
     smtp_from: str = Field(default="noreply@sssihl.edu.in", alias="SMTP_FROM")
 
+    app_base_url: str = Field(default="http://localhost:3000", alias="APP_BASE_URL")
+
     # Never ship the dev default to production — override via SECRET_KEY env var.
     secret_key: str = Field(default="dev-secret-key-change-in-production", alias="SECRET_KEY")
     debug: bool = Field(default=False, alias="DEBUG")
     environment: str = Field(default="development", alias="ENVIRONMENT")
+
+    # Auth rate-limiting (OQ-2 confirmed thresholds).
+    auth_user_failure_threshold: int = Field(default=5, alias="AUTH_USER_FAILURE_THRESHOLD")
+    auth_user_lockout_minutes: int = Field(default=15, alias="AUTH_USER_LOCKOUT_MINUTES")
+    auth_ip_throttle_limit: int = Field(default=20, alias="AUTH_IP_THROTTLE_LIMIT")
+    auth_ip_throttle_window_minutes: int = Field(
+        default=15, alias="AUTH_IP_THROTTLE_WINDOW_MINUTES"
+    )
 
 
 settings = Settings()

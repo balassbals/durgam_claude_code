@@ -40,6 +40,39 @@ base type; at that point the parameter can be narrowed and the ignore removed.
 
 ---
 
+### TD-005 — Session cookie cannot be HttpOnly (Reflex architectural constraint)
+
+**Location:** `durgam/states/auth.py` (session token stored in `rx.Cookie()`);
+`docs/security_decisions.md` → SD-001.
+
+**What it is:** Reflex 0.9.2 stores its CLIENT_TOKEN in `window.sessionStorage` (not
+an HTTP cookie) and exposes `rx.Cookie()` as the only cookie API for state vars.
+`rx.Cookie()` is set by JavaScript via the `universal-cookie` npm library; the `HttpOnly`
+flag can only be set by a server `Set-Cookie` header and therefore cannot be applied
+to `rx.Cookie()`. The M1 session token (an opaque UUID v4 mapped to `UserSession` in
+the DB) is stored in an `rx.Cookie()` and is thus JavaScript-accessible.
+
+**Compensating controls in place:**
+- Token is opaque (UUID v4, not the user's UUID); server-side invalidation is authoritative.
+- `same_site="lax"` blocks cross-site request forgery via cookie injection.
+- React's built-in JSX escaping prevents the most common XSS vectors.
+- CLAUDE.md "What NOT to do" prohibits `rx.html()` with user-controlled strings.
+- All user-supplied content is rendered through Reflex component primitives that escape output.
+
+**Residual risk:** An XSS vulnerability that bypasses React's escaping could read the
+session cookie and hijack the session.
+
+**Why this is not a production blocker at M1:** The gap is mitigable; Path B (custom
+Starlette middleware for a real HttpOnly cookie) is documented in `docs/security_decisions.md`
+as an available escalation path. The cost of switching framework integration at M1 outweighs
+the residual risk given the compensating controls.
+
+**Trigger to escalate:** (a) Reflex 1.0+ ships a server-side cookie API; (b) a security
+review at M20 or earlier determines the residual risk is unacceptable; (c) an XSS
+surface is discovered anywhere in DURGAM that could reach a user-controlled string.
+
+---
+
 ## Resolved
 
 ### TD-002 — SAWarning: transaction already deassociated from connection (resolved in m0-cleanup)

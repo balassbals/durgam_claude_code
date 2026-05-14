@@ -20,14 +20,18 @@ class TestSeed:
         assert counts["academic_years"] == 1
         assert counts["roles"] == 3
         assert counts["permissions"] == 7
-        assert counts["users"] == 3
+        assert counts["users"] == 5  # 3 active + 1 inactive + 1 must_change (M1 E2E fixtures)
         assert counts["holidays"] == 2
         assert counts["role_emails"] == 1
         assert counts["student_category_counts"] == 1
         assert counts["role_permissions"] == 11
 
     def test_second_run_inserts_zero_rows(self, db_engine):
-        """Run seed twice on the same DB; second run should insert nothing."""
+        """Run seed twice on the same DB; second run should insert nothing for most tables.
+
+        Users use ON CONFLICT DO UPDATE (to refresh bcrypt hashes), so they always
+        return a row count. All other tables use ON CONFLICT DO NOTHING.
+        """
         from scripts.seed import seed
 
         with Session(db_engine) as session:
@@ -38,16 +42,21 @@ class TestSeed:
             counts2 = seed(session)
             session.commit()
 
-        insertable = {k: v for k, v in counts2.items() if k != "role_emails"}
-        assert all(v == 0 for v in insertable.values()), f"Non-zero on 2nd run: {counts2}"
+        non_user = {k: v for k, v in counts2.items() if k not in ("role_emails", "users")}
+        assert all(v == 0 for v in non_user.values()), f"Non-zero on 2nd run: {counts2}"
         assert counts2["role_emails"] == 0
 
-    def test_seed_creates_active_records_only(self, seeded_session):
-        users = seeded_session.exec(
+    def test_seed_creates_expected_active_and_inactive_users(self, seeded_session):
+        all_users = seeded_session.exec(
             select(User).where(User.is_deleted == False)  # noqa: E712
         ).all()
-        assert len(users) >= 3
-        assert all(u.is_active for u in users)
+        assert len(all_users) >= 5
+        active = [u for u in all_users if u.is_active]
+        inactive = [u for u in all_users if not u.is_active]
+        must_change = [u for u in all_users if u.must_change_password]
+        assert len(active) >= 4  # sys_admin, dean_sci, student_001, firstlogin_user
+        assert len(inactive) >= 1  # inactive_user
+        assert len(must_change) >= 1  # firstlogin_user
 
     def test_academic_year_is_not_locked(self, seeded_session):
         ay = seeded_session.exec(select(AcademicYear).where(AcademicYear.code == "2025-26")).first()

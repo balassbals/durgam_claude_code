@@ -1,5 +1,6 @@
 import reflex as rx
 
+from durgam.pages.components import nav_shell
 from durgam.theme import TOKENS
 
 
@@ -42,6 +43,7 @@ def index() -> rx.Component:
     ]
 
     return rx.box(
+        nav_shell(),
         rx.vstack(
             rx.box(
                 height="4px",

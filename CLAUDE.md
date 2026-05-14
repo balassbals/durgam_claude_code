@@ -4,7 +4,7 @@
 **Spec**: `docs/durgam_rfp_v3.pdf` — all section references (§8, §12, etc.) point to this file.
 **Python**: 3.13 (pinned via `.python-version`).
 **Theme**: Puttaparthi Saffron–Indigo–Ivory (§15.1). Single committed theme; no alternatives in v3.
-**Current milestone**: M0 — Foundations (gate passed).
+**Current milestone**: M1 — Authentication.
 
 ## Layering rules — strictly enforced
 - **States → Services**: states orchestrate, services own the rules. States must not import SQLModel, SQLAlchemy, or any model.
@@ -30,15 +30,31 @@
   - **Replaceable**: when sponsor data arrives, the M5 bulk-import flow loads it via the same validation path that real ongoing additions use. The seed script gets wiped and replaced; never merged.
   - **Re-runnable in CI**: every CI run starts from the seed; tests must pass against it.
 
-## Permissions — `@require_role`
-Every Reflex state event handler and every page route is decorated:
+## Permissions — `@require_role` and `@public_handler`
+Every Reflex state event handler must wear EITHER `@require_role` OR `@public_handler`,
+PLUS `@audit_action`. A handler without one of these fails CI lint.
+
+**Authenticated handlers** (require a logged-in user):
 ```python
 @require_role(action="approve", resource="leave_request", scope="department")
+@audit_action(action="approve", resource="leave_request")
 async def approve_request(self, request_id: UUID): ...
 ```
-The decorator calls `auth.permissions.can(user, action, resource, target)` and
-raises `PermissionDenied` on failure. Every page additionally guards at mount
-time. A handler without the decorator fails CI lint.
+`@require_role` reads `self.current_user_id` from the Reflex State instance (M1 contract).
+Raises `PermissionDenied` if unauthenticated or the permission check fails.
+
+**Public handlers** (login, forgot_password, reset_password — no session required):
+```python
+@public_handler
+@audit_action(action="login", resource="session")
+async def login(self) -> None: ...
+```
+`@public_handler` marks the handler as intentionally unauthenticated. It does NOT
+introduce an anonymous principal with a universal permission. `@audit_action` is still
+required; the actor_user_id in the audit row will be None for unauthenticated actions.
+
+Do not decorate with `@require_role(action="*", resource="*", scope="*")` or similar
+wildcards to bypass access control. If an endpoint is genuinely public, use `@public_handler`.
 
 ## Audit — `@audit_action`
 Every state-changing handler is also decorated:
@@ -80,6 +96,60 @@ to the append-only `auditlog` table; the application DB role has INSERT+SELECT o
   - `docs/milestones/<MN>.md` with the gate checklist as actually demonstrated.
 - A version bump on Reflex, SQLModel, or any other framework dependency is itself a milestone-boundary activity; never inside an in-flight milestone.
 
+## Testing rules
+
+- **E2E tests that mutate persistent state** (passwords, account flags, tokens, lockout
+  counters, or any DB field written by a failing/succeeding auth operation) must either
+  (a) create per-test fresh users via a helper that tears them down in a `finally` block,
+  or (b) reset mutated state at teardown. Option (a) is preferred — it isolates tests from
+  each other even when a test fails before teardown. Option (b) fails silently if the test
+  crashes mid-way and leaves dirty state for subsequent runs. This applies to ALL persistent
+  mutations, including slow-burn ones: submitting one wrong password increments
+  `failed_login_count` by 1 per run. After N consecutive runs without re-seeding, a seeded
+  account locks. Use ephemeral users for ANY test that submits wrong credentials against a
+  known-good username. The seed is shared across runs and must not be assumed to be in any
+  particular state. Note: `alembic downgrade base` also counts as state mutation against the
+  dev DB — migration tests must target the test database.
+
+  **Seeded users are read-only fixtures.** No test may log in as a seeded user and mutate
+  their state. The following seeded users must be treated as read-only:
+  - `sys_admin` / `SysAdmin_Dev1!XZ` — normal active user (can be used for read-only login tests)
+  - `dean_sci` / `DeanSci_Dev1!XZ` — Dean role
+  - `firstlogin_user` / `FirstLogin_Dev1!XZ` — `must_change_password=True` (read-only fixture)
+  - `inactive_user` / `Inactive_Dev1!XZ` — `is_active=False` (read-only fixture)
+  - `student_001` / `Student_Dev1!XZ` — Student role
+
+  A test that needs a user with `must_change_password=True`, a locked account, or any
+  other specific flag MUST create an ephemeral user with that flag set via
+  `_create_ephemeral_user(must_change_password=True)`. This bug class was discovered
+  four separate times at M1; it must not recur at M2 or later milestones.
+
+- **Every E2E suite run must be deterministic.** Run the suite three times in succession
+  as part of milestone gate verification. Non-determinism is a gate failure, not a flake
+  to retry. Timeout fixes and retry loops mask root causes; they are not acceptable fixes.
+
+- **Migration tests must target the test database** (`settings.test_database_url`), not
+  the dev database. `alembic downgrade base` wipes all data — running it against the dev
+  DB destroys seed data and breaks subsequent E2E runs silently.
+
+- **Navigation reachability**: URL-based Playwright scenarios verify that pages work
+  when reached directly. They do NOT verify that pages are reachable through the
+  application's own navigation. Every module's E2E suite must include at least one
+  scenario per user journey that starts at a natural entry point (typically `/`) and
+  navigates to the feature the way a real user would. Specifically:
+  - Every module that adds authenticated UI must include a test that logs in and
+    verifies the relevant UI is reachable from the home page or the nav shell.
+  - Forced-redirect flows (e.g., `must_change_password`) must be tested end-to-end
+    through the login form, not just at the service or state layer.
+  This gap was discovered at M1 gate and must not recur at M2.
+
+- **Reflex + Playwright**: `wait_for_load_state("networkidle")` is NOT safe for
+  assertions after state-mutating actions. Reflex is all-WebSocket; networkidle fires
+  immediately with no HTTP traffic. Use `wait_for_url()` for redirect assertions and
+  polled `expect(...).to_be_visible()` for flash/element assertions.
+
+These rules were learned at M1 and apply to M3, M5, and all subsequent milestones.
+
 ## Known patterns and workarounds
 
 ### `_TIMESTAMPTZ` cast for SQLModel datetime columns
@@ -106,15 +176,18 @@ psycopg3 returns timezone-aware values after `session.refresh()`.
 - Don't generate UI mockups in lieu of real Reflex code.
 - Don't write SQL strings inline anywhere outside Alembic migrations.
 - Don't use `localStorage` / `sessionStorage` / browser cookies for **app state** — Reflex State is the source of truth. The two exceptions, both managed by the framework and not to be replicated or overridden:
-  - Reflex's own session cookie for authentication.
+  - Reflex's own CLIENT_TOKEN (stored in sessionStorage, not a cookie).
+  - The `dsession` auth cookie managed by `BaseState.session_token` (SD-001).
   - Reflex's CSRF token cookie.
   Anything beyond these two is a smell; surface it before adding.
+- **Never use `rx.html()` or any HTML-passthrough primitive for content that includes any user-controlled string.** The M1 session token is stored in a JS-accessible cookie (see TD-005); an XSS exposure leaks sessions. If a use case appears to require `rx.html()` with user content, stop and raise it as a design question. Lint enforces this.
 - Don't import from another service inside a service. If two services need each other, that's a design smell — surface it.
 - Don't add a third-party package without justifying it in the PR; new deps cost.
 - Don't skip the Mailpit / mock-data path "to save time"; both are first-class M0 deliverables.
 - Don't reorder fields in an existing migration; add a new migration.
 - Don't `@require_role` a handler with `'*'` to make a test pass; fix the test or the permission seed.
 - Don't catch broad exceptions in services. Let them bubble; the page state turns them into user-visible errors.
+- **Never access SQLModel object attributes after `session.commit()` or after an `open_session()` block closes.** `expire_on_commit=True` (the default) marks all attributes expired; accessing them on a detached instance raises `DetachedInstanceError`. Reflex catches this exception silently — the failure looks like `rx.redirect()` "didn't happen" with no visible error. Pattern: read all needed attributes into local variables INSIDE the `with open_session()` block, BEFORE `session.commit()`. See `docs/modules/auth.md` → "Known gotcha" for the full example.
 
 ## When stuck
 If a question can't be answered from this file, the RFP, or the codebase, **stop and ask in the PR description** rather than guessing. Specifically:
@@ -139,7 +212,7 @@ At the start of every coding session, Claude Code runs:
 If any of the above fails or surprises, stop and surface it before writing code.
 
 ## Current milestone
-**M0 — Foundations. Gate passed — awaiting M1 scope decision.**
+**M1 — Authentication.**
 
 This line is the source of truth for "where are we." Before opening a milestone-completing PR, Claude Code MUST:
 1. Grep this file for "Current milestone" and update both occurrences (the top status line and this section).

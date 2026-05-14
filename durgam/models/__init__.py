@@ -1,3 +1,4 @@
+from .auth import PasswordResetToken, UserSession
 from .base import TimestampedSoftDelete
 from .config_anchors import (
     AcademicYear,
@@ -34,4 +35,6 @@ __all__ = [
     "RoleEmail",
     "LetterheadAsset",
     "StudentCategoryCount",
+    "UserSession",
+    "PasswordResetToken",
 ]

@@ -8,7 +8,8 @@ point to a live PostgreSQL instance:
 """
 
 import pytest
-from sqlalchemy import create_engine, text as _text
+from sqlalchemy import create_engine
+from sqlalchemy import text as _text
 from sqlmodel import Session, SQLModel
 
 # Import all models so SQLModel metadata is populated.
