@@ -111,6 +111,19 @@ to the append-only `auditlog` table; the application DB role has INSERT+SELECT o
   particular state. Note: `alembic downgrade base` also counts as state mutation against the
   dev DB — migration tests must target the test database.
 
+  **Seeded users are read-only fixtures.** No test may log in as a seeded user and mutate
+  their state. The following seeded users must be treated as read-only:
+  - `sys_admin` / `SysAdmin_Dev1!XZ` — normal active user (can be used for read-only login tests)
+  - `dean_sci` / `DeanSci_Dev1!XZ` — Dean role
+  - `firstlogin_user` / `FirstLogin_Dev1!XZ` — `must_change_password=True` (read-only fixture)
+  - `inactive_user` / `Inactive_Dev1!XZ` — `is_active=False` (read-only fixture)
+  - `student_001` / `Student_Dev1!XZ` — Student role
+
+  A test that needs a user with `must_change_password=True`, a locked account, or any
+  other specific flag MUST create an ephemeral user with that flag set via
+  `_create_ephemeral_user(must_change_password=True)`. This bug class was discovered
+  four separate times at M1; it must not recur at M2 or later milestones.
+
 - **Every E2E suite run must be deterministic.** Run the suite three times in succession
   as part of milestone gate verification. Non-determinism is a gate failure, not a flake
   to retry. Timeout fixes and retry loops mask root causes; they are not acceptable fixes.

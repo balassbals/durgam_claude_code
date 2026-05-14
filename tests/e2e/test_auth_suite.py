@@ -9,9 +9,15 @@ Set BASE_URL to the app URL (default: http://localhost:3000).
 Set MAILPIT_URL to the Mailpit web UI (default: http://localhost:8025).
 
 The seed user credentials must match scripts/seed.py:
-  sys_admin / SysAdmin_Dev1!XZ           (active, normal)
-  inactive_user / Inactive_Dev1!XZ       (is_active=False)
-  firstlogin_user / FirstLogin_Dev1!XZ   (must_change_password=True)
+  sys_admin / SysAdmin_Dev1!XZ           (active, normal) — read-only
+  inactive_user / Inactive_Dev1!XZ       (is_active=False) — read-only
+  firstlogin_user / FirstLogin_Dev1!XZ   (must_change_password=True) — read-only
+
+All three seeded users above are READ-ONLY fixtures. No test may log in as
+these users and mutate their state (password, flags, lockout). Tests that
+need a user with specific properties (must_change_password=True, etc.) must
+create an ephemeral user with _create_ephemeral_user() and delete it in a
+finally block.
 
 Test isolation rule:
   Tests that mutate persistent state (passwords, lockout, tokens) create
@@ -49,8 +55,6 @@ _ADMIN_USER = "sys_admin"
 _ADMIN_PASS = "SysAdmin_Dev1!XZ"
 _INACTIVE_USER = "inactive_user"
 _INACTIVE_PASS = "Inactive_Dev1!XZ"
-_FIRSTLOGIN_USER = "firstlogin_user"
-_FIRSTLOGIN_PASS = "FirstLogin_Dev1!XZ"
 _LOCKOUT_THRESHOLD = 5
 
 # Password used for all ephemeral users (meets §6.1 policy)
@@ -292,17 +296,22 @@ class TestForcedPasswordChange:
 
         A user with must_change_password=True is redirected to /change-password
         immediately after successful login, before reaching the home page.
-        Uses the seeded firstlogin_user (read-only — this test does NOT change
-        the password, only verifies the redirect).
+        Uses an ephemeral user with must_change_password=True so the seeded
+        firstlogin_user is never mutated (its flag or password).
         """
-        _clear_session(page)
-        _login(page, _FIRSTLOGIN_USER, _FIRSTLOGIN_PASS)
-        # _login waited for URL to leave /login; it should be /change-password now
-        assert "/change-password" in page.url, (
-            f"Expected redirect to /change-password for must_change_password user, got {page.url}"
-        )
-        # The "must set a new password" banner must be visible
-        expect(page.locator("text=must set a new password")).to_be_visible()
+        username, _ = _create_ephemeral_user(must_change_password=True)
+        try:
+            _clear_session(page)
+            _login(page, username, _EPH_PASS)
+            # _login waited for URL to leave /login; it should be /change-password now
+            assert "/change-password" in page.url, (
+                f"Expected redirect to /change-password for must_change_password user, "
+                f"got {page.url}"
+            )
+            # The "must set a new password" banner must be visible
+            expect(page.locator("text=must set a new password")).to_be_visible()
+        finally:
+            _delete_ephemeral_user(username)
 
 
 class TestChangePassword:
@@ -438,19 +447,23 @@ class TestForcedPasswordChangeFromHomePage:
     def test_firstlogin_user_lands_on_change_password_not_home(self, page: Page):
         """§9.1 first-login forced redirect — gate: Playwright auth suite green.
 
-        Logs in as firstlogin_user (must_change_password=True). Per §9.1,
-        "First-login forces password change." The user must be redirected to
-        /change-password, not to /. Proves the redirect is enforced end-to-end
-        through the UI, not just at the service layer.
+        A user with must_change_password=True must be redirected to /change-password,
+        not to /. Uses an ephemeral user so the seeded firstlogin_user is never
+        mutated (its must_change_password flag or password). Proves the redirect is
+        enforced end-to-end through the UI, not just at the service layer.
         """
-        _clear_session(page)
-        _login(page, _FIRSTLOGIN_USER, _FIRSTLOGIN_PASS)
-        # Must land on /change-password, NOT on /
-        assert "/change-password" in page.url, (
-            f"Expected /change-password for must_change_password user, got {page.url}"
-        )
-        assert page.url != f"{BASE_URL}/", (
-            f"firstlogin_user must not land on / — got {page.url}"
-        )
-        # The forced-change banner must be visible
-        expect(page.locator("text=must set a new password")).to_be_visible()
+        username, _ = _create_ephemeral_user(must_change_password=True)
+        try:
+            _clear_session(page)
+            _login(page, username, _EPH_PASS)
+            # Must land on /change-password, NOT on /
+            assert "/change-password" in page.url, (
+                f"Expected /change-password for must_change_password user, got {page.url}"
+            )
+            assert page.url != f"{BASE_URL}/", (
+                f"must_change_password user must not land on / — got {page.url}"
+            )
+            # The forced-change banner must be visible
+            expect(page.locator("text=must set a new password")).to_be_visible()
+        finally:
+            _delete_ephemeral_user(username)
