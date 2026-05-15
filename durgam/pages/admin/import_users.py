@@ -2,7 +2,7 @@
 
 import reflex as rx
 
-from durgam.pages.components import nav_shell, page_footer
+from durgam.pages.components import admin_page, nav_shell, page_footer
 from durgam.states.admin_bulk_import import BulkImportState
 
 
@@ -26,7 +26,7 @@ def admin_import_users() -> rx.Component:
             align="start",
         )
 
-    return rx.vstack(
+    return admin_page(rx.vstack(
         nav_shell(),
         rx.box(
             rx.hstack(
@@ -229,4 +229,4 @@ def admin_import_users() -> rx.Component:
         width="100%",
         min_height="100vh",
         background="var(--color-background, #f5f0eb)",
-    )
+    ))

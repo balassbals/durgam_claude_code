@@ -3,7 +3,7 @@
 import reflex as rx
 
 from durgam.db import open_session
-from durgam.pages.components import nav_shell, page_footer
+from durgam.pages.components import admin_page, nav_shell, page_footer
 from durgam.pages.shared.data_table import TableColumn, data_table
 from durgam.repositories.permission import PermissionRepository
 from durgam.states.base import BaseState
@@ -40,7 +40,7 @@ def admin_permissions() -> rx.Component:
         TableColumn(key="scope", label="Scope"),
     ]
 
-    return rx.vstack(
+    return admin_page(rx.vstack(
         nav_shell(),
         rx.box(
             rx.hstack(
@@ -72,4 +72,4 @@ def admin_permissions() -> rx.Component:
         width="100%",
         min_height="100vh",
         background="var(--color-background, #f5f0eb)",
-    )
+    ))

@@ -2,13 +2,13 @@
 
 import reflex as rx
 
-from durgam.pages.components import nav_shell, page_footer
+from durgam.pages.components import admin_page, nav_shell, page_footer
 from durgam.pages.shared.permission_check_widget import permission_check_widget
 from durgam.states.admin_users import AdminUsersState
 
 
 def admin_user_create() -> rx.Component:
-    return rx.vstack(
+    return admin_page(rx.vstack(
         nav_shell(),
         rx.box(
             rx.hstack(
@@ -115,4 +115,4 @@ def admin_user_create() -> rx.Component:
         width="100%",
         min_height="100vh",
         background="var(--color-background, #f5f0eb)",
-    )
+    ))

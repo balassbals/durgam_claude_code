@@ -2,7 +2,7 @@
 
 import reflex as rx
 
-from durgam.pages.components import nav_shell, page_footer
+from durgam.pages.components import admin_page, nav_shell, page_footer
 from durgam.pages.shared.confirmation_dialog import confirmation_dialog
 from durgam.pages.shared.data_table import TableColumn, data_table
 from durgam.pages.shared.permission_check_widget import permission_check_widget
@@ -35,7 +35,7 @@ def admin_roles() -> rx.Component:
             ),
         )
 
-    return rx.vstack(
+    return admin_page(rx.vstack(
         nav_shell(),
         rx.box(
             rx.hstack(
@@ -81,11 +81,11 @@ def admin_roles() -> rx.Component:
         page_footer(),
         align="start", width="100%", min_height="100vh",
         background="var(--color-background, #f5f0eb)",
-    )
+    ))
 
 
 def admin_role_create() -> rx.Component:
-    return rx.vstack(
+    return admin_page(rx.vstack(
         nav_shell(),
         rx.box(
             rx.hstack(
@@ -151,7 +151,7 @@ def admin_role_create() -> rx.Component:
         page_footer(),
         align="start", width="100%", min_height="100vh",
         background="var(--color-background, #f5f0eb)",
-    )
+    ))
 
 
 def admin_role_detail() -> rx.Component:
@@ -170,7 +170,7 @@ def admin_role_detail() -> rx.Component:
             align="center",
         )
 
-    return rx.vstack(
+    return admin_page(rx.vstack(
         nav_shell(),
         rx.box(
             rx.hstack(
@@ -228,4 +228,4 @@ def admin_role_detail() -> rx.Component:
         page_footer(),
         align="start", width="100%", min_height="100vh",
         background="var(--color-background, #f5f0eb)",
-    )
+    ))

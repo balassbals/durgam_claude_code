@@ -2,7 +2,7 @@
 
 import reflex as rx
 
-from durgam.pages.components import nav_shell, page_footer
+from durgam.pages.components import admin_page, nav_shell, page_footer
 from durgam.states.admin_index import AdminIndexState
 
 
@@ -47,7 +47,7 @@ def _nav_tile(label: str, href: str, description: str) -> rx.Component:
 
 
 def admin_index() -> rx.Component:
-    return rx.vstack(
+    return admin_page(rx.vstack(
         nav_shell(),
         rx.box(
             rx.heading("Admin Dashboard", size="5", font_family="var(--font-sans)",
@@ -87,4 +87,4 @@ def admin_index() -> rx.Component:
         width="100%",
         min_height="100vh",
         background="var(--color-background, #f5f0eb)",
-    )
+    ))

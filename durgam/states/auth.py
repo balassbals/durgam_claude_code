@@ -95,6 +95,9 @@ class AuthState(BaseState):
             return rx.redirect("/login")  # type: ignore[return-value]
         if self.must_change_password:
             return rx.redirect("/change-password")  # type: ignore[return-value]
+        # Populate nav entries so the home page nav shell shows the correct links.
+        # Without this call, visible_nav_entries stays [] and nav links are absent.
+        self._load_nav_entries()
 
     def change_password_on_load(self) -> None:
         """on_load for /change-password: protect the route without a second DB lookup.

@@ -198,3 +198,20 @@ def page_footer() -> rx.Component:
         width="100%",
         margin_top="auto",
     )
+
+
+def admin_page(content: rx.Component) -> rx.Component:
+    """Wrap admin page content so it is invisible until auth check completes.
+
+    Issue 1 fix: on_load fires AFTER first render. Without this wrapper the
+    admin chrome flashes briefly for unauthenticated users before the redirect
+    fires. Wrapping in rx.cond(current_user_id != "", ...) shows nothing until
+    the guard sets current_user_id, eliminating the flash.
+
+    Use as: return admin_page(rx.vstack(nav_shell(), rx.box(...), page_footer()))
+    """
+    return rx.cond(
+        BaseState.current_user_id != "",
+        content,
+        rx.fragment(),
+    )

@@ -318,6 +318,28 @@ Duplication creates selector drift across files (root cause of the M2 E2E
 regression where the duplicated helper used wrong placeholder text, blocking
 all 14 M2 tests).
 
+### E2E test selector rule
+
+Selectors must be written against the actual rendered page, not assumed
+from the page's intent or the source code. Verify each new test locally
+against a running app before committing.
+
+Known selector rules in DURGAM (from M2 verification):
+- Inputs: use `page.get_by_placeholder("...")` — forms use `rx.input(placeholder=...)`
+  with `rx.text()` for labels. `rx.text()` renders as `<p>`, NOT `<label>`, so
+  `page.get_by_label()` will NOT find inputs.
+- Headings: use `page.get_by_role("heading", name="...")` — `rx.heading()` renders
+  as a heading role element. `page.get_by_heading()` does NOT exist in Playwright Python.
+- Email assertions: only call `_latest_mailpit_email()` if the test ACTUALLY sent an
+  email (e.g., user created via the UI form, not via `_create_ephemeral_user()`).
+  `_create_ephemeral_user()` inserts directly into the DB; no email is dispatched.
+- Nav links: `page.get_by_role("link", name="Admin")` — the nav links are rendered
+  by `rx.link()` which produces `<a>` elements with role=link.
+
+From M3 onward, no test ships without a local-run verification of its specific
+selectors. A test that passes locally but was never run against the rendered page
+is not a verified test.
+
 ## Current milestone
 **M2 — Admin Module.**
 
