@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from sqlmodel import func, select
 
-from durgam.auth.decorators import audit_action, require_role
 from durgam.db import open_session
 from durgam.models.identity import User
 from durgam.states.base import BaseState
@@ -15,9 +14,12 @@ class AdminIndexState(BaseState):
     role_count: int = 0
     pending_password_change_count: int = 0
 
-    @require_role(action="read", resource="user")
-    @audit_action(action="view", resource="admin_dashboard")
     async def load_stats(self) -> None:
+        """on_load for /admin — guards session then loads dashboard stats."""
+        guard = self._admin_guard()
+        if guard is not None:
+            return guard
+
         from durgam.models.identity import Role
 
         with open_session() as session:

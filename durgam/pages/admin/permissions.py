@@ -2,7 +2,6 @@
 
 import reflex as rx
 
-from durgam.auth.decorators import audit_action, require_role
 from durgam.db import open_session
 from durgam.pages.components import nav_shell, page_footer
 from durgam.pages.shared.data_table import TableColumn, data_table
@@ -13,9 +12,11 @@ from durgam.states.base import BaseState
 class AdminPermissionsState(BaseState):
     permissions: list[dict[str, str]] = []
 
-    @require_role(action="read", resource="permission")
-    @audit_action(action="list", resource="permission")
     async def load_permissions(self) -> None:
+        """on_load for /admin/permissions — guards session then loads list."""
+        guard = self._admin_guard()
+        if guard is not None:
+            return guard
         with open_session() as session:
             repo = PermissionRepository(session)
             grouped = repo.list_grouped_by_resource()

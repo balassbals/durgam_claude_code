@@ -40,9 +40,11 @@ class AdminRolesState(BaseState):
     confirm_title: str = ""
     confirm_body: str = ""
 
-    @require_role(action="read", resource="role")
-    @audit_action(action="list", resource="role")
     async def load_roles(self) -> None:
+        """on_load for /admin/roles and /admin/roles/new — guards session."""
+        guard = self._admin_guard()
+        if guard is not None:
+            return guard
         with open_session() as session:
             svc = _svc(session)
             role_list = svc.list_roles()
@@ -121,9 +123,11 @@ class AdminRolesState(BaseState):
         except RoleAdminError as exc:
             self.flash = exc.message
 
-    @require_role(action="read", resource="role")
-    @audit_action(action="view", resource="role")
     async def load_role_detail(self) -> None:
+        """on_load for /admin/roles/{role_id} — guards session then loads detail."""
+        guard = self._admin_guard()
+        if guard is not None:
+            return guard
         role_id_str = self.router.page.params.get("role_id", "")
         if not role_id_str:
             return rx.redirect("/admin/roles")  # type: ignore[return-value]

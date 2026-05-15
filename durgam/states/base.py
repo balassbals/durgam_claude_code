@@ -2,6 +2,7 @@ from uuid import UUID
 
 import reflex as rx
 
+from durgam.auth.permissions import can
 from durgam.db import open_session
 from durgam.nav.registry import get_visible_entries
 
@@ -37,6 +38,66 @@ class BaseState(rx.State):
 
     def clear_flash(self) -> None:
         self.flash = ""
+
+    def _resolve_session(self) -> None:
+        """Resolve session cookie and populate current_user_id / current_username.
+
+        Simpler than AuthState._resolve_session_state(): does not set
+        must_change_password or profile_incomplete (those are AuthState vars).
+        Used by admin page on_load handlers so they can do their own session
+        check and redirect without depending on AuthState.
+        """
+        if not self.session_token:
+            self.current_user_id = ""
+            self.current_username = ""
+            return
+        from durgam.repositories.auth import UserSessionRepository
+        from durgam.repositories.user import UserRepository
+        from durgam.services.auth import AuthService
+
+        with open_session() as session:
+            svc = AuthService(
+                user_repo=UserRepository(session),
+                session_repo=UserSessionRepository(session),
+            )
+            user = svc.resolve_session(self.session_token)
+            if user is None:
+                self.session_token = ""
+                self.current_user_id = ""
+                self.current_username = ""
+            else:
+                self.current_user_id = str(user.id)
+                self.current_username = user.username
+
+    def _admin_guard(self):
+        """Resolve session and verify admin (user:read:*) permission.
+
+        Returns rx.redirect("/login") if unauthenticated,
+        rx.redirect("/") with flash if authenticated but lacking admin
+        permission, or None if access is allowed.
+
+        Call at the start of every admin page on_load handler BEFORE any
+        data loading. Follows M1's home_on_load pattern: no @require_role
+        decorator (which raises instead of redirecting), manual guard instead.
+
+        Route protection rule (CLAUDE.md "Patterns established at M2"):
+        every authenticated page must guard its on_load: resolve session,
+        redirect to /login if missing, redirect to / if lacking permission,
+        all BEFORE rendering any chrome or content.
+        """
+        self._resolve_session()
+        if not self.current_user_id:
+            return rx.redirect("/login")
+        try:
+            user_id = UUID(self.current_user_id)
+        except ValueError:
+            self.current_user_id = ""
+            return rx.redirect("/login")
+        with open_session() as session:
+            if not can(user_id, "read", "user", None, None, session):
+                self.flash = "You do not have admin access."
+                return rx.redirect("/")
+        return None
 
     def _load_nav_entries(self) -> None:
         """Populate visible_nav_entries for the current user.

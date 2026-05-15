@@ -63,9 +63,11 @@ class AdminUsersState(BaseState):
         self.current_page = 1
         await self.load_users()
 
-    @require_role(action="read", resource="user")
-    @audit_action(action="list", resource="user")
     async def load_users(self) -> None:
+        """on_load for /admin/users — guards session then loads user list."""
+        guard = self._admin_guard()
+        if guard is not None:
+            return guard
         with open_session() as session:
             svc = _svc(session)
             page_users, total = svc.list_users(
@@ -234,9 +236,11 @@ class AdminUsersState(BaseState):
     def dismiss_generated_password(self) -> None:
         self.generated_password = ""
 
-    @require_role(action="read", resource="role")
-    @audit_action(action="view", resource="role")
     async def load_available_roles(self) -> None:
+        """on_load for /admin/users/new — guards session then loads roles."""
+        guard = self._admin_guard()
+        if guard is not None:
+            return guard
         with open_session() as session:
             roles = RoleRepository(session).list_active()
             self.available_roles = [

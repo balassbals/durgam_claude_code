@@ -149,7 +149,11 @@ class BulkImportState(BaseState):
             ])
         self.error_report_csv = output.getvalue()
 
-    def reset_import(self) -> None:
+    def reset_import(self):
+        """on_load for /admin/import — guards session then resets import state."""
+        guard = self._admin_guard()
+        if guard is not None:
+            return guard
         self.preview_valid = []
         self.preview_invalid = []
         self.preview_ready = False
