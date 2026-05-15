@@ -278,6 +278,46 @@ At the start of every coding session, Claude Code runs:
 
 If any of the above fails or surprises, stop and surface it before writing code.
 
+### Route protection rule (third instance of this discipline)
+
+Every authenticated page must guard its on_load handler before rendering
+any chrome or content:
+
+1. Call `_admin_guard()` (or equivalent for the module) as the FIRST line.
+2. `_admin_guard()` resolves session, redirects to `/login` if missing,
+   redirects to `/` with flash if user lacks the module's read permission.
+3. Return the guard result if it is not None (short-circuit).
+4. Only then load data and populate state.
+
+Do NOT use `@require_role` on on_load handlers — it raises `PermissionDenied`
+instead of redirecting, which shows admin chrome + error toast to unauthenticated
+users.
+
+`@require_role` + `@audit_action` remain correct on business-logic handlers
+(create, update, delete) that operate inside an already-authenticated session.
+
+**Manual incognito check at every gate.** Visit each protected page without
+a session; it must redirect to `/login`, no chrome visible at any moment.
+From M3 onward, unguarded pages are a gate failure even if integration tests pass.
+
+This rule was established at M2 after discovering admin pages rendered chrome
+for unauthenticated users. First instance: M1 home page (home_on_load). Second:
+M1 change-password (change_password_on_load). Third: M2 admin pages (_admin_guard).
+
+### E2E helper sharing rule
+
+When a new test file needs to log in, it imports `_login()` (and other shared
+helpers) from `tests/e2e/_helpers.py`. It must NEVER duplicate the helper.
+
+The canonical selectors (verified against the rendered login page):
+  - Username placeholder: `"your.username"`
+  - Password placeholder: `"••••••••••••"` (12 bullet characters)
+  - Submit button: regex `r"Sign in"` (case-insensitive)
+
+Duplication creates selector drift across files (root cause of the M2 E2E
+regression where the duplicated helper used wrong placeholder text, blocking
+all 14 M2 tests).
+
 ## Current milestone
 **M2 — Admin Module.**
 
