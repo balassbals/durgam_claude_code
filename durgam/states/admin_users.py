@@ -29,8 +29,8 @@ def _svc(session) -> UserAdminService:
 
 
 class AdminUsersState(BaseState):
-    # List view
-    users: list[dict] = []
+    # List view — all values stored as strings for Reflex foreach compatibility.
+    users: list[dict[str, str]] = []
     total_users: int = 0
     search_query: str = ""
     current_page: int = 1
@@ -53,7 +53,7 @@ class AdminUsersState(BaseState):
     confirm_open: bool = False
 
     # Available roles for the role picker
-    available_roles: list[dict] = []
+    available_roles: list[dict[str, str]] = []
 
     @require_role(action="read", resource="user")
     @audit_action(action="search", resource="user")
@@ -74,13 +74,14 @@ class AdminUsersState(BaseState):
                 page_size=self.page_size,
             )
             # Read all attributes before session closes.
+            # All values are strings for Reflex foreach (list[dict[str, str]]).
             self.users = [
                 {
                     "id": str(u.id),
                     "username": u.username,
                     "email": u.email,
-                    "is_active": u.is_active,
-                    "must_change_password": u.must_change_password,
+                    "is_active": str(u.is_active),
+                    "must_change_password": str(u.must_change_password),
                     "last_login_at": str(u.last_login_at) if u.last_login_at else "",
                 }
                 for u in page_users

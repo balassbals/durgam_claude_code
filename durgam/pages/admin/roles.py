@@ -161,7 +161,7 @@ def admin_role_detail() -> rx.Component:
         return rx.hstack(
             rx.checkbox(
                 name=perm["id"],
-                default_checked=perm["granted"],
+                default_checked=perm["granted"] == "true",  # type: ignore[index]
                 color_scheme="indigo",
             ),
             rx.text(perm["action"], font_size="0.875rem", min_width="80px"),

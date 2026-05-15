@@ -24,15 +24,15 @@ from durgam.states.base import BaseState
 
 class BulkImportState(BaseState):
     # Preview state (non-trivial: multiple state vars, conditional rendering)
-    preview_valid: list[dict] = []
-    preview_invalid: list[dict] = []
+    preview_valid: list[dict[str, str]] = []
+    preview_invalid: list[dict[str, str]] = []
     preview_ready: bool = False
     total_rows: int = 0
 
     # Commit state
     import_complete: bool = False
     import_success_count: int = 0
-    late_errors: list[dict] = []
+    late_errors: list[dict[str, str]] = []
 
     # Error report CSV (base64-encoded for download)
     error_report_csv: str = ""

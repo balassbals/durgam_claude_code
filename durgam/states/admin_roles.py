@@ -22,7 +22,7 @@ def _svc(session) -> RoleAdminService:
 
 
 class AdminRolesState(BaseState):
-    roles: list[dict] = []
+    roles: list[dict[str, str]] = []
 
     # For the role detail / permission accordion
     current_role_id_str: str = ""
@@ -31,8 +31,8 @@ class AdminRolesState(BaseState):
     current_role_level: int = 0
     current_role_description: str = ""
 
-    # {resource: [{id, action, scope, granted}]}
-    permissions_by_resource: dict[str, list[dict]] = {}
+    # {resource: [{id, action, scope, granted}]} — granted stored as "true"/"false" string.
+    permissions_by_resource: dict[str, list[dict[str, str]]] = {}
 
     # Delete confirmation
     confirm_open: bool = False
@@ -140,14 +140,15 @@ class AdminRolesState(BaseState):
 
             role_perm_ids = {str(p.id) for p in svc.get_role_permissions(role.id)}
             all_grouped = svc.get_permissions_grouped()
-            by_resource: dict[str, list[dict]] = {}
+            by_resource: dict[str, list[dict[str, str]]] = {}
             for resource, perms in all_grouped.items():
                 by_resource[resource] = [
                     {
                         "id": str(p.id),
                         "action": p.action,
                         "scope": p.scope,
-                        "granted": str(p.id) in role_perm_ids,
+                        # Store as string "true"/"false" for dict[str, str] typing.
+                        "granted": "true" if str(p.id) in role_perm_ids else "false",
                     }
                     for p in perms
                 ]

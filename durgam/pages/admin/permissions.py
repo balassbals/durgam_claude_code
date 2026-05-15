@@ -11,7 +11,7 @@ from durgam.states.base import BaseState
 
 
 class AdminPermissionsState(BaseState):
-    permissions: list[dict] = []
+    permissions: list[dict[str, str]] = []
 
     @require_role(action="read", resource="permission")
     @audit_action(action="list", resource="permission")

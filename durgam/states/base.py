@@ -33,7 +33,7 @@ class BaseState(rx.State):
 
     # Nav entries visible to the current user (cached at login; re-populated on load).
     # Each entry is {"label": str, "href": str, "icon": str, "group": str}.
-    visible_nav_entries: list[dict] = []
+    visible_nav_entries: list[dict[str, str]] = []
 
     def clear_flash(self) -> None:
         self.flash = ""
