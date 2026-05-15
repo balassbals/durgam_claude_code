@@ -202,6 +202,73 @@ If a question can't be answered from this file, the RFP, or the codebase, **stop
 
   At the checkpoint: commit the current work (passing tests + green lint), update `docs/milestones/<MN>.md` with what's done and what's next in a 5-line "resume notes" block, then end the session. Resume in a new session by reading the resume notes first, then `git log -10` for context. Never `/compact` mid-milestone — it discards exactly the rules you need to keep.
 
+## Patterns established at M2
+
+These patterns were decided at M2 and apply to every subsequent milestone.
+
+### Navigation registry
+
+Each module contributes nav entries via its `__init__.py`:
+
+```python
+# durgam/pages/<module>/__init__.py
+from durgam.nav.registry import NavEntry, register
+
+register(NavEntry(
+    label="Module Name", href="/module", icon="icon",
+    group="GroupName",
+    permission_action="read", permission_resource="resource",
+))
+```
+
+`BaseState._load_nav_entries()` calls `can()` per entry at login and caches
+`visible_nav_entries: list[dict]` in state. The nav shell reads this cache — no DB
+calls at render time. Mobile drawer and desktop nav share the same list.
+
+`permission_action=None` means the entry is visible to all authenticated users.
+
+### Responsive table two-tier rule
+
+**Tier 1 — Card layout (≤4 key columns, lookup/management tables):**  
+Used for user list, role list, permission list, and any future module with a
+management-focused list (HoD list, course list, etc.). Below 768px each row becomes
+a stacked card. Use `durgam/pages/shared/data_table.py` with `TableColumn`.
+
+Card field spec for existing M2 tables:
+- User list cards: username, email, role badges, status visible; last_login_at hidden; actions in kebab.
+- Role list cards: name, code, permission count badge; level/created_at hidden; actions in kebab.
+- Permission list cards: resource, action, scope visible; no actions (read-only).
+
+**Tier 2 — Horizontal scroll with sticky first column (5+ comparison columns):**  
+Used for course allocation, faculty workload, attendance sheets, exam results, leave
+requests, audit log, and any table where users scan across columns to compare values.
+The first column (name/date/ID) is sticky; remaining columns scroll horizontally.
+Apply directly with `rx.table` + `overflow_x="auto"` and a sticky first-column style.
+
+### Confirmation dialog pattern
+
+Always use `durgam/pages/shared/confirmation_dialog.py` for destructive actions.
+The dialog MUST:
+- Name the affected resource (e.g., "Delete user 'jdoe'?").
+- State the consequence in plain language (e.g., "This will deactivate the account.").
+- Offer a clear cancel button.
+- NOT appear for non-destructive saves.
+
+### Permissions are seed-only
+
+All (resource, action, scope) permission triples are defined in `scripts/seed.py`.
+No create/update/delete UI exists for permissions. When a new module introduces a new
+resource, add the permission triples to `scripts/seed.py` in that module's branch.
+The permission catalog is a system-design concern, not a runtime admin concern.
+
+### Hard-delete audit policy
+
+`UserAdminService.hard_delete_user()` (and any future hard-delete service method) MUST
+check for audit log rows before deleting. If `COUNT(auditlog WHERE actor_user_id = user_id) > 0`,
+raise `HardDeleteBlockedError` with an explanatory message. The auditlog is
+INSERT+SELECT only — `actor_user_id` cannot be nulled after the fact. This applies to
+any model that appears as `actor_user_id` in the auditlog.
+
 ## Session start checklist
 At the start of every coding session, Claude Code runs:
 1. `git status` — confirm clean working tree.
