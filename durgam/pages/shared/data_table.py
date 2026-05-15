@@ -1,23 +1,28 @@
 """Responsive data table component (two-tier table pattern, M2).
 
+Works with Reflex state vars (Var[list[dict]]) by using rx.foreach for
+row iteration and rx.cond for empty-state detection. Python for-loops and
+`if not rows` are not used because Reflex vars cannot be converted to bool
+in Python at component build time.
+
 Tier 1 — Card layout (≤4 key columns, lookup/management lists):
-  Used for user list, role list, permission list. Below 768px, each row
-  becomes a stacked card. Above 768px, normal table.
+  Used for user list, role list, permission list. Below 768px (is_mobile=True),
+  each row becomes a stacked card. Above 768px, normal table. Pass
+  is_mobile=False to always show the table (acceptable for desktop-first pages).
 
 Tier 2 — Horizontal scroll with sticky first column (5+ comparison columns):
-  NOT this component. Use rx.table with `overflow_x="auto"` directly for
-  course allocation, attendance, exam results, leave requests, audit log.
+  NOT this component. Use rx.table directly with overflow_x="auto".
   See CLAUDE.md "Patterns established at M2".
 
-Usage (Tier 1):
+Usage:
     data_table(
-        rows=[{"username": "jdoe", "email": "...", "_id": "uuid"}],
+        rows=AdminUsersState.users,  # Var[list[dict]]
         columns=[
             TableColumn(key="username", label="Username"),
             TableColumn(key="email", label="Email"),
         ],
         card_primary_key="username",
-        is_mobile=SomeState.is_mobile,
+        is_mobile=False,
         actions=lambda row: kebab_menu(row),
     )
 """
@@ -39,29 +44,37 @@ class TableColumn:
 
 def data_table(
     *,
-    rows: list[dict],
+    rows: list | rx.Var,
     columns: list[TableColumn],
     card_primary_key: str,
-    is_mobile: bool,
-    actions: Callable[[dict], rx.Component] | None = None,
+    is_mobile: bool | rx.Var,
+    actions: Callable | None = None,
     empty_message: str = "No records found.",
     loading: bool = False,
 ) -> rx.Component:
     """Render rows as a responsive table (desktop) or card stack (mobile).
 
-    is_mobile is a Reflex state var — the component renders both views and
-    uses rx.cond to switch between them at runtime.
+    rows can be a Reflex state var (Var[list[dict]]) — rx.foreach handles
+    reactive iteration. columns is always a Python list (build-time known).
     """
     if loading:
         return _loading_skeleton(len(columns))
 
-    if not rows:
-        return _empty_state(empty_message)
+    # Build the table and card views using rx.foreach for reactive rendering.
+    table_view = _reactive_table_view(rows, columns, actions)
+    card_view = _reactive_card_stack(rows, columns, card_primary_key, actions)
 
-    return rx.cond(
+    content = rx.cond(
         is_mobile,
-        _card_stack(rows, columns, card_primary_key, actions),
-        _table_view(rows, columns, actions),
+        card_view,
+        table_view,
+    )
+
+    # Show empty state when rows is falsy (empty list in Reflex).
+    return rx.cond(
+        rows,
+        content,
+        _empty_state(empty_message),
     )
 
 
@@ -91,13 +104,12 @@ def _empty_state(message: str) -> rx.Component:
     )
 
 
-def _table_view(
-    rows: list[dict],
+def _reactive_table_view(
+    rows: list | rx.Var,
     columns: list[TableColumn],
-    actions: Callable[[dict], rx.Component] | None,
+    actions: Callable | None,
 ) -> rx.Component:
-    visible_cols = [c for c in columns if not c.hidden_on_card or True]  # all cols in table mode
-
+    """Table view using rx.foreach for reactive row rendering."""
     header_cells = [
         rx.table.column_header_cell(
             col.label,
@@ -107,77 +119,71 @@ def _table_view(
             text_transform="uppercase",
             letter_spacing="0.04em",
         )
-        for col in visible_cols
+        for col in columns
     ]
-    if actions:
-        header_cells.append(
-            rx.table.column_header_cell("", width="3rem")
-        )
+    if actions is not None:
+        header_cells.append(rx.table.column_header_cell("", width="3rem"))
 
-    table_rows = []
-    for row in rows:
+    # The row-builder must close over the Python-level columns list and
+    # actions callable. rx.foreach calls it with each Var[dict] item.
+    def make_row(row: rx.Var) -> rx.Component:
         cells = [
-            rx.table.cell(
-                rx.text(str(row.get(col.key, "")), font_size="0.875rem"),
-            )
-            for col in visible_cols
+            rx.table.cell(rx.text(row[col.key], font_size="0.875rem"))  # type: ignore[index]
+            for col in columns
         ]
-        if actions:
+        if actions is not None:
             cells.append(rx.table.cell(actions(row)))
-        table_rows.append(rx.table.row(*cells))
+        return rx.table.row(*cells)
 
     return rx.table.root(
         rx.table.header(rx.table.row(*header_cells)),
-        rx.table.body(*table_rows),
+        rx.table.body(rx.foreach(rows, make_row)),
         width="100%",
     )
 
 
-def _card_stack(
-    rows: list[dict],
+def _reactive_card_stack(
+    rows: list | rx.Var,
     columns: list[TableColumn],
-    primary_key: str,
-    actions: Callable[[dict], rx.Component] | None,
+    card_primary_key: str,
+    actions: Callable | None,
 ) -> rx.Component:
-    cards = []
-    visible_cols = [c for c in columns if not c.hidden_on_card]
+    """Card stack using rx.foreach for reactive rendering."""
+    card_cols = [c for c in columns if not c.hidden_on_card]
 
-    for row in rows:
-        primary_val = str(row.get(primary_key, ""))
-        secondary_items = []
-        for col in visible_cols:
-            if col.key == primary_key:
-                continue
-            secondary_items.append(
-                rx.hstack(
-                    rx.text(col.label + ":", font_size="0.75rem", color="var(--color-muted)",
-                            min_width="90px"),
-                    rx.text(str(row.get(col.key, "")), font_size="0.875rem"),
-                    align="start",
-                    gap="0.5rem",
-                )
-            )
-
-        card_content = [
+    def make_card(row: rx.Var) -> rx.Component:
+        secondary_items = [
             rx.hstack(
-                rx.text(primary_val, font_weight="600", font_size="0.9rem"),
+                rx.text(
+                    col.label + ":",
+                    font_size="0.75rem",
+                    color="var(--color-muted)",
+                    min_width="90px",
+                ),
+                rx.text(row[col.key], font_size="0.875rem"),  # type: ignore[index]  # noqa
+                align="start",
+                gap="0.5rem",
+            )
+            for col in card_cols
+            if col.key != card_primary_key
+        ]
+
+        action_part = ([actions(row)] if actions is not None else [])
+
+        return rx.box(
+            rx.hstack(
+                rx.text(row[card_primary_key], font_weight="600", font_size="0.9rem"),  # type: ignore[index]
                 rx.spacer(),
-                *([] if actions is None else [actions(row)]),
+                *action_part,
                 align="center",
                 width="100%",
             ),
             *secondary_items,
-        ]
-
-        cards.append(
-            rx.box(
-                *card_content,
-                border="1px solid var(--color-rule)",
-                border_radius="6px",
-                padding="0.75rem 1rem",
-                background="white",
-                margin_bottom="0.5rem",
-            )
+            border="1px solid var(--color-rule)",
+            border_radius="6px",
+            padding="0.75rem 1rem",
+            background="white",
+            margin_bottom="0.5rem",
         )
 
-    return rx.box(*cards, width="100%")
+    return rx.box(rx.foreach(rows, make_card), width="100%")
