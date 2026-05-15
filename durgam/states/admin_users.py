@@ -56,6 +56,14 @@ class AdminUsersState(BaseState):
     available_roles: list[dict] = []
 
     @require_role(action="read", resource="user")
+    @audit_action(action="search", resource="user")
+    async def search_users(self, form_data: dict) -> None:
+        """Search handler called from the search form on_submit."""
+        self.search_query = form_data.get("search", "").strip()
+        self.current_page = 1
+        await self.load_users()
+
+    @require_role(action="read", resource="user")
     @audit_action(action="list", resource="user")
     async def load_users(self) -> None:
         with open_session() as session:

@@ -154,16 +154,31 @@ def admin_users() -> rx.Component:
                 ),
                 rx.fragment(),
             ),
-            # Search
-            rx.hstack(
-                rx.input(
-                    placeholder="Search by username or email…",
-                    value=AdminUsersState.search_query,
-                    on_change=AdminUsersState.set_search_query,  # type: ignore[attr-defined]
-                    on_blur=AdminUsersState.load_users,
-                    width="min(400px, 100%)",
-                    font_family="var(--font-sans)",
+            # Search — uses on_submit to avoid the on_change auto-setter issue (Reflex 0.9.2).
+            rx.form(
+                rx.hstack(
+                    rx.input(
+                        name="search",
+                        placeholder="Search by username or email…",
+                        default_value=AdminUsersState.search_query,
+                        width="min(360px, 100%)",
+                        font_family="var(--font-sans)",
+                    ),
+                    rx.button(
+                        "Search",
+                        type="submit",
+                        background="var(--color-primary)",
+                        color="white",
+                        border="none",
+                        padding="0.4rem 0.9rem",
+                        border_radius="4px",
+                        cursor="pointer",
+                        font_family="var(--font-sans)",
+                    ),
+                    gap="0.5rem",
+                    align="center",
                 ),
+                on_submit=AdminUsersState.search_users,
                 margin_bottom="1rem",
             ),
             # Table
