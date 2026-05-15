@@ -1,8 +1,10 @@
-"""Password hashing and policy enforcement (RFP §6.1)."""
+"""Password hashing, policy enforcement, and temporary-password generation (RFP §6.1)."""
 
 from __future__ import annotations
 
 import re
+import secrets
+import string
 from pathlib import Path
 
 import bcrypt
@@ -80,3 +82,35 @@ def validate_policy(
         for part in full_name.lower().split():
             if len(part) >= 3 and part in lower:
                 raise WeakPasswordError("Password must not contain your name.")
+
+
+_TEMP_UPPERS = string.ascii_uppercase
+_TEMP_LOWERS = string.ascii_lowercase
+_TEMP_DIGITS = string.digits
+_TEMP_SYMBOLS = "!@#$%"
+_TEMP_ALL = _TEMP_UPPERS + _TEMP_LOWERS + _TEMP_DIGITS + _TEMP_SYMBOLS
+
+
+def generate_temp_password() -> str:
+    """Return a random 16-character temporary password that passes validate_policy().
+
+    Guarantees at least one character from each required character class.
+    The password is not logged or stored; the caller must transmit it securely.
+    """
+    while True:
+        # Guarantee one of each required class, fill the rest randomly.
+        chars = [
+            secrets.choice(_TEMP_UPPERS),
+            secrets.choice(_TEMP_LOWERS),
+            secrets.choice(_TEMP_DIGITS),
+            secrets.choice(_TEMP_SYMBOLS),
+        ] + [secrets.choice(_TEMP_ALL) for _ in range(12)]
+        secrets.SystemRandom().shuffle(chars)
+        candidate = "".join(chars)
+        try:
+            validate_policy(candidate)
+            return candidate
+        except WeakPasswordError:
+            # Extremely unlikely (only if the generated password is in the common
+            # password list), but retry to guarantee the invariant.
+            continue

@@ -9,11 +9,12 @@ import sqlalchemy as sa
 from sqlmodel import Session, func, select
 
 from durgam.models.identity import User
+from durgam.repositories.base import BaseRepository
 
 
-class UserRepository:
+class UserRepository(BaseRepository[User]):
     def __init__(self, session: Session) -> None:
-        self._session = session
+        super().__init__(User, session)
 
     def get_by_username(self, username: str) -> User | None:
         """Return an active user by username (case-sensitive)."""
