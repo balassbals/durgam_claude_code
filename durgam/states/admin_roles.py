@@ -45,6 +45,7 @@ class AdminRolesState(BaseState):
         guard = self._admin_guard()
         if guard is not None:
             return guard
+        self.roles = []  # reset before query
         with open_session() as session:
             svc = _svc(session)
             role_list = svc.list_roles()

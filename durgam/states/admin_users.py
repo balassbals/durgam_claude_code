@@ -64,10 +64,18 @@ class AdminUsersState(BaseState):
         await self.load_users()
 
     async def load_users(self) -> None:
-        """on_load for /admin/users — guards session then loads user list."""
+        """on_load for /admin/users — guards session then loads user list.
+
+        Page-on-load data refresh rule (CLAUDE.md "Patterns established at M2"):
+        every list page re-queries on every on_load, not only on first mount.
+        self.users is reset to [] first so stale state never lingers between
+        navigations within the same WebSocket session.
+        """
         guard = self._admin_guard()
         if guard is not None:
             return guard
+        self.users = []  # reset before query so stale rows never linger
+        self.total_users = 0
         with open_session() as session:
             svc = _svc(session)
             page_users, total = svc.list_users(

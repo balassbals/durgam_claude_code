@@ -340,6 +340,61 @@ From M3 onward, no test ships without a local-run verification of its specific
 selectors. A test that passes locally but was never run against the rendered page
 is not a verified test.
 
+### E2E selector specificity rule
+
+When selecting by accessible name, use `exact=True` whenever the name could be a
+prefix of another rendered label. The M2 "Users"/"Import Users" case is canonical:
+
+```python
+page.get_by_role("link", name="Users", exact=True)   # correct
+page.get_by_role("link", name="Users")                # strict-mode violation
+```
+
+Partial-match selectors either throw a strict-mode violation (2+ matches) or
+silently select the wrong element. Default to exact=True for all nav link/button
+name selectors. The preferred alternative is `locator('a[href="..."]')`.
+
+### Page-on-load data refresh rule
+
+Every list page that displays mutable data MUST:
+1. Reset the list state var to `[]` at the START of the on_load handler (before
+   the DB query). This prevents stale rows from a previous navigation from
+   lingering if the new query is slow.
+2. Re-query the DB in the on_load handler on EVERY navigation, not only on first
+   mount. The Reflex WebSocket connection may persist between same-session
+   navigations; without an explicit reset, old data stays visible.
+
+```python
+async def load_users(self) -> None:
+    guard = self._admin_guard()
+    if guard is not None:
+        return guard
+    self.users = []          # ← reset first
+    self.total_users = 0
+    with open_session() as session:
+        ...                  # query and populate self.users
+```
+
+### Admin page stable-anchor wait rule
+
+After navigating to an admin page via `page.goto()`, never immediately assert
+on list content. The `admin_page()` wrapper hides all content in `rx.cond`
+until `_admin_guard()` fires via WebSocket (AFTER `wait_for_load_state("networkidle")`
+returns, because networkidle is HTTP-only). Always wait for a stable DOM anchor
+that is unconditionally present once the guard succeeds:
+
+```python
+page.goto(f"{BASE_URL}/admin/users")
+page.wait_for_load_state("networkidle")
+# Wait for admin_page() to show content after on_load guard fires.
+_wait_for_admin_page(page, "+ New user", timeout=15_000)
+# Now assert on list content.
+expect(page.get_by_text(username)).to_be_visible(timeout=10_000)
+```
+
+`_wait_for_admin_page()` is defined in `tests/e2e/test_admin_suite.py`. Add an
+equivalent helper in every new E2E file that uses admin pages.
+
 ## Current milestone
 **M2 — Admin Module.**
 
