@@ -89,8 +89,10 @@ def admin_import_users() -> rx.Component:
                     rx.heading("Step 2: Review", size="3", margin_bottom="0.75rem"),
                     rx.hstack(
                         rx.text(
-                            f"{len(BulkImportState.preview_valid)} valid, "
-                            f"{len(BulkImportState.preview_invalid)} invalid",
+                            BulkImportState.preview_valid.length(),
+                            " valid, ",
+                            BulkImportState.preview_invalid.length(),
+                            " invalid",
                             font_size="0.875rem",
                         ),
                         rx.spacer(),
@@ -127,7 +129,8 @@ def admin_import_users() -> rx.Component:
                     ),
                     rx.hstack(
                         rx.button(
-                            f"Commit {len(BulkImportState.preview_valid)} valid rows",
+                            rx.text("Commit ", BulkImportState.preview_valid.length(),
+                                    " valid rows"),
                             on_click=BulkImportState.commit_import,
                             background="var(--color-primary)",
                             color="white",
@@ -158,7 +161,8 @@ def admin_import_users() -> rx.Component:
                 rx.box(
                     rx.heading("Import Complete", size="3", margin_bottom="0.75rem"),
                     rx.text(
-                        f"{BulkImportState.import_success_count} users imported successfully.",
+                        BulkImportState.import_success_count,
+                        " users imported successfully.",
                         font_size="0.875rem",
                         margin_bottom="0.5rem",
                     ),
@@ -166,7 +170,8 @@ def admin_import_users() -> rx.Component:
                         BulkImportState.error_report_csv != "",
                         rx.hstack(
                             rx.text(
-                                f"{len(BulkImportState.late_errors)} rows failed at commit time.",
+                                BulkImportState.late_errors.length(),
+                                " rows failed at commit time.",
                                 font_size="0.875rem",
                                 color="var(--color-danger, #c0392b)",
                             ),
