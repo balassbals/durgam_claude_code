@@ -6,6 +6,8 @@ import csv
 import io
 from uuid import UUID
 
+import reflex as rx
+
 from durgam.auth.decorators import audit_action, require_role
 from durgam.db import open_session
 from durgam.repositories.role import RoleRepository
@@ -37,8 +39,12 @@ class BulkImportState(BaseState):
 
     @require_role(action="write", resource="user")
     @audit_action(action="upload_csv", resource="user")
-    async def upload_csv(self, files: list) -> None:
-        """Non-trivial handler: parses CSV, validates rows, sets preview state."""
+    async def upload_csv(self, files: list[rx.UploadFile]) -> None:
+        """Non-trivial handler: parses CSV, validates rows, sets preview state.
+
+        Reflex 0.9.2 on_drop passes list[rx.UploadFile]; read bytes via
+        file.file.read() (BinaryIO sync read) or await file.read() (async).
+        """
         self.flash = ""
         self.preview_valid = []
         self.preview_invalid = []
@@ -49,7 +55,8 @@ class BulkImportState(BaseState):
             self.flash = "No file selected."
             return
 
-        file_bytes: bytes = files[0]  # Reflex passes bytes directly
+        upload_file = files[0]
+        file_bytes: bytes = upload_file.file.read()
 
         with open_session() as session:
             valid, invalid = validate_user_csv(

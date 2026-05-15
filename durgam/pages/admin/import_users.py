@@ -74,8 +74,9 @@ def admin_import_users() -> rx.Component:
                             cursor="pointer",
                             _hover={"border_color": "var(--color-primary)"},
                         ),
-                        accept={".csv": "text/csv"},
-                        on_upload=BulkImportState.upload_csv,
+                        # Reflex 0.9.2: on_drop (not on_upload); accept is MIME→[ext].
+                        accept={"text/csv": [".csv"]},
+                        on_drop=BulkImportState.upload_csv,
                     ),
                     margin_bottom="1rem",
                 ),
