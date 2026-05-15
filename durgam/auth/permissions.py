@@ -49,8 +49,11 @@ def can(
         if user_role.scope_type is not None and scope_type is not None:
             if user_role.scope_type != scope_type:
                 continue
-            if user_role.scope_id is not None and scope_id is not None:
-                if user_role.scope_id != scope_id:
+            # A role with a specific scope_id only grants access when the check
+            # provides the exact matching scope_id. scope_id=None in the check
+            # means "unspecified scope" and must NOT match a role scoped to X.
+            if user_role.scope_id is not None:
+                if scope_id is None or user_role.scope_id != scope_id:
                     continue
 
         rp_rows = session.exec(

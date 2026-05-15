@@ -18,13 +18,16 @@ class TestSeed:
         db_session.commit()
 
         assert counts["academic_years"] == 1
-        assert counts["roles"] == 3
-        assert counts["permissions"] == 7
+        # M2 adds BASIC_USER role → 4 roles total.
+        assert counts["roles"] == 4
+        # M2 adds user:delete, role:read/write/delete, permission:read, audit_log:read → 13 total.
+        assert counts["permissions"] == 13
         assert counts["users"] == 5  # 3 active + 1 inactive + 1 must_change (M1 E2E fixtures)
         assert counts["holidays"] == 2
         assert counts["role_emails"] == 1
         assert counts["student_category_counts"] == 1
-        assert counts["role_permissions"] == 11
+        # SYSTEM_ADMIN=13, DEAN=3, STUDENT=1, BASIC_USER=0 → 17 total.
+        assert counts["role_permissions"] == 17
 
     def test_second_run_inserts_zero_rows(self, db_engine):
         """Run seed twice on the same DB; second run should insert nothing for most tables.
