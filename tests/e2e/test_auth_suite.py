@@ -42,9 +42,10 @@ import httpx
 import pytest
 from playwright.sync_api import Page, expect
 
-BASE_URL = os.environ.get("BASE_URL", "http://localhost:3000")
-MAILPIT_URL = os.environ.get("MAILPIT_URL", "http://localhost:8025")
-MAILPIT_API = f"{MAILPIT_URL}/api/v1"
+from tests.e2e._helpers import BASE_URL, MAILPIT_API, _login
+
+# Re-export the canonical helper so any future importer can get it from here.
+__all__ = ["_login"]
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("DURGAM_E2E") != "1",
@@ -145,23 +146,7 @@ def _delete_ephemeral_user(username: str) -> None:
 # ---------------------------------------------------------------------------
 # Page helpers
 # ---------------------------------------------------------------------------
-
-def _login(page: Page, username: str, password: str) -> None:
-    """Submit login form and wait for navigation away from /login.
-
-    Uses wait_for_url instead of wait_for_load_state("networkidle") because
-    Reflex dispatches all events including redirects over WebSocket. WebSocket
-    traffic does not affect Playwright's networkidle state, so networkidle
-    fires before the redirect is received from the backend.
-    """
-    page.goto(f"{BASE_URL}/login")
-    page.wait_for_load_state("networkidle")  # OK — initial page load is HTTP
-    page.get_by_placeholder("your.username").fill(username)
-    page.get_by_placeholder("••••••••••••").first.fill(password)
-    page.get_by_role("button", name=re.compile(r"Sign in", re.IGNORECASE)).click()
-    # Wait for URL to leave /login — redirect is WebSocket-based, not HTTP
-    page.wait_for_url(lambda url: "/login" not in url, timeout=10000)
-
+# _login and _logout are imported from tests.e2e._helpers (canonical source).
 
 def _clear_session(page: Page) -> None:
     """Wipe the dsession cookie so each test starts unauthenticated."""

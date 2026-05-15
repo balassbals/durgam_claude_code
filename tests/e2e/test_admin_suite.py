@@ -27,13 +27,10 @@ from __future__ import annotations
 import os
 import uuid
 
-import httpx
 import pytest
 from playwright.sync_api import Page, expect
 
-BASE_URL = os.environ.get("BASE_URL", "http://localhost:3000")
-MAILPIT_URL = os.environ.get("MAILPIT_URL", "http://localhost:8025")
-MAILPIT_API = f"{MAILPIT_URL}/api/v1"
+from tests.e2e._helpers import BASE_URL, _latest_mailpit_email, _login
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("DURGAM_E2E") != "1",
@@ -110,42 +107,6 @@ def _delete_ephemeral_user(username: str) -> None:
         conn.execute(text("DELETE FROM users WHERE username = :u"), {"u": username})
         conn.commit()
     engine.dispose()
-
-
-def _latest_mailpit_email(to_address: str, subject_contains: str, timeout: int = 15) -> dict:
-    """Poll Mailpit REST API for the most recent matching email."""
-    import time
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        resp = httpx.get(f"{MAILPIT_API}/messages", timeout=5)
-        resp.raise_for_status()
-        for msg in resp.json().get("messages", []):
-            if (
-                subject_contains.lower() in msg.get("Subject", "").lower()
-                and any(to_address in r.get("Address", "") for r in msg.get("To", []))
-            ):
-                return msg
-        time.sleep(1)
-    raise AssertionError(
-        f"No Mailpit email to {to_address!r} with subject containing {subject_contains!r}"
-        f" within {timeout}s"
-    )
-
-
-# ── Page helpers ──────────────────────────────────────────────────────────────
-
-def _login(page: Page, username: str, password: str) -> None:
-    page.goto(f"{BASE_URL}/login")
-    page.wait_for_load_state("networkidle")
-    page.get_by_placeholder("your.username").fill(username)
-    page.get_by_placeholder("password").fill(password)
-    page.get_by_role("button", name="Log in").click()
-    page.wait_for_url(f"{BASE_URL}/**", timeout=10_000)
-
-
-def _logout(page: Page) -> None:
-    page.get_by_role("button", name="Log out").click()
-    page.wait_for_url(f"{BASE_URL}/login", timeout=10_000)
 
 
 # ── Navigation Reachability tests ─────────────────────────────────────────────
