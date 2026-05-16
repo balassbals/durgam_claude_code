@@ -1,2 +1,2 @@
-username,email,role_code
-example_user,example.user@sssihl.edu.in,STUDENT
+username,email,role_code,full_name
+example_user,example.user@sssihl.edu.in,STUDENT,Example User

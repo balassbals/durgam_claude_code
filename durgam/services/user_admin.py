@@ -59,6 +59,7 @@ class UserAdminService:
         email: str,
         actor_id: UUID,
         role_ids: list[UUID] | None = None,
+        full_name: str | None = None,
     ) -> tuple[User, str]:
         """Create a new user with an auto-generated temporary password.
 
@@ -86,6 +87,7 @@ class UserAdminService:
             password_hash=password_hash,
             actor_id=actor_id,
             must_change_password=True,
+            full_name=full_name or None,
         )
         if role_ids:
             self._user_roles.replace_user_roles(user.id, role_ids, actor_id)

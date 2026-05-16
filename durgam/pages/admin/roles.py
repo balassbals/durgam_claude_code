@@ -178,11 +178,17 @@ def admin_role_detail() -> rx.Component:
                 align="center",
                 gap="0.5rem",
             ),
-            # Permission row — checkbox + "action · scope" label.
+            # Permission row — controlled checkbox bound to role_perm_ids_checked.
+            # Uses checked= (controlled) instead of default_checked= (uncontrolled)
+            # so the state updates reactively when navigating between roles.
             rx.hstack(
                 rx.checkbox(
-                    name=item["id"],  # type: ignore[index]
-                    default_checked=item["granted"] == "true",  # type: ignore[index]
+                    checked=AdminRolesState.role_perm_ids_checked.contains(  # type: ignore[attr-defined]
+                        item["id"]  # type: ignore[index]
+                    ),
+                    on_change=AdminRolesState.toggle_perm(  # type: ignore[call-arg, func-returns-value]
+                        item["id"]  # type: ignore[index]
+                    ),
                     color_scheme="indigo",
                 ),
                 rx.text(
@@ -238,29 +244,29 @@ def admin_role_detail() -> rx.Component:
                 "Existing grants are pre-checked.",
                 font_size="0.8rem", color="var(--color-muted)", margin_bottom="0.5rem",
             ),
-            rx.form(
-                rx.vstack(
-                    rx.box(
-                        rx.foreach(AdminRolesState.perm_table, perm_table_row),
-                        width="100%",
-                        padding_bottom="0.5rem",
-                    ),
-                    rx.button("Save permissions", type="submit",
-                              background="var(--color-primary)", color="white",
-                              border="none", padding="0.5rem 1.5rem", border_radius="4px",
-                              cursor="pointer", font_family="var(--font-sans)",
-                              margin_top="1rem"),
-                    rx.cond(
-                        AdminRolesState.flash != "",
-                        rx.box(rx.text(AdminRolesState.flash, font_size="0.875rem"),
-                               background="var(--color-surface, #faf9f7)",
-                               border="1px solid var(--color-rule)", border_radius="4px",
-                               padding="0.5rem 1rem", margin_top="0.5rem"),
-                        rx.fragment(),
-                    ),
-                    align="start", gap="0.5rem",
+            rx.vstack(
+                rx.box(
+                    rx.foreach(AdminRolesState.perm_table, perm_table_row),
+                    width="100%",
+                    padding_bottom="0.5rem",
                 ),
-                on_submit=AdminRolesState.save_role_permissions,
+                rx.button(
+                    "Save permissions",
+                    on_click=AdminRolesState.save_role_permissions,
+                    background="var(--color-primary)", color="white",
+                    border="none", padding="0.5rem 1.5rem", border_radius="4px",
+                    cursor="pointer", font_family="var(--font-sans)",
+                    margin_top="1rem",
+                ),
+                rx.cond(
+                    AdminRolesState.flash != "",
+                    rx.box(rx.text(AdminRolesState.flash, font_size="0.875rem"),
+                           background="var(--color-surface, #faf9f7)",
+                           border="1px solid var(--color-rule)", border_radius="4px",
+                           padding="0.5rem 1rem", margin_top="0.5rem"),
+                    rx.fragment(),
+                ),
+                align="start", gap="0.5rem",
             ),
             permission_check_widget(),
             padding="2rem", max_width="900px", width="100%",

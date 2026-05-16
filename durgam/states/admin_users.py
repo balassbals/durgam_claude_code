@@ -117,11 +117,13 @@ class AdminUsersState(BaseState):
             return
 
         try:
+            full_name = form_data.get("full_name", "").strip() or None
             role_ids = [UUID(r) for r in self.form_role_ids] if self.form_role_ids else []
             with open_session() as session:
                 svc = _svc(session)
                 user, temp_pw = svc.create_user(username, email, UUID(self.current_user_id),
-                                                 role_ids=role_ids or None)
+                                                 role_ids=role_ids or None,
+                                                 full_name=full_name)
                 user_id = str(user.id)
                 user_email = user.email
                 session.commit()

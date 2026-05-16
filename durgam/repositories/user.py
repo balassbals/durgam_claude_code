@@ -100,12 +100,14 @@ class UserRepository(BaseRepository[User]):
         actor_id: UUID,
         *,
         must_change_password: bool = True,
+        full_name: str | None = None,
     ) -> User:
         """Insert a new active user and return it with a populated id."""
         now = datetime.now(UTC)
         user = User(
             username=username,
             email=email,
+            full_name=full_name or None,
             password_hash=password_hash,
             is_active=True,
             must_change_password=must_change_password,

@@ -23,7 +23,7 @@ from durgam.services.password import generate_temp_password, hash_password
 log = structlog.get_logger(__name__)
 
 _REQUIRED_COLS = {"username", "email", "role_code"}
-_OPTIONAL_COLS: set[str] = set()  # no optional cols at M2; User has no name field
+_OPTIONAL_COLS = {"full_name"}  # optional; stored on User.full_name (added M2 close-out)
 _ALL_COLS = _REQUIRED_COLS | _OPTIONAL_COLS
 
 
@@ -33,6 +33,7 @@ class ValidRow:
     username: str
     email: str
     role_code: str
+    full_name: str = ""
 
 
 @dataclass
@@ -60,8 +61,7 @@ def validate_user_csv(
     Returns (valid_rows, invalid_rows). Only the first max_preview_rows are
     validated and returned (preview cap); the rest are ignored.
 
-    CSV schema: username, email, role_code (required). No optional columns at M2
-    (the User model has no name/description field; full_name column removed).
+    CSV schema: username, email, role_code (required); full_name (optional).
     Unknown extra columns are accepted and silently ignored.
     """
     try:
@@ -127,8 +127,9 @@ def validate_user_csv(
         else:
             seen_usernames.add(username)
             seen_emails.add(email)
+            full_name = row.get("full_name", "")
             valid.append(ValidRow(row_number=i, username=username, email=email,
-                                  role_code=role_code))
+                                  role_code=role_code, full_name=full_name))
 
     return valid, invalid
 
@@ -160,6 +161,7 @@ def commit_user_import(
                 password_hash=hash_password(temp_pw),
                 actor_id=actor_id,
                 must_change_password=True,
+                full_name=vrow.full_name or None,
             )
             role = roles.get(vrow.role_code)
             if role:

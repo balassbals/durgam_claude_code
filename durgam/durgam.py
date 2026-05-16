@@ -15,6 +15,7 @@ from durgam.pages.forgot_password import forgot_password
 from durgam.pages.index import index
 from durgam.pages.login import login
 from durgam.pages.reset_password import reset_password
+from durgam.pages.shared.permission_check_widget import PermissionCheckState
 from durgam.states.admin_bulk_import import BulkImportState
 from durgam.states.admin_index import AdminIndexState
 from durgam.states.admin_roles import AdminRolesState
@@ -56,12 +57,12 @@ app.add_page(
 app.add_page(admin_index, route="/admin", on_load=AdminIndexState.load_stats)
 app.add_page(admin_users, route="/admin/users", on_load=AdminUsersState.load_users)
 app.add_page(admin_user_create, route="/admin/users/new",
-             on_load=AdminUsersState.load_available_roles)
+             on_load=[AdminUsersState.load_available_roles, PermissionCheckState.clear_widget])
 app.add_page(admin_roles, route="/admin/roles", on_load=AdminRolesState.load_roles)
 app.add_page(admin_role_create, route="/admin/roles/new",
              on_load=AdminRolesState.load_roles)
 app.add_page(admin_role_detail, route="/admin/roles/[role_id]",
-             on_load=AdminRolesState.load_role_detail)
+             on_load=[AdminRolesState.load_role_detail, PermissionCheckState.clear_widget])
 app.add_page(admin_permissions, route="/admin/permissions",
              on_load=AdminPermissionsState.load_permissions)
 app.add_page(admin_import_users, route="/admin/import",

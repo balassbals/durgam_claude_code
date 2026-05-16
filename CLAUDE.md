@@ -457,6 +457,62 @@ Notifications/flashes are tied to a single page visit:
    persists until the user clicks Dismiss or navigates away. No other notification
    is marked persistent.
 
+### State-binding rule for checkboxes and toggles
+
+A widget's visual state (checked/unchecked, on/off) MUST be bound directly to
+the source-of-truth state variable — not to a separate intermediate variable or
+to a `default_*` prop.
+
+The M2 permission accordion bug (Bug H): count badges used `role_perm_ids` (correct),
+but checkboxes used `default_checked=item["granted"]=="true"` (React uncontrolled mode).
+React only reads `defaultChecked` at MOUNT; it ignores subsequent state changes.
+Navigating between roles updated `perm_table["granted"]` correctly, but the checkboxes
+stayed at their original mounted state.
+
+**Fix pattern**: use `checked=State.source_of_truth_set.contains(item_id)` (controlled
+mode) and `on_change=State.toggle(item_id)`. The handler updates the source-of-truth
+set; the checkbox re-renders reactively. The count badge and the checkbox both read
+from the same state — they cannot diverge.
+
+```python
+# Wrong — uncontrolled; only works at mount; diverges from live state
+rx.checkbox(default_checked=item["granted"] == "true")
+
+# Correct — controlled; reactive; same source of truth as count badges
+rx.checkbox(
+    checked=State.checked_ids.contains(item["id"]),  # type: ignore[attr-defined]
+    on_change=State.toggle(item["id"]),
+)
+```
+
+From M3 onward: any checkbox or toggle that displays the current state of a DB
+record MUST use the controlled pattern.
+
+### Ephemeral form state rule
+
+Form widgets that hold user-input state (search boxes, permission check widget,
+temp filters, selected-value dropdowns) MUST be reset on every page on_load.
+Stale form values from a prior page visit must not appear when the user returns.
+
+The M2 widget Bug J: permission check widget retained selected values and result
+after navigating away and returning. Fix: add `PermissionCheckState.clear_widget`
+to the page's `on_load` chain via `app.add_page(... on_load=[main_handler, clear_widget])`.
+
+Pattern: same lifecycle rule as flash notifications — ephemeral state is scoped to
+a single page visit and is cleared by on_load before new state is computed.
+
+```python
+# In the state class:
+def clear_widget(self) -> None:
+    self.pc_result = ""
+    self.pc_selected_resource = ""
+    # ... other ephemeral fields
+
+# In durgam.py:
+app.add_page(page_fn, route="...",
+             on_load=[MainState.load_data, WidgetState.clear_widget])
+```
+
 ## Current milestone
 **M2 — Admin Module.**
 

@@ -32,10 +32,15 @@ class AdminRolesState(BaseState):
     current_role_description: str = ""
 
     # Flat list for rx.foreach — headers and perm rows interleaved.
-    # Keys: type, resource, badge, action, scope, id, granted.
+    # Keys: type, resource, badge, action, scope, id (no "granted" — use role_perm_ids_checked).
     perm_table: list[dict[str, str]] = []
     perm_granted_count: int = 0
     perm_total_count: int = 0
+
+    # Controlled checkbox state — IDs of permissions currently checked in the UI.
+    # Initialized from the role's actual permissions on load; updated on toggle.
+    # Source of truth for both the checkboxes and the save handler.
+    role_perm_ids_checked: list[str] = []
 
     # Delete confirmation
     confirm_open: bool = False
@@ -90,15 +95,27 @@ class AdminRolesState(BaseState):
         except RoleAdminError as exc:
             self.flash = exc.message
 
+    def toggle_perm(self, perm_id: str, checked: bool) -> None:
+        """Toggle a single permission checkbox. Called by on_change on each checkbox."""
+        if checked:
+            if perm_id not in self.role_perm_ids_checked:
+                self.role_perm_ids_checked = self.role_perm_ids_checked + [perm_id]
+        else:
+            self.role_perm_ids_checked = [p for p in self.role_perm_ids_checked
+                                           if p != perm_id]
+
     @require_role(action="write", resource="role")
     @audit_action(action="update_permissions", resource="role")
-    async def save_role_permissions(self, form_data: dict) -> None:
-        """Save the permission accordion selections for the current role."""
+    async def save_role_permissions(self) -> None:
+        """Save the permission accordion — reads from role_perm_ids_checked (Bug H fix).
+
+        Switched from form_data (unreliable with default_checked uncontrolled checkboxes)
+        to a controlled state var. role_perm_ids_checked is the single source of truth.
+        """
         self.flash = ""
         if not self.current_role_id_str:
             return
-        # form_data contains checkbox values keyed by permission_id
-        perm_ids = [UUID(k) for k, v in form_data.items() if v]
+        perm_ids = [UUID(p) for p in self.role_perm_ids_checked]
         try:
             with open_session() as session:
                 svc = _svc(session)
@@ -147,25 +164,27 @@ class AdminRolesState(BaseState):
             self.current_role_description = role.description or ""
 
             role_perm_ids = {str(p.id) for p in svc.get_role_permissions(role.id)}
-            all_grouped = svc.get_permissions_grouped()
+            # role_perm_ids_checked is the SINGLE source of truth for checked state.
+            # Both checkboxes and count badges read from it (count badge recomputed).
+            self.role_perm_ids_checked = list(role_perm_ids)
 
-            # Build flat list with header rows and perm rows for rx.foreach.
-            # Headers carry the count badge; perm rows carry the checkbox data.
+            all_grouped = svc.get_permissions_grouped()
             table: list[dict[str, str]] = []
-            total_granted = 0
+            total_granted = len(role_perm_ids)
             total_count = 0
             for resource in sorted(all_grouped.keys()):
                 perms = sorted(all_grouped[resource], key=lambda p: (p.action, p.scope))
                 n_granted = sum(1 for p in perms if str(p.id) in role_perm_ids)
-                total_granted += n_granted
                 total_count += len(perms)
                 table.append({
                     "type": "header",
                     "resource": resource,
                     "badge": f"{n_granted}/{len(perms)}",
-                    "action": "", "scope": "", "id": "", "granted": "",
+                    "action": "", "scope": "", "id": "",
                 })
                 for p in perms:
+                    # "granted" removed from perm rows — checkboxes use
+                    # role_perm_ids_checked.contains(item["id"]) instead.
                     table.append({
                         "type": "perm",
                         "resource": resource,
@@ -173,7 +192,6 @@ class AdminRolesState(BaseState):
                         "action": p.action,
                         "scope": p.scope,
                         "id": str(p.id),
-                        "granted": "true" if str(p.id) in role_perm_ids else "false",
                     })
             self.perm_table = table
             self.perm_granted_count = total_granted

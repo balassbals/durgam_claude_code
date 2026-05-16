@@ -75,6 +75,13 @@ def admin_user_create() -> rx.Component:
                                  font_family="var(--font-sans)"),
                         width="100%",
                     ),
+                    rx.box(
+                        rx.text("Full name", font_size="0.875rem", font_weight="600",
+                                margin_bottom="0.25rem"),
+                        rx.input(name="full_name", placeholder="e.g. Jaya Smith (optional)",
+                                 font_family="var(--font-sans)"),
+                        width="100%",
+                    ),
                     rx.text(
                         "Password is auto-generated and emailed to the user. "
                         "They must change it on first login.",

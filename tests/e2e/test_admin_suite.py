@@ -285,16 +285,24 @@ class TestRoleConstructionAndPermission:
             # Role detail page loads — wait for the role name to appear.
             expect(page.get_by_text("Gate Test Role")).to_be_visible(timeout=10_000)
 
-            # Step 7: use the permission check widget (Bug F: now uses dropdowns).
-            # Select user, action, resource via native <select> elements.
-            page.locator('select[name="pc_user_id"]').select_option(value=user_id)
-            page.locator('select[name="pc_action"]').select_option("read")
-            page.locator('select[name="pc_resource"]').select_option("department")
-            page.locator('select[name="pc_scope_type"]').select_option("department")
-            # Scope ID left blank → global check → ✗ Denied (no department:read granted).
+            # Step 7: use the permission check widget (Bug I: resource first, then action).
+            # Selects use on_change handlers — no form name attributes.
+            # Resource first: triggers async load of available actions.
+            resource_sel = page.locator("select").nth(0)  # first select = Resource
+            scope_sel = page.locator("select").nth(1)     # second = Scope type
+            action_sel = page.locator("select").nth(2)    # third = Action (loaded after resource)
+            user_sel = page.locator("select").nth(3)      # fourth = User
+
+            resource_sel.select_option("department")
+            # Wait for action dropdown to populate (async set_pc_resource fires).
+            expect(action_sel).to_be_visible(timeout=8_000)
+            action_sel.select_option("read")
+            scope_sel.select_option("department")
+            user_sel.select_option(value=user_id)
+            # Scope ID blank → no scoped object → department:read check with no scope.
             page.get_by_role("button", name="Check").click()
 
-            # The result must be ✗ Denied (user has no department:read permission).
+            # The result must be ✗ Denied (ephemeral user has no department:read).
             expect(page.get_by_text("✗ Denied")).to_be_visible(timeout=10_000)
 
         finally:
