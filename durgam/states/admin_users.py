@@ -74,6 +74,7 @@ class AdminUsersState(BaseState):
         guard = self._admin_guard()
         if guard is not None:
             return guard
+        self.generated_password = ""  # clear temp password on navigation (shown once)
         self.users = []  # reset before query so stale rows never linger
         self.total_users = 0
         with open_session() as session:
@@ -83,19 +84,26 @@ class AdminUsersState(BaseState):
                 page=self.current_page,
                 page_size=self.page_size,
             )
-            # Read all attributes before session closes.
-            # All values are strings for Reflex foreach (list[dict[str, str]]).
-            self.users = [
-                {
+            # Fetch roles for each user — excludes BASIC_USER (every user has it).
+            from durgam.repositories.user_role import UserRoleRepository
+            ur_repo = UserRoleRepository(session)
+            users_data = []
+            for u in page_users:
+                user_role_pairs = ur_repo.get_user_roles_with_role(u.id)
+                role_codes = [
+                    r.code for _, r in user_role_pairs
+                    if r.code != "BASIC_USER"
+                ]
+                users_data.append({
                     "id": str(u.id),
                     "username": u.username,
                     "email": u.email,
+                    "roles": ", ".join(role_codes) if role_codes else "—",
                     "is_active": str(u.is_active),
                     "must_change_password": str(u.must_change_password),
                     "last_login_at": str(u.last_login_at) if u.last_login_at else "",
-                }
-                for u in page_users
-            ]
+                })
+            self.users = users_data
             self.total_users = total
         self._load_nav_entries()
 
@@ -182,7 +190,7 @@ class AdminUsersState(BaseState):
 
     @require_role(action="write", resource="user")
     @audit_action(action="reset_password", resource="user")
-    async def reset_user_password(self) -> None:
+    async def reset_user_password(self):
         """Non-trivial handler: generates temp password, emails user, displays once."""
         user_id = self.confirm_user_id
         self.confirm_open = False
@@ -200,13 +208,15 @@ class AdminUsersState(BaseState):
                 session.commit()
 
             self.generated_password = temp_pw
-            self.flash = f"Password reset for '{username}'. New temporary password shown below."
+            self.flash = f"Password reset for '{username}'. Temporary password shown below."
             asyncio.create_task(
                 send_user_password_reset_email(
                     type("U", (), {"id": user_id, "email": email, "username": username})(),
                     temp_pw,
                 )
             )
+            # Scroll to top so the temp-password box (at page top) is visible.
+            return rx.call_script("window.scrollTo({top:0,behavior:'smooth'})")
         except UserAdminError as exc:
             self.flash = exc.message
 

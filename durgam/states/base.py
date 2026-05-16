@@ -36,6 +36,11 @@ class BaseState(rx.State):
     # Each entry is {"label": str, "href": str, "icon": str, "group": str}.
     visible_nav_entries: list[dict[str, str]] = []
 
+    # True only after _admin_guard() confirms BOTH authentication AND authorization.
+    # admin_page() gates on this so that authenticated-but-unauthorized users
+    # (e.g. student_001) see a blank screen before redirect, not admin chrome.
+    admin_authorized: bool = False
+
     def clear_flash(self) -> None:
         self.flash = ""
 
@@ -76,15 +81,14 @@ class BaseState(rx.State):
         rx.redirect("/") with flash if authenticated but lacking admin
         permission, or None if access is allowed.
 
-        Call at the start of every admin page on_load handler BEFORE any
-        data loading. Follows M1's home_on_load pattern: no @require_role
-        decorator (which raises instead of redirecting), manual guard instead.
-
-        Route protection rule (CLAUDE.md "Patterns established at M2"):
-        every authenticated page must guard its on_load: resolve session,
-        redirect to /login if missing, redirect to / if lacking permission,
-        all BEFORE rendering any chrome or content.
+        Sets admin_authorized=True only when BOTH checks pass. admin_page()
+        gates on admin_authorized so authenticated-but-unauthorized users
+        (e.g. student_001) see a blank screen before redirect, not chrome.
+        Clears flash on every admin navigation so stale notifications from
+        a prior page do not persist.
         """
+        self.admin_authorized = False  # require fresh auth+authz on every nav
+        self.flash = ""               # clear stale flash from previous page
         self._resolve_session()
         if not self.current_user_id:
             return rx.redirect("/login")
@@ -97,6 +101,7 @@ class BaseState(rx.State):
             if not can(user_id, "read", "user", None, None, session):
                 self.flash = "You do not have admin access."
                 return rx.redirect("/")
+        self.admin_authorized = True
         return None
 
     def _load_nav_entries(self) -> None:

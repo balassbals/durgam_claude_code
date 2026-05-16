@@ -161,7 +161,7 @@ def admin_role_detail() -> rx.Component:
         return rx.hstack(
             rx.checkbox(
                 name=perm["id"],
-                default_checked=perm["granted"] == "true",  # type: ignore[index]
+                default_checked=perm["granted"] == "true",
                 color_scheme="indigo",
             ),
             rx.text(perm["action"], font_size="0.875rem", min_width="80px"),
@@ -218,6 +218,15 @@ def admin_role_detail() -> rx.Component:
                               border="none", padding="0.5rem 1.5rem", border_radius="4px",
                               cursor="pointer", font_family="var(--font-sans)",
                               margin_top="1rem"),
+                    # Inline feedback near Save — visible at the user's scroll position.
+                    rx.cond(
+                        AdminRolesState.flash != "",
+                        rx.box(rx.text(AdminRolesState.flash, font_size="0.875rem"),
+                               background="var(--color-surface, #faf9f7)",
+                               border="1px solid var(--color-rule)", border_radius="4px",
+                               padding="0.5rem 1rem", margin_top="0.5rem"),
+                        rx.fragment(),
+                    ),
                     align="start", gap="0.5rem",
                 ),
                 on_submit=AdminRolesState.save_role_permissions,

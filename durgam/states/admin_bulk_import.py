@@ -149,6 +149,19 @@ class BulkImportState(BaseState):
             ])
         self.error_report_csv = output.getvalue()
 
+    def download_template(self):
+        """Serve the CSV import template as a client-side download (Bug 1).
+
+        Uses rx.download to push the file to the browser without a separate
+        HTTP route. The template content is the canonical source of truth for
+        the CSV schema expected by validate_user_csv().
+        """
+        content = (
+            "username,email,role_code,full_name\n"
+            "example_user,example.user@sssihl.edu.in,STUDENT,Example User\n"
+        )
+        return rx.download(data=content, filename="import_user_template.csv")
+
     def reset_import(self):
         """on_load for /admin/import — guards session then resets import state."""
         guard = self._admin_guard()

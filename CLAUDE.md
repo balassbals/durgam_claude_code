@@ -283,18 +283,23 @@ If any of the above fails or surprises, stop and surface it before writing code.
 **Applies to:** `/` (home page), `/change-password`, all `/admin/*` pages, and
 every authenticated page added in M3+.
 
-Every authenticated page must guard its on_load handler before rendering
-any chrome or content:
+Every authenticated page must guard its on_load handler AGAINST BOTH
+unauthenticated AND authenticated-but-unauthorized states, before rendering
+any content:
 
-1. Wrap the page's returned component in `rx.cond(State.current_user_id != "", content, rx.fragment())`.
-   This shows a blank screen until the on_load auth guard fires — preventing
-   chrome from flashing for unauthenticated users before the redirect fires.
-   Use `admin_page(content)` for admin pages. For home page, wrap in
-   `rx.cond(AuthState.current_user_id != "", content, rx.fragment())` directly.
-2. The on_load handler calls `_admin_guard()` (for admin pages) or manually
-   resolves session + redirects (for home/change-password, following M1 pattern).
-3. Return the guard redirect if it is not None (short-circuit before any data load).
+1. Wrap the page in `rx.cond(BaseState.admin_authorized, content, rx.fragment())`
+   via `admin_page(content)`. `admin_authorized` is set to True ONLY after
+   `_admin_guard()` confirms BOTH authentication AND `can("read","user")` pass.
+   This means authenticated-but-unauthorized users (e.g. student_001) also see
+   a blank screen before redirect — not chrome.
+2. `_admin_guard()` clears `self.flash = ""` and `self.admin_authorized = False`
+   at the start of every admin navigation (stale notifications from prior page
+   do not persist).
+3. Return the guard redirect if not None (short-circuit before any data load).
 4. Only then load data and populate state.
+
+For home page: `rx.cond(AuthState.current_user_id != "", content, rx.fragment())`.
+For admin pages: `admin_page(content)` which uses `BaseState.admin_authorized`.
 
 Do NOT use `@require_role` on on_load handlers — it raises `PermissionDenied`
 instead of redirecting, which shows admin chrome + error toast to unauthenticated
@@ -425,6 +430,21 @@ expect(page.get_by_text(username, exact=True)).to_be_visible()
 
 From M3 onward: any `get_by_text` on a test-generated value defaults to
 `exact=True` unless intentional substring matching is required and documented.
+
+### Notification lifecycle rule
+
+Notifications/flashes are tied to a single page visit:
+
+1. **On every admin navigation:** `_admin_guard()` clears `self.flash = ""`.
+   Stale flash from a prior page does not persist to the next page.
+2. **`generated_password` (temp password):** cleared at the start of `load_users()`
+   when the user navigates back to `/admin/users`. Shown once; gone on next visit.
+3. **On logout:** `AuthState.logout()` clears `self.flash = ""` and
+   `self.admin_authorized = False` before redirecting to `/login`. No notifications
+   follow the user to the login page.
+4. **Persistent notifications (the only known M2 case):** the temp password box
+   persists until the user clicks Dismiss or navigates away. No other notification
+   is marked persistent.
 
 ## Current milestone
 **M2 — Admin Module.**

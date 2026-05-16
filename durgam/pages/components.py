@@ -210,8 +210,11 @@ def admin_page(content: rx.Component) -> rx.Component:
 
     Use as: return admin_page(rx.vstack(nav_shell(), rx.box(...), page_footer()))
     """
+    # Gate on admin_authorized (set in _admin_guard() only after BOTH auth and
+    # can("read","user") pass). current_user_id alone is insufficient: an
+    # authenticated-but-unauthorized user (e.g. student_001) also has it set.
     return rx.cond(
-        BaseState.current_user_id != "",
+        BaseState.admin_authorized,
         content,
         rx.fragment(),
     )

@@ -84,6 +84,17 @@ def validate_policy(
                 raise WeakPasswordError("Password must not contain your name.")
 
 
+# Single source of truth for user-facing password rules, shared with validate_policy().
+PASSWORD_RULES: list[str] = [
+    "Be at least 12 characters long",
+    "Contain at least one uppercase letter",
+    "Contain at least one lowercase letter",
+    "Contain at least one digit",
+    "Contain at least one symbol (!@#$%)",
+    "Not be a common password",
+    "Not contain your username or email address",
+]
+
 _TEMP_UPPERS = string.ascii_uppercase
 _TEMP_LOWERS = string.ascii_lowercase
 _TEMP_DIGITS = string.digits

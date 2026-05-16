@@ -2,6 +2,7 @@
 
 import reflex as rx
 
+from durgam.pages.change_password import _password_rules_hint
 from durgam.states.auth import AuthState
 
 
@@ -56,6 +57,7 @@ def reset_password() -> rx.Component:
                                 padding="0.5rem 0.75rem",
                                 font_family="var(--font-sans)",
                             ),
+                            _password_rules_hint(),
                             align_items="flex-start",
                             gap="0.25rem",
                             width="100%",

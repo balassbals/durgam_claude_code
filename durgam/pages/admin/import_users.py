@@ -35,14 +35,19 @@ def admin_import_users() -> rx.Component:
                 rx.heading("Import Users", size="5", font_family="var(--font-sans)"),
                 gap="1rem", align="center", margin_bottom="1.5rem",
             ),
-            # Template download link
+            # Template download — uses rx.download event to push CSV to browser.
             rx.hstack(
                 rx.text("Download template:", font_size="0.875rem"),
-                rx.link(
+                rx.button(
                     "users_import_template.csv",
-                    href="/admin/import/template.csv",
+                    on_click=BulkImportState.download_template,
+                    background="transparent",
+                    border="none",
                     color="var(--color-primary)",
                     font_size="0.875rem",
+                    cursor="pointer",
+                    padding="0",
+                    text_decoration="underline",
                 ),
                 margin_bottom="1.5rem",
                 gap="0.5rem",

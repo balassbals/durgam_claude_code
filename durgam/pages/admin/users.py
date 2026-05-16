@@ -78,6 +78,7 @@ def admin_users() -> rx.Component:
     columns = [
         TableColumn(key="username", label="Username"),
         TableColumn(key="email", label="Email"),
+        TableColumn(key="roles", label="Roles"),
         TableColumn(key="is_active", label="Active"),
         TableColumn(key="last_login_at", label="Last login", hidden_on_card=True),
     ]
@@ -136,8 +137,9 @@ def admin_users() -> rx.Component:
                         rx.button(
                             "Dismiss",
                             on_click=AdminUsersState.dismiss_generated_password,
-                            background="transparent",
-                            border="1px solid var(--color-rule)",
+                            background="var(--color-primary)",
+                            color="white",
+                            border="none",
                             padding="0.2rem 0.75rem",
                             border_radius="4px",
                             cursor="pointer",

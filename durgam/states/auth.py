@@ -23,14 +23,14 @@ from durgam.services.password import WeakPasswordError
 from durgam.states.base import BaseState
 
 
-def _auth_svc(session) -> AuthService:  # type: ignore[no-untyped-def]
+def _auth_svc(session) -> AuthService:
     return AuthService(
         user_repo=UserRepository(session),
         session_repo=UserSessionRepository(session),
     )
 
 
-def _pw_svc(session) -> PasswordService:  # type: ignore[no-untyped-def]
+def _pw_svc(session) -> PasswordService:
     return PasswordService(
         user_repo=UserRepository(session),
         token_repo=PasswordResetTokenRepository(session),
@@ -119,7 +119,7 @@ class AuthState(BaseState):
 
     def load_reset_token(self) -> None:
         """Read ?token= query param from the URL. Use as on_load on the reset-password page."""
-        self.reset_token = self.router._page.params.get("token", "")  # type: ignore[attr-defined]
+        self.reset_token = self.router._page.params.get("token", "")
 
     @public_handler
     @audit_action(action="login", resource="session")
@@ -177,6 +177,8 @@ class AuthState(BaseState):
         self.current_user_id = ""
         self.current_username = ""
         self.must_change_password = False
+        self.flash = ""            # clear stale flash (Bug 10)
+        self.admin_authorized = False  # reset admin gate on logout
         return rx.redirect("/login")  # type: ignore[return-value]
 
     @public_handler
