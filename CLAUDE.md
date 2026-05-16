@@ -421,10 +421,10 @@ expect(action_sel.locator("option[value='read']")).to_be_attached(timeout=10_000
 action_sel.select_option("read")           # option is guaranteed present
 ```
 
-Also: `option[value!='']` targets real options excluding the placeholder, useful
+Also: `option:not([value=''])` targets real options excluding the placeholder, useful
 for waiting until a dropdown is fully populated:
 ```python
-expect(user_sel.locator("option[value!='']").first).to_be_attached(timeout=15_000)
+expect(user_sel.locator("option:not([value=''])").first).to_be_attached(timeout=15_000)
 ```
 
 From M3 onward, every test that interacts with a dependent dropdown (action filtered

@@ -303,9 +303,9 @@ class TestRoleConstructionAndPermission:
             user_sel = page.locator("#pc-user-select")
 
             # Wait for user dropdown to be populated via on_mount load_widget_data.
-            # "option[value!='']" matches real options, not the placeholder.
+            # "option:not([value=''])" matches real options, not the placeholder.
             expect(
-                user_sel.locator("option[value!='']").first
+                user_sel.locator("option:not([value=''])").first
             ).to_be_attached(timeout=15_000)
 
             # Select resource — triggers async set_pc_resource which populates actions.
