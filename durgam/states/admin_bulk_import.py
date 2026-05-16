@@ -157,8 +157,8 @@ class BulkImportState(BaseState):
         the CSV schema expected by validate_user_csv().
         """
         content = (
-            "username,email,role_code,full_name\n"
-            "example_user,example.user@sssihl.edu.in,STUDENT,Example User\n"
+            "username,email,role_code\n"
+            "example_user,example.user@sssihl.edu.in,STUDENT\n"
         )
         return rx.download(data=content, filename="import_user_template.csv")
 

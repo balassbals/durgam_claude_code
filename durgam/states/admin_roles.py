@@ -31,8 +31,11 @@ class AdminRolesState(BaseState):
     current_role_level: int = 0
     current_role_description: str = ""
 
-    # {resource: [{id, action, scope, granted}]} — granted stored as "true"/"false" string.
-    permissions_by_resource: dict[str, list[dict[str, str]]] = {}
+    # Flat list for rx.foreach — headers and perm rows interleaved.
+    # Keys: type, resource, badge, action, scope, id, granted.
+    perm_table: list[dict[str, str]] = []
+    perm_granted_count: int = 0
+    perm_total_count: int = 0
 
     # Delete confirmation
     confirm_open: bool = False
@@ -145,19 +148,36 @@ class AdminRolesState(BaseState):
 
             role_perm_ids = {str(p.id) for p in svc.get_role_permissions(role.id)}
             all_grouped = svc.get_permissions_grouped()
-            by_resource: dict[str, list[dict[str, str]]] = {}
-            for resource, perms in all_grouped.items():
-                by_resource[resource] = [
-                    {
-                        "id": str(p.id),
+
+            # Build flat list with header rows and perm rows for rx.foreach.
+            # Headers carry the count badge; perm rows carry the checkbox data.
+            table: list[dict[str, str]] = []
+            total_granted = 0
+            total_count = 0
+            for resource in sorted(all_grouped.keys()):
+                perms = sorted(all_grouped[resource], key=lambda p: (p.action, p.scope))
+                n_granted = sum(1 for p in perms if str(p.id) in role_perm_ids)
+                total_granted += n_granted
+                total_count += len(perms)
+                table.append({
+                    "type": "header",
+                    "resource": resource,
+                    "badge": f"{n_granted}/{len(perms)}",
+                    "action": "", "scope": "", "id": "", "granted": "",
+                })
+                for p in perms:
+                    table.append({
+                        "type": "perm",
+                        "resource": resource,
+                        "badge": "",
                         "action": p.action,
                         "scope": p.scope,
-                        # Store as string "true"/"false" for dict[str, str] typing.
+                        "id": str(p.id),
                         "granted": "true" if str(p.id) in role_perm_ids else "false",
-                    }
-                    for p in perms
-                ]
-            self.permissions_by_resource = by_resource
+                    })
+            self.perm_table = table
+            self.perm_granted_count = total_granted
+            self.perm_total_count = total_count
         self._load_nav_entries()
 
     def open_delete_confirm(self, role_id: str, role_name: str) -> None:

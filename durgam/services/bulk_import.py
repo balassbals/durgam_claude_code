@@ -23,7 +23,7 @@ from durgam.services.password import generate_temp_password, hash_password
 log = structlog.get_logger(__name__)
 
 _REQUIRED_COLS = {"username", "email", "role_code"}
-_OPTIONAL_COLS = {"full_name"}
+_OPTIONAL_COLS: set[str] = set()  # no optional cols at M2; User has no name field
 _ALL_COLS = _REQUIRED_COLS | _OPTIONAL_COLS
 
 
@@ -33,7 +33,6 @@ class ValidRow:
     username: str
     email: str
     role_code: str
-    full_name: str = ""
 
 
 @dataclass
@@ -61,7 +60,8 @@ def validate_user_csv(
     Returns (valid_rows, invalid_rows). Only the first max_preview_rows are
     validated and returned (preview cap); the rest are ignored.
 
-    CSV schema: username, email, role_code (required); full_name (optional).
+    CSV schema: username, email, role_code (required). No optional columns at M2
+    (the User model has no name/description field; full_name column removed).
     Unknown extra columns are accepted and silently ignored.
     """
     try:
@@ -100,7 +100,6 @@ def validate_user_csv(
         username = row.get("username", "")
         email = row.get("email", "").lower()
         role_code = row.get("role_code", "").upper()
-        full_name = row.get("full_name", "")
 
         errors_for_row = []
 
@@ -129,7 +128,7 @@ def validate_user_csv(
             seen_usernames.add(username)
             seen_emails.add(email)
             valid.append(ValidRow(row_number=i, username=username, email=email,
-                                  role_code=role_code, full_name=full_name))
+                                  role_code=role_code))
 
     return valid, invalid
 

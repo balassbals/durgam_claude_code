@@ -155,19 +155,48 @@ def admin_role_create() -> rx.Component:
 
 
 def admin_role_detail() -> rx.Component:
-    """Role detail page with resource-first permission accordion."""
+    """Role detail page — grouped permission list with pre-checked existing grants."""
 
-    def perm_row(perm: dict) -> rx.Component:
-        return rx.hstack(
-            rx.checkbox(
-                name=perm["id"],
-                default_checked=perm["granted"] == "true",
-                color_scheme="indigo",
+    def perm_table_row(item: rx.Var) -> rx.Component:
+        """Renders a resource header (with count badge) or a permission checkbox row."""
+        return rx.cond(
+            item["type"] == "header",  # type: ignore[index]
+            # Resource group header with "{n granted}/{m total}" badge.
+            rx.hstack(
+                rx.text(
+                    item["resource"],  # type: ignore[index]
+                    font_weight="700",
+                    font_size="0.85rem",
+                    color="var(--color-body)",
+                    text_transform="capitalize",
+                ),
+                rx.badge(item["badge"], variant="soft", color_scheme="indigo"),  # type: ignore[index]
+                width="100%",
+                padding="0.6rem 0 0.2rem",
+                border_top="1px solid var(--color-rule)",
+                margin_top="0.75rem",
+                align="center",
+                gap="0.5rem",
             ),
-            rx.text(perm["action"], font_size="0.875rem", min_width="80px"),
-            rx.text(perm["scope"], font_size="0.875rem", color="var(--color-muted)"),
-            gap="0.5rem",
-            align="center",
+            # Permission row — checkbox + "action · scope" label.
+            rx.hstack(
+                rx.checkbox(
+                    name=item["id"],  # type: ignore[index]
+                    default_checked=item["granted"] == "true",  # type: ignore[index]
+                    color_scheme="indigo",
+                ),
+                rx.text(
+                    item["action"],  # type: ignore[index]
+                    " · ",
+                    item["scope"],  # type: ignore[index]
+                    font_size="0.875rem",
+                    color="var(--color-body)",
+                ),
+                gap="0.6rem",
+                align="center",
+                padding="0.2rem 1rem",
+                cursor="pointer",
+            ),
         )
 
     return admin_page(rx.vstack(
@@ -190,35 +219,37 @@ def admin_role_detail() -> rx.Component:
                        padding="0.75rem 1rem", margin_bottom="1rem"),
                 rx.fragment(),
             ),
-            rx.heading("Permissions", size="3", margin_bottom="1rem"),
+            rx.hstack(
+                rx.heading("Permissions", size="3"),
+                rx.spacer(),
+                rx.text(
+                    AdminRolesState.perm_granted_count,
+                    " of ",
+                    AdminRolesState.perm_total_count,
+                    " granted",
+                    font_size="0.8rem",
+                    color="var(--color-muted)",
+                ),
+                align="center",
+                margin_bottom="0.5rem",
+            ),
             rx.text(
-                "Check the permissions to grant to this role, then click Save.",
-                font_size="0.8rem", color="var(--color-muted)", margin_bottom="1rem",
+                "Check the permissions to grant to this role, then click Save. "
+                "Existing grants are pre-checked.",
+                font_size="0.8rem", color="var(--color-muted)", margin_bottom="0.5rem",
             ),
             rx.form(
                 rx.vstack(
-                    rx.foreach(
-                        AdminRolesState.permissions_by_resource,
-                        lambda resource_entry: rx.box(
-                            rx.text(resource_entry[0], font_weight="600", font_size="0.9rem",
-                                    color="var(--color-body)", margin_bottom="0.5rem"),
-                            rx.vstack(
-                                rx.foreach(resource_entry[1], perm_row),
-                                align="start", gap="0.25rem", padding_left="1rem",
-                            ),
-                            border="1px solid var(--color-rule)",
-                            border_radius="6px",
-                            padding="0.75rem 1rem",
-                            margin_bottom="0.5rem",
-                            background="white",
-                        ),
+                    rx.box(
+                        rx.foreach(AdminRolesState.perm_table, perm_table_row),
+                        width="100%",
+                        padding_bottom="0.5rem",
                     ),
                     rx.button("Save permissions", type="submit",
                               background="var(--color-primary)", color="white",
                               border="none", padding="0.5rem 1.5rem", border_radius="4px",
                               cursor="pointer", font_family="var(--font-sans)",
                               margin_top="1rem"),
-                    # Inline feedback near Save — visible at the user's scroll position.
                     rx.cond(
                         AdminRolesState.flash != "",
                         rx.box(rx.text(AdminRolesState.flash, font_size="0.875rem"),

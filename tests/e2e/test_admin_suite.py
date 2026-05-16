@@ -285,15 +285,13 @@ class TestRoleConstructionAndPermission:
             # Role detail page loads — wait for the role name to appear.
             expect(page.get_by_text("Gate Test Role")).to_be_visible(timeout=10_000)
 
-            # Step 7: use the permission check widget (on_submit form).
-            import uuid as _uuid
-            fake_scope_id = str(_uuid.uuid4())
-
-            page.get_by_placeholder("UUID of the user").fill(user_id)
-            page.get_by_placeholder("e.g. read").fill("read")
-            page.get_by_placeholder("e.g. department").first.fill("department")
-            page.get_by_placeholder("e.g. department (optional)").fill("department")
-            page.get_by_placeholder("UUID of scoped object (optional)").fill(fake_scope_id)
+            # Step 7: use the permission check widget (Bug F: now uses dropdowns).
+            # Select user, action, resource via native <select> elements.
+            page.locator('select[name="pc_user_id"]').select_option(value=user_id)
+            page.locator('select[name="pc_action"]').select_option("read")
+            page.locator('select[name="pc_resource"]').select_option("department")
+            page.locator('select[name="pc_scope_type"]').select_option("department")
+            # Scope ID left blank → global check → ✗ Denied (no department:read granted).
             page.get_by_role("button", name="Check").click()
 
             # The result must be ✗ Denied (user has no department:read permission).
