@@ -398,6 +398,38 @@ async def load_users(self) -> None:
         ...                  # query and populate self.users
 ```
 
+### E2E dependent-dropdown rule
+
+When a test interacts with a dropdown whose options are populated by an async
+server response to a prior selection, the test MUST wait for the **specific option**
+to be attached — not just for the dropdown element to be visible.
+
+Reflex WebSocket state updates do NOT affect Playwright's `networkidle` state, so
+the dropdown element renders (becomes visible) before the server delivers the options
+list. Calling `select_option("read")` immediately after "visible" will find an empty
+list and fail. This is the same WebSocket-state-arrival principle as the M1
+`wait_for_url` rule.
+
+**Pattern:**
+```python
+# Wrong — dropdown visible but options not yet delivered
+expect(action_sel).to_be_visible(timeout=10_000)
+action_sel.select_option("read")           # may find empty list
+
+# Correct — wait for the specific option to exist in the DOM
+expect(action_sel.locator("option[value='read']")).to_be_attached(timeout=10_000)
+action_sel.select_option("read")           # option is guaranteed present
+```
+
+Also: `option[value!='']` targets real options excluding the placeholder, useful
+for waiting until a dropdown is fully populated:
+```python
+expect(user_sel.locator("option[value!='']").first).to_be_attached(timeout=15_000)
+```
+
+From M3 onward, every test that interacts with a dependent dropdown (action filtered
+by resource, scope_id filtered by scope_type, etc.) must use this pattern.
+
 ### Admin page stable-anchor wait rule
 
 After navigating to an admin page via `page.goto()`, never immediately assert

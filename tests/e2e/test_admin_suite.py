@@ -286,28 +286,49 @@ class TestRoleConstructionAndPermission:
             expect(page.get_by_text("Gate Test Role")).to_be_visible(timeout=10_000)
 
             # Step 7: use the permission check widget.
-            # load_widget_data fires via on_mount; wait for user dropdown to have options
-            # before interacting (the select renders before options arrive via WebSocket).
-            user_sel = page.locator("#pc-user-select")
-            expect(user_sel).to_be_visible(timeout=15_000)
-            # Wait for at least one real user option to appear (not just the placeholder).
-            user_option = user_sel.locator("option[value!='']")
-            expect(user_option.first).to_be_attached(timeout=15_000)
+            #
+            # Dependency analysis (from PermissionCheckState.set_pc_resource):
+            #   action dropdown depends on RESOURCE ONLY — scope_type has no
+            #   effect on pc_available_actions. Test order: resource → action
+            #   → scope_type → user → submit.
+            #
+            # E2E dependent-dropdown rule (CLAUDE.md "Patterns established at M2"):
+            #   Wait for the SPECIFIC OPTION to be attached, not just the dropdown
+            #   to be visible. Reflex WebSocket state updates do not affect
+            #   Playwright's networkidle, so element-visibility precedes data-arrival.
 
             resource_sel = page.locator("#pc-resource-select")
             scope_sel = page.locator("#pc-scope-type-select")
+            action_sel = page.locator("#pc-action-select")
+            user_sel = page.locator("#pc-user-select")
 
-            # Select resource first — triggers async set_pc_resource which loads actions.
+            # Wait for user dropdown to be populated via on_mount load_widget_data.
+            # "option[value!='']" matches real options, not the placeholder.
+            expect(
+                user_sel.locator("option[value!='']").first
+            ).to_be_attached(timeout=15_000)
+
+            # Select resource — triggers async set_pc_resource which populates actions.
             resource_sel.select_option("department")
 
-            # Wait for action dropdown to appear (rx.cond renders it after resource loads).
-            action_sel = page.locator("#pc-action-select")
-            expect(action_sel).to_be_visible(timeout=10_000)
+            # Wait for the SPECIFIC "read" option to exist (not just the dropdown element).
+            # Visibility alone is insufficient: the element renders before WebSocket
+            # delivers the options list, so select_option("read") would find an empty list.
+            expect(
+                action_sel.locator("option[value='read']")
+            ).to_be_attached(timeout=10_000)
             action_sel.select_option("read")
 
+            # scope_type does NOT re-filter actions — simple sync setter, no wait needed.
             scope_sel.select_option("department")
+
+            # Wait for specific user option to be attached before selecting by value.
+            expect(
+                user_sel.locator(f"option[value='{user_id}']")
+            ).to_be_attached(timeout=10_000)
             user_sel.select_option(value=user_id)
-            # Scope ID is disabled at M2 (no scope objects seeded yet).
+
+            # Scope ID disabled at M2 — no scope objects seeded yet.
             page.get_by_role("button", name="Check").click()
 
             # Ephemeral user has no department:read → ✗ Denied.
