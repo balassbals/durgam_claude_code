@@ -1,7 +1,8 @@
 import reflex as rx
 
-from durgam.pages.components import nav_shell
+from durgam.pages.components import flash_success, nav_shell
 from durgam.states.auth import AuthState
+from durgam.states.base import BaseState
 from durgam.theme import TOKENS
 
 
@@ -51,6 +52,11 @@ def index() -> rx.Component:
         AuthState.current_user_id != "",
         rx.box(
         nav_shell(),
+        rx.cond(
+            BaseState.flash != "",
+            rx.box(flash_success(BaseState.flash), padding="0.5rem 1.5rem 0"),
+            rx.fragment(),
+        ),
         rx.vstack(
             rx.box(
                 height="4px",

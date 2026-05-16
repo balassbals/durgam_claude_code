@@ -91,6 +91,10 @@ class AuthState(BaseState):
         in theory but broke on fresh-compile server starts in Reflex 0.9.x).
         """
         self.flash = ""  # clear stale flash from prior navigation
+        # Carry pending_success (e.g. "Password changed") into flash for display.
+        if self.pending_success:
+            self.flash = self.pending_success
+            self.pending_success = ""
         self._resolve_session_state()
         if not self.current_user_id:
             return rx.redirect("/login")  # type: ignore[return-value]
@@ -200,6 +204,7 @@ class AuthState(BaseState):
                 )
                 session.commit()
             self.must_change_password = False
+            self.pending_success = "Password changed successfully."  # shown on home page
             return rx.redirect("/")  # type: ignore[return-value]
         except AuthError as exc:
             self.flash = exc.message

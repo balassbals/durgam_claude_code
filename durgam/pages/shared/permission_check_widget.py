@@ -57,17 +57,17 @@ class PermissionCheckState(BaseState):
     @require_role(action="read", resource="user")
     @audit_action(action="view", resource="user")
     async def load_widget_data(self) -> None:
-        """Populate pc_users on widget mount. No-op if already loaded."""
+        """Populate pc_users on widget mount. Excludes e2e_* ephemeral test users."""
         if self.pc_users:
             return
         with open_session() as session:
             from durgam.repositories.user import UserRepository
             repo = UserRepository(session)
-            users, _ = repo.list_paginated(None, 0, 50)
+            # exclude_ephemeral=True: filter out e2e_* test users (Issue 5).
+            users, _ = repo.list_paginated(None, 0, 50, exclude_ephemeral=True)
             self.pc_users = [
                 {"id": str(u.id), "username": u.username}
                 for u in users
-                if not u.is_deleted
             ]
 
     @require_role(action="read", resource="permission")
@@ -178,10 +178,11 @@ def permission_check_widget() -> rx.Component:
             # Row 1: Resource (determines available actions) + Scope type
             rx.hstack(
                 rx.box(
-                    _label("Resource — select first to filter actions (Bug I)"),
+                    _label("Resource — select first to populate actions"),
                     rx.el.select(
                         rx.el.option("— Select resource —", value=""),
                         *[rx.el.option(r, value=r) for r in _M2_RESOURCES],
+                        id="pc-resource-select",
                         on_change=PermissionCheckState.set_pc_resource,
                         **_sel_style,
                     ),
@@ -191,6 +192,7 @@ def permission_check_widget() -> rx.Component:
                     _label("Scope type"),
                     rx.el.select(
                         *[rx.el.option(s, value=s) for s in _SCOPE_TYPES],
+                        id="pc-scope-type-select",
                         on_change=PermissionCheckState.set_pc_scope_type,
                         **_sel_style,
                     ),
@@ -213,6 +215,7 @@ def permission_check_widget() -> rx.Component:
                                 PermissionCheckState.pc_available_actions,
                                 lambda a: rx.el.option(a, value=a),
                             ),
+                            id="pc-action-select",
                             on_change=PermissionCheckState.set_pc_action,
                             **_sel_style,
                         ),
@@ -227,6 +230,7 @@ def permission_check_widget() -> rx.Component:
                             PermissionCheckState.pc_users,
                             lambda u: rx.el.option(u["username"], value=u["id"]),
                         ),
+                        id="pc-user-select",
                         on_change=PermissionCheckState.set_pc_user,
                         **_sel_style,
                     ),
@@ -235,14 +239,21 @@ def permission_check_widget() -> rx.Component:
                 gap="1rem",
                 width="100%",
             ),
-            # Row 3: Scope ID (optional UUID for scoped checks)
+            # Row 3: Scope ID — dropdown (disabled at M2; no scope objects seeded yet).
+            # Issue 4: replaced text input with a dropdown showing availability status.
             rx.box(
-                _label("Scope ID — UUID of the scoped object (leave blank for global)"),
-                rx.input(
-                    placeholder="Optional UUID",
-                    on_change=PermissionCheckState.set_pc_scope_id,
-                    font_size="0.875rem",
-                    width="100%",
+                _label("Scope ID — specific object within the scope type"),
+                rx.cond(
+                    PermissionCheckState.pc_selected_scope_type == "(global / none)",
+                    rx.text("Not applicable for global scope.", font_size="0.8rem",
+                            color="var(--color-muted)", padding="0.4rem"),
+                    rx.el.select(
+                        rx.el.option("(No objects available — scope objects ship at M3+)",
+                                     value="", disabled=True),
+                        disabled=True,
+                        id="pc-scope-id-select",
+                        **{**_sel_style, "background": "var(--color-surface)"},
+                    ),
                 ),
                 width="100%",
             ),

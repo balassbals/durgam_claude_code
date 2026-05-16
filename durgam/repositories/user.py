@@ -70,12 +70,19 @@ class UserRepository(BaseRepository[User]):
         search: str | None,
         offset: int,
         limit: int,
+        *,
+        exclude_ephemeral: bool = False,
     ) -> tuple[list[User], int]:
         """Return (page, total) of active users, optionally filtered by search string.
 
         Search is a case-insensitive substring match on username or email.
+        exclude_ephemeral: if True, excludes usernames starting with 'e2e_' (test users).
         """
         base = select(User).where(User.is_deleted == False)  # noqa: E712
+        if exclude_ephemeral:
+            # Filter out ephemeral test users (e2e_* pattern) from UI dropdowns.
+            # The admin user list still shows them; only permission widgets filter.
+            base = base.where(~User.username.like("e2e_%"))  # type: ignore[attr-defined]
         if search:
             pattern = f"%{search}%"
             base = base.where(

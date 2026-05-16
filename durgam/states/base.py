@@ -36,6 +36,10 @@ class BaseState(rx.State):
     # Each entry is {"label": str, "href": str, "icon": str, "group": str}.
     visible_nav_entries: list[dict[str, str]] = []
 
+    # Carries a success message across a single redirect. Set before rx.redirect();
+    # picked up by the destination page's on_load which moves it into self.flash.
+    pending_success: str = ""
+
     # True only after _admin_guard() confirms BOTH authentication AND authorization.
     # admin_page() gates on this so that authenticated-but-unauthorized users
     # (e.g. student_001) see a blank screen before redirect, not admin chrome.

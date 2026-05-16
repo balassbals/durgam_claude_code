@@ -513,6 +513,45 @@ app.add_page(page_fn, route="...",
              on_load=[MainState.load_data, WidgetState.clear_widget])
 ```
 
+### Standard color tokens (established at M2)
+
+All buttons and notifications use named standard styles. No component hard-codes colors.
+
+**Buttons** (use helpers from `durgam/pages/components.py`):
+- `primary_btn(...)` — primary action (Save, Submit, Create, Confirm)
+- `secondary_btn(...)` — secondary action (Cancel, Back, Close)
+- `destructive_btn(...)` — destructive action (Delete, Deactivate)
+
+**Notifications** (use helpers from `durgam/pages/components.py`):
+- `flash_success(message)` — green tint
+- `flash_error(message)` — red tint
+- `flash_warning(message)` — amber tint
+- `flash_info(message)` — indigo tint
+
+Token names live in `durgam/theme.py`: `--color-destructive`, `--color-success-bg`,
+`--color-success-border`, etc. From M3 onward, new buttons and notifications reference
+these helpers; deviating requires adding a named token, never inlining colors.
+
+### Ephemeral-user dropdown filter rule
+
+Any UI dropdown that selects a user MUST exclude usernames matching the ephemeral
+test pattern (`e2e_%`). Pass `exclude_ephemeral=True` to `UserRepository.list_paginated`.
+This prevents test-run pollution from appearing to real admins.
+
+The `e2e_` prefix is the documented ephemeral convention; see `tests/e2e/_helpers.py`.
+
+The user list page (`/admin/users`) does NOT filter — all users including e2e_ are
+shown there as a diagnostic aid. Only per-user selection dropdowns (e.g., permission
+check widget) filter them out.
+
+### Migration test isolation
+
+Migration tests (`tests/integration/test_migrations.py`) must call `_reset_test_db()`
+at the start of any test that runs a downgrade/upgrade cycle. The `seeded_db_engine`
+session fixture's teardown drops all SQLModel tables but leaves `alembic_version` at
+the current head — creating an inconsistent state. `_reset_test_db()` drops
+`alembic_version` and all SQLModel tables, then runs `upgrade head` from scratch.
+
 ## Current milestone
 **M2 — Admin Module.**
 

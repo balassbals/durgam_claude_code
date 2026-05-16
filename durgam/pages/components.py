@@ -200,6 +200,113 @@ def page_footer() -> rx.Component:
     )
 
 
+# ── Standard button helpers (Issues 6+7) ─────────────────────────────────────
+# Every button in M2+ must use one of these three styles. No component
+# hard-codes colors. New components in M3+ reference these helpers.
+
+def primary_btn(*children, **props) -> rx.Component:
+    """Primary action button (Save, Submit, Create, Confirm)."""
+    return rx.button(
+        *children,
+        background="var(--color-primary)",
+        color="white",
+        border="none",
+        padding="0.5rem 1.25rem",
+        border_radius="4px",
+        cursor="pointer",
+        font_family="var(--font-sans)",
+        **props,
+    )
+
+
+def secondary_btn(*children, **props) -> rx.Component:
+    """Secondary action button (Cancel, Back, Close)."""
+    return rx.button(
+        *children,
+        background="transparent",
+        color="var(--color-primary)",
+        border="1px solid var(--color-primary)",
+        padding="0.5rem 1.25rem",
+        border_radius="4px",
+        cursor="pointer",
+        font_family="var(--font-sans)",
+        **props,
+    )
+
+
+def destructive_btn(*children, **props) -> rx.Component:
+    """Destructive action button (Delete, Deactivate, Permanently remove)."""
+    return rx.button(
+        *children,
+        background="var(--color-destructive)",
+        color="white",
+        border="none",
+        padding="0.5rem 1.25rem",
+        border_radius="4px",
+        cursor="pointer",
+        font_family="var(--font-sans)",
+        **props,
+    )
+
+
+# ── Standard notification helpers (Issues 6+7) ───────────────────────────────
+
+def flash_success(message: rx.Var | str) -> rx.Component:
+    """Success notification box (green tint)."""
+    return rx.box(
+        rx.hstack(rx.text("✓", color="var(--color-success-border)"), rx.text(message),
+                  gap="0.5rem", align="center"),
+        background="var(--color-success-bg)",
+        border="1px solid var(--color-success-border)",
+        border_radius="4px",
+        padding="0.75rem 1rem",
+        margin_bottom="1rem",
+        font_size="0.875rem",
+    )
+
+
+def flash_error(message: rx.Var | str) -> rx.Component:
+    """Error notification box (red tint)."""
+    return rx.box(
+        rx.hstack(rx.text("✗", color="var(--color-error-border)"), rx.text(message),
+                  gap="0.5rem", align="center"),
+        background="var(--color-error-bg)",
+        border="1px solid var(--color-error-border)",
+        border_radius="4px",
+        padding="0.75rem 1rem",
+        margin_bottom="1rem",
+        font_size="0.875rem",
+    )
+
+
+def flash_warning(message: rx.Var | str) -> rx.Component:
+    """Warning notification box (amber tint)."""
+    return rx.box(
+        rx.hstack(rx.text("⚠", color="var(--color-warning-border)"), rx.text(message),
+                  gap="0.5rem", align="center"),
+        background="var(--color-warning-bg)",
+        border="1px solid var(--color-warning-border)",
+        border_radius="4px",
+        padding="0.75rem 1rem",
+        margin_bottom="1rem",
+        font_size="0.875rem",
+    )
+
+
+def flash_info(message: rx.Var | str) -> rx.Component:
+    """Info notification box (indigo tint)."""
+    return rx.box(
+        rx.hstack(rx.text("ℹ", color="var(--color-info-border)"), rx.text(message),
+                  gap="0.5rem", align="center"),
+        background="var(--color-info-bg)",
+        border="1px solid var(--color-info-border)",
+        border_radius="4px",
+        padding="0.75rem 1rem",
+        margin_bottom="1rem",
+        font_size="0.875rem",
+    )
+
+
 def admin_page(content: rx.Component) -> rx.Component:
     """Wrap admin page content so it is invisible until auth check completes.
 

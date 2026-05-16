@@ -9,7 +9,35 @@ import os
 import subprocess
 import sys
 
+import sqlalchemy
+import sqlmodel
+
+import durgam.models  # noqa: F401 — populate SQLModel.metadata before drop_all
 from durgam.config import settings
+
+
+def _reset_test_db() -> None:
+    """Drop ALL tables (SQLModel + alembic_version) then upgrade to head.
+
+    The seeded_db_engine fixture (session-scoped) calls
+    SQLModel.metadata.drop_all() which removes all user/role/etc. tables but
+    leaves alembic_version at the current head revision. This creates an
+    inconsistent state that makes both 'downgrade base' and 'upgrade head'
+    fail. The fix: drop everything including alembic_version, then let
+    'upgrade head' recreate the schema cleanly from scratch.
+    """
+    engine = sqlalchemy.create_engine(settings.test_database_url)
+    try:
+        # Drop alembic_version (not in SQLModel metadata so drop_all misses it).
+        with engine.connect() as conn:
+            conn.execute(sqlalchemy.text("DROP TABLE IF EXISTS alembic_version"))
+            conn.commit()
+        # Drop all SQLModel tables.
+        sqlmodel.SQLModel.metadata.drop_all(engine)
+    finally:
+        engine.dispose()
+    # Recreate schema from scratch via Alembic (sets alembic_version = head).
+    _alembic("upgrade", "head")
 
 
 def _alembic(*args: str) -> subprocess.CompletedProcess[str]:
@@ -28,7 +56,18 @@ def _alembic(*args: str) -> subprocess.CompletedProcess[str]:
 
 class TestMigrations:
     def test_downgrade_to_base_and_upgrade_to_head(self):
-        """Verify full down-to-base then up-to-head cycle works cleanly."""
+        """Verify full down-to-base then up-to-head cycle works cleanly.
+
+        Runs upgrade head first to repair any inconsistency caused by the
+        seeded_db_engine fixture's teardown: that fixture calls
+        SQLModel.metadata.drop_all() which removes all user tables but leaves
+        alembic_version at the current head. Without this repair step, the
+        subsequent downgrade fails with 'relation "users" does not exist'
+        because Alembic reads alembic_version=head but the table is gone.
+        """
+        # Reset to a guaranteed-clean state before the downgrade/upgrade cycle.
+        _reset_test_db()
+
         result = _alembic("downgrade", "base")
         assert result.returncode == 0, f"downgrade base failed:\n{result.stderr}"
 

@@ -285,21 +285,27 @@ class TestRoleConstructionAndPermission:
             # Role detail page loads — wait for the role name to appear.
             expect(page.get_by_text("Gate Test Role")).to_be_visible(timeout=10_000)
 
-            # Step 7: use the permission check widget (Bug I: resource first, then action).
-            # Selects use on_change handlers — no form name attributes.
-            # Resource first: triggers async load of available actions.
-            resource_sel = page.locator("select").nth(0)  # first select = Resource
-            scope_sel = page.locator("select").nth(1)     # second = Scope type
-            action_sel = page.locator("select").nth(2)    # third = Action (loaded after resource)
-            user_sel = page.locator("select").nth(3)      # fourth = User
+            # Step 7: use the permission check widget.
+            # Selects use id attributes for reliable targeting (not nth() which is
+            # fragile when the action dropdown appears/disappears conditionally).
+            resource_sel = page.locator("#pc-resource-select")
+            scope_sel = page.locator("#pc-scope-type-select")
+            user_sel = page.locator("#pc-user-select")
 
+            # Wait for widget to mount and load users (on_mount fires load_widget_data).
+            expect(user_sel).to_be_visible(timeout=15_000)
+
+            # Select resource first — triggers async set_pc_resource which loads actions.
             resource_sel.select_option("department")
-            # Wait for action dropdown to populate (async set_pc_resource fires).
-            expect(action_sel).to_be_visible(timeout=8_000)
+
+            # Wait for action dropdown to appear (rendered inside rx.cond after resource set).
+            action_sel = page.locator("#pc-action-select")
+            expect(action_sel).to_be_visible(timeout=10_000)
+
             action_sel.select_option("read")
             scope_sel.select_option("department")
             user_sel.select_option(value=user_id)
-            # Scope ID blank → no scoped object → department:read check with no scope.
+            # Scope ID is disabled at M2 — no scoped objects available.
             page.get_by_role("button", name="Check").click()
 
             # The result must be ✗ Denied (ephemeral user has no department:read).
