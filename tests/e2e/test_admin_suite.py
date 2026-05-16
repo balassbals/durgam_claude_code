@@ -251,7 +251,7 @@ class TestAdminUserList:
             page.get_by_placeholder("Search by username or email…").fill(username)
             page.get_by_role("button", name="Search", exact=True).click()
             # Username must appear in search results.
-            expect(page.get_by_text(username)).to_be_visible(timeout=10_000)
+            expect(page.get_by_text(username, exact=True)).to_be_visible(timeout=10_000)
         finally:
             _delete_ephemeral_user(username)
 
@@ -340,7 +340,7 @@ class TestUserDeletion:
             _wait_for_admin_page(page, "+ New user", timeout=15_000)
             page.get_by_placeholder("Search by username or email…").fill(username)
             page.get_by_role("button", name="Search", exact=True).click()
-            expect(page.get_by_text(username)).to_be_visible(timeout=10_000)
+            expect(page.get_by_text(username, exact=True)).to_be_visible(timeout=10_000)
         finally:
             _delete_ephemeral_user(username)
 

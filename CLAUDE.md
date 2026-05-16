@@ -402,6 +402,30 @@ expect(page.get_by_text(username)).to_be_visible(timeout=10_000)
 `_wait_for_admin_page()` is defined in `tests/e2e/test_admin_suite.py`. Add an
 equivalent helper in every new E2E file that uses admin pages.
 
+### E2E exact=True rule for dynamic values
+
+Any `get_by_text()` on a dynamic value (username, email, code, name generated
+by the test) MUST use `exact=True`. Dynamic values frequently appear as substrings
+of other DOM text:
+- A username `e2e_abc123` is a prefix of its email `e2e_abc123@sssihl.edu.in`.
+- A role code `GATE_XYZ` could be a substring of a role name `Gate XYZ Role`.
+- A short code can appear inside a longer label.
+
+Without `exact=True`, Playwright's substring matching finds multiple elements and
+throws a strict-mode violation. This is the third instance of this discipline at M2
+(after "Users"/"Import Users" and "Admin"/"Admin Dashboard"):
+
+```python
+# Wrong — strict-mode violation if email also visible
+expect(page.get_by_text(username)).to_be_visible()
+
+# Correct
+expect(page.get_by_text(username, exact=True)).to_be_visible()
+```
+
+From M3 onward: any `get_by_text` on a test-generated value defaults to
+`exact=True` unless intentional substring matching is required and documented.
+
 ## Current milestone
 **M2 — Admin Module.**
 
