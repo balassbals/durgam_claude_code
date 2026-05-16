@@ -286,29 +286,31 @@ class TestRoleConstructionAndPermission:
             expect(page.get_by_text("Gate Test Role")).to_be_visible(timeout=10_000)
 
             # Step 7: use the permission check widget.
-            # Selects use id attributes for reliable targeting (not nth() which is
-            # fragile when the action dropdown appears/disappears conditionally).
+            # load_widget_data fires via on_mount; wait for user dropdown to have options
+            # before interacting (the select renders before options arrive via WebSocket).
+            user_sel = page.locator("#pc-user-select")
+            expect(user_sel).to_be_visible(timeout=15_000)
+            # Wait for at least one real user option to appear (not just the placeholder).
+            user_option = user_sel.locator("option[value!='']")
+            expect(user_option.first).to_be_attached(timeout=15_000)
+
             resource_sel = page.locator("#pc-resource-select")
             scope_sel = page.locator("#pc-scope-type-select")
-            user_sel = page.locator("#pc-user-select")
-
-            # Wait for widget to mount and load users (on_mount fires load_widget_data).
-            expect(user_sel).to_be_visible(timeout=15_000)
 
             # Select resource first — triggers async set_pc_resource which loads actions.
             resource_sel.select_option("department")
 
-            # Wait for action dropdown to appear (rendered inside rx.cond after resource set).
+            # Wait for action dropdown to appear (rx.cond renders it after resource loads).
             action_sel = page.locator("#pc-action-select")
             expect(action_sel).to_be_visible(timeout=10_000)
-
             action_sel.select_option("read")
+
             scope_sel.select_option("department")
             user_sel.select_option(value=user_id)
-            # Scope ID is disabled at M2 — no scoped objects available.
+            # Scope ID is disabled at M2 (no scope objects seeded yet).
             page.get_by_role("button", name="Check").click()
 
-            # The result must be ✗ Denied (ephemeral user has no department:read).
+            # Ephemeral user has no department:read → ✗ Denied.
             expect(page.get_by_text("✗ Denied")).to_be_visible(timeout=10_000)
 
         finally:

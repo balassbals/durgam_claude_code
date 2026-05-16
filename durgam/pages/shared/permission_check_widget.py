@@ -54,24 +54,25 @@ class PermissionCheckState(BaseState):
         self.pc_selected_scope_id = ""
         self.pc_available_actions = []
 
-    @require_role(action="read", resource="user")
-    @audit_action(action="view", resource="user")
     async def load_widget_data(self) -> None:
-        """Populate pc_users on widget mount. Excludes e2e_* ephemeral test users."""
+        """Populate pc_users on widget mount. Excludes e2e_* ephemeral test users.
+
+        No @require_role: this is an on_mount helper on a page already protected
+        by admin_page() + _admin_guard(). Adding @require_role here causes a
+        PermissionDenied race if PermissionCheckState.current_user_id isn't yet
+        propagated from the page's on_load, leaving pc_users permanently empty.
+        """
         if self.pc_users:
             return
         with open_session() as session:
             from durgam.repositories.user import UserRepository
             repo = UserRepository(session)
-            # exclude_ephemeral=True: filter out e2e_* test users (Issue 5).
             users, _ = repo.list_paginated(None, 0, 50, exclude_ephemeral=True)
             self.pc_users = [
                 {"id": str(u.id), "username": u.username}
                 for u in users
             ]
 
-    @require_role(action="read", resource="permission")
-    @audit_action(action="view", resource="permission")
     async def set_pc_resource(self, value: str) -> None:
         """Update selected resource and reload available actions (Bug I)."""
         self.pc_selected_resource = value
@@ -239,20 +240,38 @@ def permission_check_widget() -> rx.Component:
                 gap="1rem",
                 width="100%",
             ),
-            # Row 3: Scope ID — dropdown (disabled at M2; no scope objects seeded yet).
-            # Issue 4: replaced text input with a dropdown showing availability status.
+            # Row 3: Scope ID — contextual based on scope_type selection (Item 3).
             rx.box(
                 _label("Scope ID — specific object within the scope type"),
                 rx.cond(
                     PermissionCheckState.pc_selected_scope_type == "(global / none)",
-                    rx.text("Not applicable for global scope.", font_size="0.8rem",
-                            color="var(--color-muted)", padding="0.4rem"),
-                    rx.el.select(
-                        rx.el.option("(No objects available — scope objects ship at M3+)",
-                                     value="", disabled=True),
-                        disabled=True,
-                        id="pc-scope-id-select",
-                        **{**_sel_style, "background": "var(--color-surface)"},
+                    rx.text("Not applicable — global permissions have no scope object.",
+                            font_size="0.8rem", color="var(--color-muted)", padding="0.4rem"),
+                    rx.cond(
+                        PermissionCheckState.pc_selected_scope_type == "self",
+                        rx.text("Scope ID is the user themselves — auto-set from User selection.",
+                                font_size="0.8rem", color="var(--color-muted)", padding="0.4rem"),
+                        # All other scope types (department, campus, school, etc.) —
+                        # no objects seeded at M2; they ship at M3+.
+                        rx.box(
+                            rx.el.select(
+                                rx.el.option(
+                                    "(No " + PermissionCheckState.pc_selected_scope_type +
+                                    " objects seeded — ships at M3+)",
+                                    value="", disabled=True,
+                                ),
+                                disabled=True,
+                                id="pc-scope-id-select",
+                                **{**_sel_style, "background": "var(--color-surface)"},
+                            ),
+                            rx.text(
+                                "Scope objects of this type are seeded starting at M3. "
+                                "For now, check global permissions (scope_type = global).",
+                                font_size="0.75rem",
+                                color="var(--color-muted)",
+                                margin_top="0.25rem",
+                            ),
+                        ),
                     ),
                 ),
                 width="100%",

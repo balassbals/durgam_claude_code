@@ -2,9 +2,10 @@
 
 import reflex as rx
 
-from durgam.pages.components import nav_shell
+from durgam.pages.components import nav_shell, typed_flash
 from durgam.services.password import PASSWORD_RULES
 from durgam.states.auth import AuthState
+from durgam.states.base import BaseState
 
 
 def _password_rules_hint() -> rx.Component:
@@ -60,21 +61,7 @@ def change_password() -> rx.Component:
                         font_family="var(--font-sans)",
                     ),
                 ),
-                rx.cond(
-                    AuthState.flash != "",
-                    rx.box(
-                        rx.text(
-                            AuthState.flash,
-                            color="var(--color-body)",
-                            font_size="0.9rem",
-                        ),
-                        padding="0.75rem",
-                        background="rgba(76, 78, 46, 0.06)",
-                        border="1px solid var(--color-rule)",
-                        border_radius="4px",
-                    ),
-                    rx.fragment(),
-                ),
+                typed_flash(BaseState.flash, BaseState.flash_type),
                 rx.form(
                     rx.vstack(
                         rx.vstack(

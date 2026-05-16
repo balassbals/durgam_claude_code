@@ -26,6 +26,7 @@ class BaseState(rx.State):
     current_role_code: str = ""
 
     flash: str = ""
+    flash_type: str = "info"  # "success" | "error" | "warning" | "info"
 
     # Request metadata populated by auth middleware / Reflex router data.
     client_ip: str = ""
@@ -98,6 +99,7 @@ class BaseState(rx.State):
         """
         self.admin_authorized = False  # require fresh auth+authz on every nav
         self.flash = ""               # clear stale flash from previous page
+        self.flash_type = "info"
         # Clear the one-time temp password when navigating away from /admin/users.
         # On /admin/users itself this is a no-op; on any other admin page it clears.
         if getattr(self, "router", None) and self.router.page.path != "/admin/users":
@@ -113,6 +115,7 @@ class BaseState(rx.State):
         with open_session() as session:
             if not can(user_id, "read", "user", None, None, session):
                 self.flash = "You do not have admin access."
+                self.flash_type = "warning"
                 return rx.redirect("/")
         self.admin_authorized = True
         return None

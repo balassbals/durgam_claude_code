@@ -307,6 +307,31 @@ def flash_info(message: rx.Var | str) -> rx.Component:
     )
 
 
+def typed_flash(flash: rx.Var, flash_type: rx.Var) -> rx.Component:
+    """Render a flash notification with color based on flash_type.
+
+    flash_type: "success" | "error" | "warning" | "info" (default info).
+    Used on change-password, reset-password, and other auth pages.
+    """
+    return rx.cond(
+        flash != "",
+        rx.cond(
+            flash_type == "success",
+            flash_success(flash),
+            rx.cond(
+                flash_type == "error",
+                flash_error(flash),
+                rx.cond(
+                    flash_type == "warning",
+                    flash_warning(flash),
+                    flash_info(flash),
+                ),
+            ),
+        ),
+        rx.fragment(),
+    )
+
+
 def admin_page(content: rx.Component) -> rx.Component:
     """Wrap admin page content so it is invisible until auth check completes.
 

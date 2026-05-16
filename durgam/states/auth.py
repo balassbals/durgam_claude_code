@@ -168,6 +168,7 @@ class AuthState(BaseState):
             return rx.redirect("/")  # type: ignore[return-value]
         except AuthError as exc:
             self.flash = exc.message
+            self.flash_type = "error"
         finally:
             self.is_loading = False
 
@@ -196,6 +197,7 @@ class AuthState(BaseState):
         self.flash = ""
         if new_pw != confirm:
             self.flash = "New passwords do not match."
+            self.flash_type = "error"
             return
         try:
             with open_session() as session:
@@ -204,12 +206,14 @@ class AuthState(BaseState):
                 )
                 session.commit()
             self.must_change_password = False
-            self.pending_success = "Password changed successfully."  # shown on home page
+            self.pending_success = "Password changed successfully."
             return rx.redirect("/")  # type: ignore[return-value]
         except AuthError as exc:
             self.flash = exc.message
+            self.flash_type = "error"
         except WeakPasswordError as exc:
             self.flash = exc.reason
+            self.flash_type = "error"
 
     @public_handler
     @audit_action(action="request_password_reset", resource="session")
