@@ -42,9 +42,6 @@ class AdminUsersState(BaseState):
     form_role_ids: list[str] = []
     form_is_active: bool = True
 
-    # One-time display of generated password
-    generated_password: str = ""
-
     # Confirmation dialog state
     confirm_action: str = ""   # "soft_delete" | "hard_delete" | "reset_password"
     confirm_user_id: str = ""
@@ -74,7 +71,6 @@ class AdminUsersState(BaseState):
         guard = self._admin_guard()
         if guard is not None:
             return guard
-        self.generated_password = ""  # clear temp password on navigation (shown once)
         self.users = []  # reset before query so stale rows never linger
         self.total_users = 0
         with open_session() as session:
@@ -138,7 +134,11 @@ class AdminUsersState(BaseState):
                     temp_pw,
                 )
             )
-            await self.load_users()
+            # Don't call load_users() here — the redirect to /admin/users triggers
+            # it via on_load, and calling it here would run while still on
+            # /admin/users/new, causing _admin_guard() to clear generated_password
+            # (because path != "/admin/users"). The on_load load_users() sees the
+            # correct path and keeps the password visible.
             return rx.redirect("/admin/users")  # type: ignore[return-value]
         except UserAdminError as exc:
             self.flash = exc.message
@@ -191,7 +191,13 @@ class AdminUsersState(BaseState):
     @require_role(action="write", resource="user")
     @audit_action(action="reset_password", resource="user")
     async def reset_user_password(self):
-        """Non-trivial handler: generates temp password, emails user, displays once."""
+        """Non-trivial handler: generates temp password, emails user, displays once.
+
+        Bug D fix: instead of scrolling to the top of the page (fragile), we keep
+        the confirmation dialog open with a success state showing the temp password
+        prominently. The admin clicks 'Got it' to dismiss. The dialog position is
+        always visible regardless of scroll position.
+        """
         user_id = self.confirm_user_id
         self.confirm_open = False
         self.generated_password = ""
@@ -208,15 +214,21 @@ class AdminUsersState(BaseState):
                 session.commit()
 
             self.generated_password = temp_pw
-            self.flash = f"Password reset for '{username}'. Temporary password shown below."
+            # Re-open dialog in success mode so the password is shown at the
+            # admin's scroll position (dialog overlays regardless of scroll).
+            self.confirm_action = "reset_done"
+            self.confirm_title = f"Password reset for '{username}'"
+            self.confirm_body = (
+                f"Temporary password: {temp_pw}\n\n"
+                "The user has been emailed. Share this verbally if they didn't receive it."
+            )
+            self.confirm_open = True
             asyncio.create_task(
                 send_user_password_reset_email(
                     type("U", (), {"id": user_id, "email": email, "username": username})(),
                     temp_pw,
                 )
             )
-            # Scroll to top so the temp-password box (at page top) is visible.
-            return rx.call_script("window.scrollTo({top:0,behavior:'smooth'})")
         except UserAdminError as exc:
             self.flash = exc.message
 
@@ -252,7 +264,10 @@ class AdminUsersState(BaseState):
         self.confirm_user_id = ""
 
     def dismiss_generated_password(self) -> None:
+        """Dismiss the temp-password display. Also closes the reset_done success dialog."""
         self.generated_password = ""
+        self.confirm_open = False
+        self.confirm_action = ""
 
     async def load_available_roles(self) -> None:
         """on_load for /admin/users/new — guards session then loads roles."""

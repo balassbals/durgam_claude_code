@@ -41,6 +41,11 @@ class BaseState(rx.State):
     # (e.g. student_001) see a blank screen before redirect, not admin chrome.
     admin_authorized: bool = False
 
+    # One-time temp-password display (set by create_user and reset_user_password).
+    # Lives on BaseState so _admin_guard() can clear it on navigation away from
+    # /admin/users — the only page where it should be visible.
+    generated_password: str = ""
+
     def clear_flash(self) -> None:
         self.flash = ""
 
@@ -89,6 +94,10 @@ class BaseState(rx.State):
         """
         self.admin_authorized = False  # require fresh auth+authz on every nav
         self.flash = ""               # clear stale flash from previous page
+        # Clear the one-time temp password when navigating away from /admin/users.
+        # On /admin/users itself this is a no-op; on any other admin page it clears.
+        if getattr(self, "router", None) and self.router.page.path != "/admin/users":
+            self.generated_password = ""
         self._resolve_session()
         if not self.current_user_id:
             return rx.redirect("/login")
@@ -103,6 +112,10 @@ class BaseState(rx.State):
                 return rx.redirect("/")
         self.admin_authorized = True
         return None
+
+    def _dismiss_generated_password(self) -> None:
+        """Clear the one-time temp-password display. Call from Dismiss button."""
+        self.generated_password = ""
 
     def _load_nav_entries(self) -> None:
         """Populate visible_nav_entries for the current user.

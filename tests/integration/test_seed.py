@@ -25,9 +25,12 @@ class TestSeed:
 
         # Assert TOTAL row counts after seed (stable regardless of pre-existing data).
         assert _count(db_session, Role) == 4, "Expected BASIC_USER, SYSTEM_ADMIN, DEAN, STUDENT"
-        assert _count(db_session, Permission) == 13, "Expected 13 seeded permission triples"
+        # M2 expanded: 20 triples (removed system:manage, added system:read/write/configure,
+        # department:read:*/campus/school/write, leave_request:read).
+        assert _count(db_session, Permission) == 20, "Expected 20 seeded permission triples"
         assert _count(db_session, User) >= 5, "Expected at least the 5 seeded users"
-        assert _count(db_session, RolePermission) >= 17, "Expected at least 17 role→permission rows"
+        # SYSTEM_ADMIN=20, DEAN=4, STUDENT=1, BASIC_USER=0 → 25 total.
+        assert _count(db_session, RolePermission) >= 25, "Expected at least 25 role→permission rows"
         ay = db_session.exec(select(AcademicYear).where(AcademicYear.code == "2025-26")).first()
         assert ay is not None, "AcademicYear 2025-26 must exist after seeding"
 

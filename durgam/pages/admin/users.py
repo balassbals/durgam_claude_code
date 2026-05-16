@@ -61,14 +61,28 @@ def _confirm_dispatch() -> rx.Component:
                 on_cancel=AdminUsersState.cancel_confirm,
                 confirm_label="Delete permanently",
             ),
-            confirmation_dialog(
-                is_open=AdminUsersState.confirm_open,
-                title=AdminUsersState.confirm_title,
-                body=AdminUsersState.confirm_body,
-                on_confirm=AdminUsersState.reset_user_password,
-                on_cancel=AdminUsersState.cancel_confirm,
-                confirm_label="Reset password",
-                danger=False,
+            rx.cond(
+                AdminUsersState.confirm_action == "reset_done",
+                # Bug D: show the temp password in the dialog after reset succeeds.
+                # Dialog stays at the user's scroll position — more reliable than scrollTo.
+                confirmation_dialog(
+                    is_open=AdminUsersState.confirm_open,
+                    title=AdminUsersState.confirm_title,
+                    body=AdminUsersState.confirm_body,
+                    on_confirm=AdminUsersState.dismiss_generated_password,
+                    on_cancel=AdminUsersState.dismiss_generated_password,
+                    confirm_label="Got it, Dismiss",
+                    danger=False,
+                ),
+                confirmation_dialog(
+                    is_open=AdminUsersState.confirm_open,
+                    title=AdminUsersState.confirm_title,
+                    body=AdminUsersState.confirm_body,
+                    on_confirm=AdminUsersState.reset_user_password,
+                    on_cancel=AdminUsersState.cancel_confirm,
+                    confirm_label="Reset password",
+                    danger=False,
+                ),
             ),
         ),
     )

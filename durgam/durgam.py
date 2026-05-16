@@ -9,6 +9,7 @@ from durgam.pages.admin.permissions import AdminPermissionsState, admin_permissi
 from durgam.pages.admin.roles import admin_role_create, admin_role_detail, admin_roles
 from durgam.pages.admin.user_detail import admin_user_create
 from durgam.pages.admin.users import admin_users
+from durgam.pages.audit.index import AuditLogState, audit_log
 from durgam.pages.change_password import change_password
 from durgam.pages.forgot_password import forgot_password
 from durgam.pages.index import index
@@ -65,3 +66,4 @@ app.add_page(admin_permissions, route="/admin/permissions",
              on_load=AdminPermissionsState.load_permissions)
 app.add_page(admin_import_users, route="/admin/import",
              on_load=BulkImportState.reset_import)
+app.add_page(audit_log, route="/audit", on_load=AuditLogState.load_audit)

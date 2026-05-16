@@ -22,8 +22,36 @@ research identifies it as a friction point. A server-side redirect (via Reflex's
 non-trivial framework integration (documented in docs/security_decisions.md →
 SD-002 Path B escalation path).
 
-**Affected pages:** `/` (home), `/change-password`, all `/admin/*` pages.  
+**Affected pages:** `/` (home), `/change-password`, all `/admin/*` pages, `/audit`.  
 **Milestone to revisit:** UI Polish (before M20).
+
+---
+
+## Layout
+
+- `/change-password` and similar auth pages: nav should be at top, not vertically
+  centred. Form layout needs a design pass.
+- `/change-password` form looks basic/unprofessional; needs spacing and typography polish.
+
+---
+
+## Responsiveness
+
+- At 360px viewport: tables don't convert to cards (Tier 1 spec in UX Charter §6
+  not fully implemented in practice; the component code exists but rendering at
+  narrow widths needs testing and tuning).
+- At 360px: navigation cramped; hamburger drawer behaviour inconsistent at edge widths.
+- At 768px (tablet): navbar layout cramped.
+
+---
+
+## Forms and widgets
+
+- Permission check widget: replace raw UUID inputs with dropdowns populated from
+  users, roles, and scope-objects (departments, campuses). UUIDs should not be
+  visible to end users in the admin UI.
+- Generally: all UUIDs in admin UIs should be hidden from users; display by name
+  with internal UUID stored in the form's hidden state.
 
 ---
 

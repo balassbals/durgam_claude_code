@@ -85,11 +85,15 @@ def seed(session: Session) -> dict[str, int]:
     }
 
     # ── Permissions ───────────────────────────────────────────────────────────
-    # M2 permission set: comprehensive triples for all resources introduced through M2.
+    # M2 permission set (expanded): full cross-product of relevant triples.
     # Permissions are seed-only; no create form exists in the UI (project policy).
+    # Note: "manage" action is NOT used. CRUD uses read/write/delete explicitly;
+    # meta-actions (configure, approve) are named for their specific purpose.
     perms_data = [
-        # System-wide administration
-        {"resource": "system", "action": "manage", "scope": "*"},
+        # System-level configuration (replaces former system:manage:*)
+        {"resource": "system", "action": "read", "scope": "*"},
+        {"resource": "system", "action": "write", "scope": "*"},
+        {"resource": "system", "action": "configure", "scope": "*"},
         # User management (M2 Admin module)
         {"resource": "user", "action": "read", "scope": "*"},
         {"resource": "user", "action": "write", "scope": "*"},
@@ -103,10 +107,16 @@ def seed(session: Session) -> dict[str, int]:
         # Academic year (M0/M3 Config module)
         {"resource": "academic_year", "action": "read", "scope": "*"},
         {"resource": "academic_year", "action": "write", "scope": "*"},
-        # Department-scoped operations (M4+ Department module; seed now for role assignment)
+        # Department-scoped operations (M4+ Department module)
+        {"resource": "department", "action": "read", "scope": "*"},
+        {"resource": "department", "action": "read", "scope": "campus"},
+        {"resource": "department", "action": "read", "scope": "school"},
         {"resource": "department", "action": "read", "scope": "department"},
+        {"resource": "department", "action": "write", "scope": "department"},
+        # Leave request management (M8+ Leave module)
+        {"resource": "leave_request", "action": "read", "scope": "department"},
         {"resource": "leave_request", "action": "approve", "scope": "department"},
-        # Audit log placeholder (M6 Audit module)
+        # Audit log (M6 Audit module)
         {"resource": "audit_log", "action": "read", "scope": "*"},
     ]
     perm_inserted = 0
@@ -138,7 +148,8 @@ def seed(session: Session) -> dict[str, int]:
     dean_role = roles["DEAN"]
     dean_perm_keys = [
         ("academic_year", "read", "*"),
-        ("department", "read", "department"),
+        ("department", "read", "school"),     # Dean sees school-level departments
+        ("leave_request", "read", "department"),
         ("leave_request", "approve", "department"),
     ]
     for key in dean_perm_keys:

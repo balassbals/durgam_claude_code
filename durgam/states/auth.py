@@ -90,6 +90,7 @@ class AuthState(BaseState):
         relied on the second event seeing mutations from the first, which is guaranteed
         in theory but broke on fresh-compile server starts in Reflex 0.9.x).
         """
+        self.flash = ""  # clear stale flash from prior navigation
         self._resolve_session_state()
         if not self.current_user_id:
             return rx.redirect("/login")  # type: ignore[return-value]
@@ -111,6 +112,7 @@ class AuthState(BaseState):
         If current_user_id is empty (user arrived unauthenticated), redirect to /login.
         Does NOT redirect must_change_password users — they are already on the right page.
         """
+        self.flash = ""  # clear stale flash from prior navigation (Bug C)
         if not self.current_user_id:
             # Session not yet resolved; resolve it now so the page has state.
             self._resolve_session_state()

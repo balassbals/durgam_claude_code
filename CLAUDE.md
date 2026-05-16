@@ -261,6 +261,17 @@ No create/update/delete UI exists for permissions. When a new module introduces 
 resource, add the permission triples to `scripts/seed.py` in that module's branch.
 The permission catalog is a system-design concern, not a runtime admin concern.
 
+The M2 seed enumerates the (resource, action, scope) triples that exist in the system
+at this milestone. Future milestones extend the seed for new resources.
+
+**Action vocabulary (established at M2):**
+- `read` / `write` / `delete` — CRUD operations on a resource.
+- `configure` — system-level configuration (e.g. system:configure:*).
+- `approve` — approval workflow action (e.g. leave_request:approve:department).
+- **`manage` is NOT used.** The old `system:manage:*` triple was replaced with
+  `system:read:*`, `system:write:*`, `system:configure:*` at M2 close-out. Any
+  code path that called `can("manage", ...)` must use the specific action instead.
+
 ### Hard-delete audit policy
 
 `UserAdminService.hard_delete_user()` (and any future hard-delete service method) MUST
