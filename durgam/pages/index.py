@@ -1,6 +1,7 @@
 import reflex as rx
 
 from durgam.pages.components import nav_shell
+from durgam.states.auth import AuthState
 from durgam.theme import TOKENS
 
 
@@ -42,7 +43,13 @@ def index() -> rx.Component:
         ("--color-rule", TOKENS["--color-rule"] + " — gold (decorative rules)"),
     ]
 
-    return rx.box(
+    # Route protection guard (same pattern as admin_page() for /admin/*).
+    # on_load fires AFTER first paint; wrapping in rx.cond prevents the home
+    # page content from flashing for unauthenticated users before the redirect
+    # to /login fires. Shows blank screen then /login — no content flash.
+    return rx.cond(
+        AuthState.current_user_id != "",
+        rx.box(
         nav_shell(),
         rx.vstack(
             rx.box(
@@ -92,4 +99,6 @@ def index() -> rx.Component:
         background_color="var(--color-surface)",
         min_height="100vh",
         width="100%",
+        ),
+        rx.fragment(),
     )

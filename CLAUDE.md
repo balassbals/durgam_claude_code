@@ -278,15 +278,22 @@ At the start of every coding session, Claude Code runs:
 
 If any of the above fails or surprises, stop and surface it before writing code.
 
-### Route protection rule (third instance of this discipline)
+### Route protection rule (applies to ALL authenticated pages from M2 onward)
+
+**Applies to:** `/` (home page), `/change-password`, all `/admin/*` pages, and
+every authenticated page added in M3+.
 
 Every authenticated page must guard its on_load handler before rendering
 any chrome or content:
 
-1. Call `_admin_guard()` (or equivalent for the module) as the FIRST line.
-2. `_admin_guard()` resolves session, redirects to `/login` if missing,
-   redirects to `/` with flash if user lacks the module's read permission.
-3. Return the guard result if it is not None (short-circuit).
+1. Wrap the page's returned component in `rx.cond(State.current_user_id != "", content, rx.fragment())`.
+   This shows a blank screen until the on_load auth guard fires — preventing
+   chrome from flashing for unauthenticated users before the redirect fires.
+   Use `admin_page(content)` for admin pages. For home page, wrap in
+   `rx.cond(AuthState.current_user_id != "", content, rx.fragment())` directly.
+2. The on_load handler calls `_admin_guard()` (for admin pages) or manually
+   resolves session + redirects (for home/change-password, following M1 pattern).
+3. Return the guard redirect if it is not None (short-circuit before any data load).
 4. Only then load data and populate state.
 
 Do NOT use `@require_role` on on_load handlers — it raises `PermissionDenied`

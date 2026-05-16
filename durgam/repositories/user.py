@@ -87,7 +87,9 @@ class UserRepository(BaseRepository[User]):
         total: int = self._session.exec(
             select(func.count()).select_from(base.subquery())
         ).one()
-        rows = list(self._session.exec(base.offset(offset).limit(limit)).all())
+        # ORDER BY created_at DESC: newest users first; deterministic without it.
+        ordered = base.order_by(User.created_at.desc())  # type: ignore[attr-defined]
+        rows = list(self._session.exec(ordered.offset(offset).limit(limit)).all())
         return rows, total
 
     def create(

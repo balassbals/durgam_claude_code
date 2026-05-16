@@ -233,20 +233,24 @@ class TestAdminUserList:
     def test_user_appears_in_admin_list(self, page: Page) -> None:
         """Admin user list shows all committed users, including DB-inserted ones.
 
-        Page-on-load data refresh rule (CLAUDE.md): list pages re-query on every
-        on_load, not only first mount. _create_ephemeral_user commits before returning.
-        The test waits for the admin page to fully render (stable anchor) before
-        asserting on list content — admin_page() hides content until auth guard fires.
+        Uses the search form to look up the specific username rather than scanning
+        the full list. This avoids false positives from the stable-anchor firing
+        before the user list data arrives, and works regardless of sort order or list
+        length. The search itself is the data-aware stable anchor: results only render
+        after search_users() re-queries the DB and state arrives via WebSocket.
         """
         username, email, _ = _create_ephemeral_user(role_code="STUDENT")
         try:
             _login(page, _ADMIN_USER, _ADMIN_PASS)
             page.goto(f"{BASE_URL}/admin/users")
             page.wait_for_load_state("networkidle")
-            # Wait for admin_page() rx.cond to show content after on_load guard fires.
-            # Stable anchor: "+ New user" button always visible for sys_admin on this page.
+            # Wait for admin_page() content to render (auth guard fires via WebSocket).
             _wait_for_admin_page(page, "+ New user", timeout=15_000)
-            # Now assert the username is in the table (populated by load_users DB query).
+            # Use the search form — this is a data-aware anchor: submitting triggers
+            # search_users() which re-queries the DB with the explicit username filter.
+            page.get_by_placeholder("Search by username or email…").fill(username)
+            page.get_by_role("button", name="Search", exact=True).click()
+            # Username must appear in search results.
             expect(page.get_by_text(username)).to_be_visible(timeout=10_000)
         finally:
             _delete_ephemeral_user(username)
@@ -323,10 +327,10 @@ class TestRoleConstructionAndPermission:
 
 class TestUserDeletion:
     def test_user_visible_in_list_before_deletion(self, page: Page) -> None:
-        """User created programmatically appears in the admin user list.
+        """User created programmatically appears in the admin user list (via search).
 
-        Uses _wait_for_admin_page() to ensure the page is fully rendered
-        before asserting on username text.
+        Uses search form as data-aware stable anchor — same approach as
+        test_user_appears_in_admin_list.
         """
         username, email, _ = _create_ephemeral_user(role_code="STUDENT")
         try:
@@ -334,6 +338,8 @@ class TestUserDeletion:
             page.goto(f"{BASE_URL}/admin/users")
             page.wait_for_load_state("networkidle")
             _wait_for_admin_page(page, "+ New user", timeout=15_000)
+            page.get_by_placeholder("Search by username or email…").fill(username)
+            page.get_by_role("button", name="Search", exact=True).click()
             expect(page.get_by_text(username)).to_be_visible(timeout=10_000)
         finally:
             _delete_ephemeral_user(username)
