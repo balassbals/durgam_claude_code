@@ -4,7 +4,20 @@
 **Spec**: `docs/durgam_rfp_v3.pdf` — all section references (§8, §12, etc.) point to this file.
 **Python**: 3.13 (pinned via `.python-version`).
 **Theme**: Puttaparthi Saffron–Indigo–Ivory (§15.1). Single committed theme; no alternatives in v3.
-**Current milestone**: M2 — Admin Module.
+**Current milestone**: M3 — Configuration — Organisational Core.
+
+## Authority files (binding, in priority order)
+
+Every milestone planning prompt and every implementation decision must read these in order:
+
+1. **`docs/durgam_rfp_v3.pdf`** — the frozen v3 specification. All section references (§8, §12, etc.) point to this file.
+2. **`docs/rfp_errata.md`** — gaps, ambiguities, and corrections discovered after v3 was frozen. Binding alongside the RFP. If the RFP and an erratum disagree, the erratum wins (it captures the more current understanding).
+3. **`docs/ux_charter.md`** — front-end standards. Read at every milestone gate and during planning.
+4. **`docs/milestones/M{N}.md`** — the in-flight milestone's notes, inherited items, and gate checklist.
+5. **CLAUDE.md** (this file) — project conventions, layering rules, established patterns.
+
+The RFP is NOT re-issued when gaps are found. Single frozen v3 + a growing errata document is cleaner than maintaining v3.1, v3.2, etc. Each erratum entry names the source authority (usually the original informal requirements), the gap, and which milestone absorbs the correction.
+
 
 ## Layering rules — strictly enforced
 - **States → Services**: states orchestrate, services own the rules. States must not import SQLModel, SQLAlchemy, or any model.
@@ -606,7 +619,7 @@ the current head — creating an inconsistent state. `_reset_test_db()` drops
 `alembic_version` and all SQLModel tables, then runs `upgrade head` from scratch.
 
 ## Current milestone
-**M2 — Admin Module.**
+**M3 — Configuration — Organisational Core.**
 
 This line is the source of truth for "where are we." Before opening a milestone-completing PR, Claude Code MUST:
 1. Grep this file for "Current milestone" and update both occurrences (the top status line and this section).

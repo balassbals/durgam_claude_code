@@ -169,6 +169,14 @@ milestone, confirm satisfaction:
 Refer to UX Charter §12 for what is explicitly NOT required at
 this milestone.
 
+## Step 7a: Errata coverage (1 minute)
+
+Open `docs/rfp_errata.md`. For each erratum that names this
+milestone as the "Disposition" milestone, confirm the disposition
+has been implemented and verified. The errata sit alongside the
+RFP as binding requirements; a milestone closing without addressing
+its named errata is incomplete, even if the RFP gate clause passes.
+
 ## Step 8: Decision
 
 If Steps 2–7 all passed without gaps:
