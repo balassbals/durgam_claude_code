@@ -74,7 +74,18 @@ filterwarnings = [
 
 [tool.coverage.run]
 source = ["durgam"]
-omit = ["durgam/durgam.py", "*/migrations/*"]
+omit = [
+    "durgam/durgam.py",          # app bootstrap — no unit-testable logic
+    "*/migrations/*",
+    # Pages and states are covered by E2E tests (DURGAM_E2E=1), not unit tests.
+    # The 70% threshold applies only to layers that unit tests can reach:
+    # services, repositories, models, auth, audit, nav.
+    "durgam/pages/*",
+    "durgam/states/*",
+    "durgam/db.py",               # session factory, no business logic
+    "durgam/storage/minio.py",    # external integration
+    "durgam/notifications/admin_emails.py",  # template-only functions
+]
 
 [tool.coverage.report]
 exclude_lines = [

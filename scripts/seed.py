@@ -66,6 +66,10 @@ def seed(session: Session) -> dict[str, int]:
         {"code": "SYSTEM_ADMIN", "name": "System Administrator", "level": 100},
         {"code": "DEAN", "name": "Dean", "level": 50},
         {"code": "STUDENT", "name": "Student", "level": 10},
+        # BASIC_USER: the implicit fallback role every user receives. It carries no
+        # permissions — the home page is accessible to any authenticated user without
+        # a permission check. The role exists so nav filtering has a stable anchor.
+        {"code": "BASIC_USER", "name": "Basic User", "level": 1},
     ]
     role_inserted = 0
     for r in roles_data:
@@ -81,14 +85,39 @@ def seed(session: Session) -> dict[str, int]:
     }
 
     # ── Permissions ───────────────────────────────────────────────────────────
+    # M2 permission set (expanded): full cross-product of relevant triples.
+    # Permissions are seed-only; no create form exists in the UI (project policy).
+    # Note: "manage" action is NOT used. CRUD uses read/write/delete explicitly;
+    # meta-actions (configure, approve) are named for their specific purpose.
     perms_data = [
-        {"resource": "system", "action": "manage", "scope": "*"},
+        # System-level configuration (replaces former system:manage:*)
+        {"resource": "system", "action": "read", "scope": "*"},
+        {"resource": "system", "action": "write", "scope": "*"},
+        {"resource": "system", "action": "configure", "scope": "*"},
+        # User management (M2 Admin module)
         {"resource": "user", "action": "read", "scope": "*"},
         {"resource": "user", "action": "write", "scope": "*"},
+        {"resource": "user", "action": "delete", "scope": "*"},
+        # Role management (M2 Admin module)
+        {"resource": "role", "action": "read", "scope": "*"},
+        {"resource": "role", "action": "write", "scope": "*"},
+        {"resource": "role", "action": "delete", "scope": "*"},
+        # Permission management (M2 Admin module — read-only listing)
+        {"resource": "permission", "action": "read", "scope": "*"},
+        # Academic year (M0/M3 Config module)
         {"resource": "academic_year", "action": "read", "scope": "*"},
         {"resource": "academic_year", "action": "write", "scope": "*"},
+        # Department-scoped operations (M4+ Department module)
+        {"resource": "department", "action": "read", "scope": "*"},
+        {"resource": "department", "action": "read", "scope": "campus"},
+        {"resource": "department", "action": "read", "scope": "school"},
         {"resource": "department", "action": "read", "scope": "department"},
+        {"resource": "department", "action": "write", "scope": "department"},
+        # Leave request management (M8+ Leave module)
+        {"resource": "leave_request", "action": "read", "scope": "department"},
         {"resource": "leave_request", "action": "approve", "scope": "department"},
+        # Audit log (M6 Audit module)
+        {"resource": "audit_log", "action": "read", "scope": "*"},
     ]
     perm_inserted = 0
     for p in perms_data:
@@ -119,7 +148,8 @@ def seed(session: Session) -> dict[str, int]:
     dean_role = roles["DEAN"]
     dean_perm_keys = [
         ("academic_year", "read", "*"),
-        ("department", "read", "department"),
+        ("department", "read", "school"),     # Dean sees school-level departments
+        ("leave_request", "read", "department"),
         ("leave_request", "approve", "department"),
     ]
     for key in dean_perm_keys:
@@ -138,6 +168,8 @@ def seed(session: Session) -> dict[str, int]:
             .values(role_id=student_role.id, permission_id=perms[key].id)
             .on_conflict_do_nothing(),
         )
+
+    # BASIC_USER has no permissions — home page access is auth-layer, not permission-layer.
     counts["role_permissions"] = rp_inserted
 
     # ── Users ─────────────────────────────────────────────────────────────────
@@ -218,6 +250,13 @@ def seed(session: Session) -> dict[str, int]:
             session,
             pg_insert(UserRole)
             .values(user_id=user.id, role_id=roles[role_code].id)
+            .on_conflict_do_nothing(),
+        )
+        # Every user gets BASIC_USER in addition to their primary role (M2 policy).
+        _exec_insert(
+            session,
+            pg_insert(UserRole)
+            .values(user_id=user.id, role_id=roles["BASIC_USER"].id)
             .on_conflict_do_nothing(),
         )
     counts["users"] = user_inserted

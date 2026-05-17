@@ -20,6 +20,7 @@ class User(TimestampedSoftDelete, table=True):
     )
 
     username: str = Field(max_length=64, nullable=False)
+    full_name: str | None = Field(default=None, max_length=256, nullable=True)
     email: str = Field(max_length=254, nullable=False)
     password_hash: str = Field(max_length=256, nullable=False)
     is_active: bool = Field(default=True, nullable=False)

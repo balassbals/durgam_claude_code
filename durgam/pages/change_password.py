@@ -2,8 +2,31 @@
 
 import reflex as rx
 
-from durgam.pages.components import nav_shell
+from durgam.pages.components import nav_shell, typed_flash
+from durgam.services.password import PASSWORD_RULES
 from durgam.states.auth import AuthState
+from durgam.states.base import BaseState
+
+
+def _password_rules_hint() -> rx.Component:
+    """Password rules displayed below the new password field (Bug 2)."""
+    return rx.box(
+        rx.text("New password must:", font_size="0.8rem", color="var(--color-muted)",
+                font_weight="500", margin_bottom="0.25rem"),
+        rx.vstack(
+            *[
+                rx.hstack(
+                    rx.text("·", color="var(--color-muted)", font_size="0.8rem"),
+                    rx.text(rule, font_size="0.8rem", color="var(--color-muted)"),
+                    gap="0.4rem",
+                )
+                for rule in PASSWORD_RULES
+            ],
+            align="start",
+            gap="0.1rem",
+        ),
+        padding="0.5rem 0",
+    )
 
 
 def change_password() -> rx.Component:
@@ -38,21 +61,7 @@ def change_password() -> rx.Component:
                         font_family="var(--font-sans)",
                     ),
                 ),
-                rx.cond(
-                    AuthState.flash != "",
-                    rx.box(
-                        rx.text(
-                            AuthState.flash,
-                            color="var(--color-body)",
-                            font_size="0.9rem",
-                        ),
-                        padding="0.75rem",
-                        background="rgba(76, 78, 46, 0.06)",
-                        border="1px solid var(--color-rule)",
-                        border_radius="4px",
-                    ),
-                    rx.fragment(),
-                ),
+                typed_flash(BaseState.flash, BaseState.flash_type),
                 rx.form(
                     rx.vstack(
                         rx.vstack(
@@ -93,6 +102,7 @@ def change_password() -> rx.Component:
                                 padding="0.5rem 0.75rem",
                                 font_family="var(--font-sans)",
                             ),
+                            _password_rules_hint(),
                             align_items="flex-start",
                             gap="0.25rem",
                             width="100%",

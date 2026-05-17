@@ -23,14 +23,14 @@ from durgam.services.password import WeakPasswordError
 from durgam.states.base import BaseState
 
 
-def _auth_svc(session) -> AuthService:  # type: ignore[no-untyped-def]
+def _auth_svc(session) -> AuthService:
     return AuthService(
         user_repo=UserRepository(session),
         session_repo=UserSessionRepository(session),
     )
 
 
-def _pw_svc(session) -> PasswordService:  # type: ignore[no-untyped-def]
+def _pw_svc(session) -> PasswordService:
     return PasswordService(
         user_repo=UserRepository(session),
         token_repo=PasswordResetTokenRepository(session),
@@ -90,11 +90,19 @@ class AuthState(BaseState):
         relied on the second event seeing mutations from the first, which is guaranteed
         in theory but broke on fresh-compile server starts in Reflex 0.9.x).
         """
+        self.flash = ""  # clear stale flash from prior navigation
+        # Carry pending_success (e.g. "Password changed") into flash for display.
+        if self.pending_success:
+            self.flash = self.pending_success
+            self.pending_success = ""
         self._resolve_session_state()
         if not self.current_user_id:
             return rx.redirect("/login")  # type: ignore[return-value]
         if self.must_change_password:
             return rx.redirect("/change-password")  # type: ignore[return-value]
+        # Populate nav entries so the home page nav shell shows the correct links.
+        # Without this call, visible_nav_entries stays [] and nav links are absent.
+        self._load_nav_entries()
 
     def change_password_on_load(self) -> None:
         """on_load for /change-password: protect the route without a second DB lookup.
@@ -108,6 +116,7 @@ class AuthState(BaseState):
         If current_user_id is empty (user arrived unauthenticated), redirect to /login.
         Does NOT redirect must_change_password users — they are already on the right page.
         """
+        self.flash = ""  # clear stale flash from prior navigation (Bug C)
         if not self.current_user_id:
             # Session not yet resolved; resolve it now so the page has state.
             self._resolve_session_state()
@@ -116,7 +125,7 @@ class AuthState(BaseState):
 
     def load_reset_token(self) -> None:
         """Read ?token= query param from the URL. Use as on_load on the reset-password page."""
-        self.reset_token = self.router._page.params.get("token", "")  # type: ignore[attr-defined]
+        self.reset_token = self.router._page.params.get("token", "")
 
     @public_handler
     @audit_action(action="login", resource="session")
@@ -159,6 +168,7 @@ class AuthState(BaseState):
             return rx.redirect("/")  # type: ignore[return-value]
         except AuthError as exc:
             self.flash = exc.message
+            self.flash_type = "error"
         finally:
             self.is_loading = False
 
@@ -174,6 +184,8 @@ class AuthState(BaseState):
         self.current_user_id = ""
         self.current_username = ""
         self.must_change_password = False
+        self.flash = ""            # clear stale flash (Bug 10)
+        self.admin_authorized = False  # reset admin gate on logout
         return rx.redirect("/login")  # type: ignore[return-value]
 
     @public_handler
@@ -185,6 +197,7 @@ class AuthState(BaseState):
         self.flash = ""
         if new_pw != confirm:
             self.flash = "New passwords do not match."
+            self.flash_type = "error"
             return
         try:
             with open_session() as session:
@@ -193,11 +206,14 @@ class AuthState(BaseState):
                 )
                 session.commit()
             self.must_change_password = False
+            self.pending_success = "Password changed successfully."
             return rx.redirect("/")  # type: ignore[return-value]
         except AuthError as exc:
             self.flash = exc.message
+            self.flash_type = "error"
         except WeakPasswordError as exc:
             self.flash = exc.reason
+            self.flash_type = "error"
 
     @public_handler
     @audit_action(action="request_password_reset", resource="session")

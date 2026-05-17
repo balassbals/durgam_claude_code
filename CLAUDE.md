@@ -4,7 +4,7 @@
 **Spec**: `docs/durgam_rfp_v3.pdf` — all section references (§8, §12, etc.) point to this file.
 **Python**: 3.13 (pinned via `.python-version`).
 **Theme**: Puttaparthi Saffron–Indigo–Ivory (§15.1). Single committed theme; no alternatives in v3.
-**Current milestone**: M1 — Authentication.
+**Current milestone**: M2 — Admin Module.
 
 ## Layering rules — strictly enforced
 - **States → Services**: states orchestrate, services own the rules. States must not import SQLModel, SQLAlchemy, or any model.
@@ -202,6 +202,84 @@ If a question can't be answered from this file, the RFP, or the codebase, **stop
 
   At the checkpoint: commit the current work (passing tests + green lint), update `docs/milestones/<MN>.md` with what's done and what's next in a 5-line "resume notes" block, then end the session. Resume in a new session by reading the resume notes first, then `git log -10` for context. Never `/compact` mid-milestone — it discards exactly the rules you need to keep.
 
+## Patterns established at M2
+
+These patterns were decided at M2 and apply to every subsequent milestone.
+
+### Navigation registry
+
+Each module contributes nav entries via its `__init__.py`:
+
+```python
+# durgam/pages/<module>/__init__.py
+from durgam.nav.registry import NavEntry, register
+
+register(NavEntry(
+    label="Module Name", href="/module", icon="icon",
+    group="GroupName",
+    permission_action="read", permission_resource="resource",
+))
+```
+
+`BaseState._load_nav_entries()` calls `can()` per entry at login and caches
+`visible_nav_entries: list[dict]` in state. The nav shell reads this cache — no DB
+calls at render time. Mobile drawer and desktop nav share the same list.
+
+`permission_action=None` means the entry is visible to all authenticated users.
+
+### Responsive table two-tier rule
+
+**Tier 1 — Card layout (≤4 key columns, lookup/management tables):**  
+Used for user list, role list, permission list, and any future module with a
+management-focused list (HoD list, course list, etc.). Below 768px each row becomes
+a stacked card. Use `durgam/pages/shared/data_table.py` with `TableColumn`.
+
+Card field spec for existing M2 tables:
+- User list cards: username, email, role badges, status visible; last_login_at hidden; actions in kebab.
+- Role list cards: name, code, permission count badge; level/created_at hidden; actions in kebab.
+- Permission list cards: resource, action, scope visible; no actions (read-only).
+
+**Tier 2 — Horizontal scroll with sticky first column (5+ comparison columns):**  
+Used for course allocation, faculty workload, attendance sheets, exam results, leave
+requests, audit log, and any table where users scan across columns to compare values.
+The first column (name/date/ID) is sticky; remaining columns scroll horizontally.
+Apply directly with `rx.table` + `overflow_x="auto"` and a sticky first-column style.
+
+### Confirmation dialog pattern
+
+Always use `durgam/pages/shared/confirmation_dialog.py` for destructive actions.
+The dialog MUST:
+- Name the affected resource (e.g., "Delete user 'jdoe'?").
+- State the consequence in plain language (e.g., "This will deactivate the account.").
+- Offer a clear cancel button.
+- NOT appear for non-destructive saves.
+
+### Permissions are seed-only
+
+All (resource, action, scope) permission triples are defined in `scripts/seed.py`.
+No create/update/delete UI exists for permissions. When a new module introduces a new
+resource, add the permission triples to `scripts/seed.py` in that module's branch.
+The permission catalog is a system-design concern, not a runtime admin concern.
+
+The M2 seed enumerates the (resource, action, scope) triples that exist in the system
+at this milestone. Future milestones extend the seed for new resources.
+
+**Action vocabulary (established at M2):**
+- `read` / `write` / `delete` — CRUD operations on a resource.
+- `configure` — system-level configuration (e.g. system:configure:*).
+- `approve` — approval workflow action (e.g. leave_request:approve:department).
+- **`manage` is NOT used.** The old `system:manage:*` triple was replaced with
+  `system:read:*`, `system:write:*`, `system:configure:*` at M2 close-out. Any
+  code path that called `can("manage", ...)` must use the specific action instead.
+
+### Hard-delete audit policy
+
+`UserAdminService.hard_delete_user()` (and any future hard-delete service method) MUST
+check for audit log rows before deleting. If `COUNT(auditlog WHERE actor_user_id = user_id) > 0`,
+raise `HardDeleteBlockedError` with an explanatory message. The auditlog is
+INSERT+SELECT only — `actor_user_id` cannot be nulled after the fact. This applies to
+any model that appears as `actor_user_id` in the auditlog.
+
 ## Session start checklist
 At the start of every coding session, Claude Code runs:
 1. `git status` — confirm clean working tree.
@@ -211,8 +289,324 @@ At the start of every coding session, Claude Code runs:
 
 If any of the above fails or surprises, stop and surface it before writing code.
 
+### Route protection rule (applies to ALL authenticated pages from M2 onward)
+
+**Applies to:** `/` (home page), `/change-password`, all `/admin/*` pages, and
+every authenticated page added in M3+.
+
+Every authenticated page must guard its on_load handler AGAINST BOTH
+unauthenticated AND authenticated-but-unauthorized states, before rendering
+any content:
+
+1. Wrap the page in `rx.cond(BaseState.admin_authorized, content, rx.fragment())`
+   via `admin_page(content)`. `admin_authorized` is set to True ONLY after
+   `_admin_guard()` confirms BOTH authentication AND `can("read","user")` pass.
+   This means authenticated-but-unauthorized users (e.g. student_001) also see
+   a blank screen before redirect — not chrome.
+2. `_admin_guard()` clears `self.flash = ""` and `self.admin_authorized = False`
+   at the start of every admin navigation (stale notifications from prior page
+   do not persist).
+3. Return the guard redirect if not None (short-circuit before any data load).
+4. Only then load data and populate state.
+
+For home page: `rx.cond(AuthState.current_user_id != "", content, rx.fragment())`.
+For admin pages: `admin_page(content)` which uses `BaseState.admin_authorized`.
+
+Do NOT use `@require_role` on on_load handlers — it raises `PermissionDenied`
+instead of redirecting, which shows admin chrome + error toast to unauthenticated
+users.
+
+`@require_role` + `@audit_action` remain correct on business-logic handlers
+(create, update, delete) that operate inside an already-authenticated session.
+
+**Manual incognito check at every gate.** Visit each protected page without
+a session; it must redirect to `/login`, no chrome visible at any moment.
+From M3 onward, unguarded pages are a gate failure even if integration tests pass.
+
+This rule was established at M2 after discovering admin pages rendered chrome
+for unauthenticated users. First instance: M1 home page (home_on_load). Second:
+M1 change-password (change_password_on_load). Third: M2 admin pages (_admin_guard).
+
+### E2E helper sharing rule
+
+When a new test file needs to log in, it imports `_login()` (and other shared
+helpers) from `tests/e2e/_helpers.py`. It must NEVER duplicate the helper.
+
+The canonical selectors (verified against the rendered login page):
+  - Username placeholder: `"your.username"`
+  - Password placeholder: `"••••••••••••"` (12 bullet characters)
+  - Submit button: regex `r"Sign in"` (case-insensitive)
+
+Duplication creates selector drift across files (root cause of the M2 E2E
+regression where the duplicated helper used wrong placeholder text, blocking
+all 14 M2 tests).
+
+### E2E test selector rule
+
+Selectors must be written against the actual rendered page, not assumed
+from the page's intent or the source code. Verify each new test locally
+against a running app before committing.
+
+Known selector rules in DURGAM (from M2 verification):
+- Inputs: use `page.get_by_placeholder("...")` — forms use `rx.input(placeholder=...)`
+  with `rx.text()` for labels. `rx.text()` renders as `<p>`, NOT `<label>`, so
+  `page.get_by_label()` will NOT find inputs.
+- Headings: use `page.get_by_role("heading", name="...")` — `rx.heading()` renders
+  as a heading role element. `page.get_by_heading()` does NOT exist in Playwright Python.
+- Email assertions: only call `_latest_mailpit_email()` if the test ACTUALLY sent an
+  email (e.g., user created via the UI form, not via `_create_ephemeral_user()`).
+  `_create_ephemeral_user()` inserts directly into the DB; no email is dispatched.
+- Nav links: `page.get_by_role("link", name="Admin")` — the nav links are rendered
+  by `rx.link()` which produces `<a>` elements with role=link.
+
+From M3 onward, no test ships without a local-run verification of its specific
+selectors. A test that passes locally but was never run against the rendered page
+is not a verified test.
+
+### E2E selector specificity rule
+
+When selecting by accessible name, use `exact=True` whenever the name could be a
+prefix of another rendered label. The M2 "Users"/"Import Users" case is canonical:
+
+```python
+page.get_by_role("link", name="Users", exact=True)   # correct
+page.get_by_role("link", name="Users")                # strict-mode violation
+```
+
+Partial-match selectors either throw a strict-mode violation (2+ matches) or
+silently select the wrong element. Default to exact=True for all nav link/button
+name selectors. The preferred alternative is `locator('a[href="..."]')`.
+
+### Page-on-load data refresh rule
+
+Every list page that displays mutable data MUST:
+1. Reset the list state var to `[]` at the START of the on_load handler (before
+   the DB query). This prevents stale rows from a previous navigation from
+   lingering if the new query is slow.
+2. Re-query the DB in the on_load handler on EVERY navigation, not only on first
+   mount. The Reflex WebSocket connection may persist between same-session
+   navigations; without an explicit reset, old data stays visible.
+
+```python
+async def load_users(self) -> None:
+    guard = self._admin_guard()
+    if guard is not None:
+        return guard
+    self.users = []          # ← reset first
+    self.total_users = 0
+    with open_session() as session:
+        ...                  # query and populate self.users
+```
+
+### E2E dependent-dropdown rule
+
+When a test interacts with a dropdown whose options are populated by an async
+server response to a prior selection, the test MUST wait for the **specific option**
+to be attached — not just for the dropdown element to be visible.
+
+Reflex WebSocket state updates do NOT affect Playwright's `networkidle` state, so
+the dropdown element renders (becomes visible) before the server delivers the options
+list. Calling `select_option("read")` immediately after "visible" will find an empty
+list and fail. This is the same WebSocket-state-arrival principle as the M1
+`wait_for_url` rule.
+
+**Pattern:**
+```python
+# Wrong — dropdown visible but options not yet delivered
+expect(action_sel).to_be_visible(timeout=10_000)
+action_sel.select_option("read")           # may find empty list
+
+# Correct — wait for the specific option to exist in the DOM
+expect(action_sel.locator("option[value='read']")).to_be_attached(timeout=10_000)
+action_sel.select_option("read")           # option is guaranteed present
+```
+
+Also: `option:not([value=''])` targets real options excluding the placeholder, useful
+for waiting until a dropdown is fully populated:
+```python
+expect(user_sel.locator("option:not([value=''])").first).to_be_attached(timeout=15_000)
+```
+
+From M3 onward, every test that interacts with a dependent dropdown (action filtered
+by resource, scope_id filtered by scope_type, etc.) must use this pattern.
+
+### Admin page stable-anchor wait rule
+
+After navigating to an admin page via `page.goto()`, never immediately assert
+on list content. The `admin_page()` wrapper hides all content in `rx.cond`
+until `_admin_guard()` fires via WebSocket (AFTER `wait_for_load_state("networkidle")`
+returns, because networkidle is HTTP-only). Always wait for a stable DOM anchor
+that is unconditionally present once the guard succeeds:
+
+```python
+page.goto(f"{BASE_URL}/admin/users")
+page.wait_for_load_state("networkidle")
+# Wait for admin_page() to show content after on_load guard fires.
+_wait_for_admin_page(page, "+ New user", timeout=15_000)
+# Now assert on list content.
+expect(page.get_by_text(username)).to_be_visible(timeout=10_000)
+```
+
+`_wait_for_admin_page()` is defined in `tests/e2e/test_admin_suite.py`. Add an
+equivalent helper in every new E2E file that uses admin pages.
+
+### E2E exact=True rule for dynamic values
+
+Any `get_by_text()` on a dynamic value (username, email, code, name generated
+by the test) MUST use `exact=True`. Dynamic values frequently appear as substrings
+of other DOM text:
+- A username `e2e_abc123` is a prefix of its email `e2e_abc123@sssihl.edu.in`.
+- A role code `GATE_XYZ` could be a substring of a role name `Gate XYZ Role`.
+- A short code can appear inside a longer label.
+
+Without `exact=True`, Playwright's substring matching finds multiple elements and
+throws a strict-mode violation. This is the third instance of this discipline at M2
+(after "Users"/"Import Users" and "Admin"/"Admin Dashboard"):
+
+```python
+# Wrong — strict-mode violation if email also visible
+expect(page.get_by_text(username)).to_be_visible()
+
+# Correct
+expect(page.get_by_text(username, exact=True)).to_be_visible()
+```
+
+From M3 onward: any `get_by_text` on a test-generated value defaults to
+`exact=True` unless intentional substring matching is required and documented.
+
+### Notification lifecycle rule
+
+Notifications/flashes are tied to a single page visit:
+
+1. **On every admin navigation:** `_admin_guard()` clears `self.flash = ""`.
+   Stale flash from a prior page does not persist to the next page.
+2. **`generated_password` (temp password):** cleared at the start of `load_users()`
+   when the user navigates back to `/admin/users`. Shown once; gone on next visit.
+3. **On logout:** `AuthState.logout()` clears `self.flash = ""` and
+   `self.admin_authorized = False` before redirecting to `/login`. No notifications
+   follow the user to the login page.
+4. **Persistent notifications (the only known M2 case):** the temp password box
+   persists until the user clicks Dismiss or navigates away. No other notification
+   is marked persistent.
+
+### State-binding rule for checkboxes and toggles
+
+A widget's visual state (checked/unchecked, on/off) MUST be bound directly to
+the source-of-truth state variable — not to a separate intermediate variable or
+to a `default_*` prop.
+
+The M2 permission accordion bug (Bug H): count badges used `role_perm_ids` (correct),
+but checkboxes used `default_checked=item["granted"]=="true"` (React uncontrolled mode).
+React only reads `defaultChecked` at MOUNT; it ignores subsequent state changes.
+Navigating between roles updated `perm_table["granted"]` correctly, but the checkboxes
+stayed at their original mounted state.
+
+**Fix pattern**: use `checked=State.source_of_truth_set.contains(item_id)` (controlled
+mode) and `on_change=State.toggle(item_id)`. The handler updates the source-of-truth
+set; the checkbox re-renders reactively. The count badge and the checkbox both read
+from the same state — they cannot diverge.
+
+```python
+# Wrong — uncontrolled; only works at mount; diverges from live state
+rx.checkbox(default_checked=item["granted"] == "true")
+
+# Correct — controlled; reactive; same source of truth as count badges
+rx.checkbox(
+    checked=State.checked_ids.contains(item["id"]),  # type: ignore[attr-defined]
+    on_change=State.toggle(item["id"]),
+)
+```
+
+From M3 onward: any checkbox or toggle that displays the current state of a DB
+record MUST use the controlled pattern.
+
+### Ephemeral form state rule
+
+Form widgets that hold user-input state (search boxes, permission check widget,
+temp filters, selected-value dropdowns) MUST be reset on every page on_load.
+Stale form values from a prior page visit must not appear when the user returns.
+
+The M2 widget Bug J: permission check widget retained selected values and result
+after navigating away and returning. Fix: add `PermissionCheckState.clear_widget`
+to the page's `on_load` chain via `app.add_page(... on_load=[main_handler, clear_widget])`.
+
+Pattern: same lifecycle rule as flash notifications — ephemeral state is scoped to
+a single page visit and is cleared by on_load before new state is computed.
+
+```python
+# In the state class:
+def clear_widget(self) -> None:
+    self.pc_result = ""
+    self.pc_selected_resource = ""
+    # ... other ephemeral fields
+
+# In durgam.py:
+app.add_page(page_fn, route="...",
+             on_load=[MainState.load_data, WidgetState.clear_widget])
+```
+
+### Standard color tokens (established at M2)
+
+All buttons and notifications use named standard styles. No component hard-codes colors.
+
+**Buttons** (use helpers from `durgam/pages/components.py`):
+- `primary_btn(...)` — primary action (Save, Submit, Create, Confirm)
+- `secondary_btn(...)` — secondary action (Cancel, Back, Close)
+- `destructive_btn(...)` — destructive action (Delete, Deactivate)
+
+**Notifications** (use helpers from `durgam/pages/components.py`):
+- `flash_success(message)` — green tint
+- `flash_error(message)` — red tint
+- `flash_warning(message)` — amber tint
+- `flash_info(message)` — indigo tint
+
+Token names live in `durgam/theme.py`: `--color-destructive`, `--color-success-bg`,
+`--color-success-border`, etc. From M3 onward, new buttons and notifications reference
+these helpers; deviating requires adding a named token, never inlining colors.
+
+### Ephemeral-user dropdown filter rule
+
+Any UI dropdown that selects a user MUST exclude usernames matching the ephemeral
+test pattern (`e2e_%`). Pass `exclude_ephemeral=True` to `UserRepository.list_paginated`.
+This prevents test-run pollution from appearing to real admins.
+
+The `e2e_` prefix is the documented ephemeral convention; see `tests/e2e/_helpers.py`.
+
+The user list page (`/admin/users`) does NOT filter — all users including e2e_ are
+shown there as a diagnostic aid. Only per-user selection dropdowns (e.g., permission
+check widget) filter them out.
+
+### Gate-verification seeded-user rule
+
+Gate-verification tests use seeded users for assertions about the permission
+system, not ephemeral users. Ephemeral users (`e2e_*`) are for tests that
+create/edit/delete users in isolation (e.g., `test_create_user_flow`).
+
+The user dropdown filter (`exclude_ephemeral=True`) excludes `e2e_*` users
+from per-user selection widgets by design — to keep test pollution out of the
+admin UI. Tests that interact with these dropdowns MUST use seeded users.
+
+To get a seeded user's UUID at test-setup time:
+```python
+from tests.e2e._helpers import get_seeded_user_id
+student_id = get_seeded_user_id("student_001")
+```
+
+Seeded users used for permission-check widget assertions are read-only fixtures
+(see "Testing rules" above). The test reads their UUID but must NOT modify the
+user row. This rule was discovered at M2 when `test_create_role_and_verify_scoped_permission`
+created an ephemeral user and then could not find them in the widget dropdown.
+
+### Migration test isolation
+
+Migration tests (`tests/integration/test_migrations.py`) must call `_reset_test_db()`
+at the start of any test that runs a downgrade/upgrade cycle. The `seeded_db_engine`
+session fixture's teardown drops all SQLModel tables but leaves `alembic_version` at
+the current head — creating an inconsistent state. `_reset_test_db()` drops
+`alembic_version` and all SQLModel tables, then runs `upgrade head` from scratch.
+
 ## Current milestone
-**M1 — Authentication.**
+**M2 — Admin Module.**
 
 This line is the source of truth for "where are we." Before opening a milestone-completing PR, Claude Code MUST:
 1. Grep this file for "Current milestone" and update both occurrences (the top status line and this section).
