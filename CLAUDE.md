@@ -576,6 +576,27 @@ The user list page (`/admin/users`) does NOT filter — all users including e2e_
 shown there as a diagnostic aid. Only per-user selection dropdowns (e.g., permission
 check widget) filter them out.
 
+### Gate-verification seeded-user rule
+
+Gate-verification tests use seeded users for assertions about the permission
+system, not ephemeral users. Ephemeral users (`e2e_*`) are for tests that
+create/edit/delete users in isolation (e.g., `test_create_user_flow`).
+
+The user dropdown filter (`exclude_ephemeral=True`) excludes `e2e_*` users
+from per-user selection widgets by design — to keep test pollution out of the
+admin UI. Tests that interact with these dropdowns MUST use seeded users.
+
+To get a seeded user's UUID at test-setup time:
+```python
+from tests.e2e._helpers import get_seeded_user_id
+student_id = get_seeded_user_id("student_001")
+```
+
+Seeded users used for permission-check widget assertions are read-only fixtures
+(see "Testing rules" above). The test reads their UUID but must NOT modify the
+user row. This rule was discovered at M2 when `test_create_role_and_verify_scoped_permission`
+created an ephemeral user and then could not find them in the widget dropdown.
+
 ### Migration test isolation
 
 Migration tests (`tests/integration/test_migrations.py`) must call `_reset_test_db()`

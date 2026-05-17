@@ -50,6 +50,31 @@ def _logout(page: Page) -> None:
     page.wait_for_url(f"{BASE_URL}/login", timeout=10_000)
 
 
+def get_seeded_user_id(username: str) -> str:
+    """Return the UUID of a seeded user as a string.
+
+    Used by E2E tests that need a seeded user's DB UUID (e.g., to select them
+    in the permission check widget). Never call on ephemeral users — those are
+    created inline in the test and their IDs come from _create_ephemeral_user().
+    """
+    from sqlalchemy import create_engine, text
+
+    from durgam.config import settings
+
+    engine = create_engine(settings.database_url_sync)
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(
+                text("SELECT id FROM users WHERE username = :u"),
+                {"u": username},
+            ).fetchone()
+            if result is None:
+                raise ValueError(f"Seeded user not found: {username}")
+            return str(result[0])
+    finally:
+        engine.dispose()
+
+
 def _latest_mailpit_email(
     to_address: str, subject_contains: str, timeout: int = 15
 ) -> dict:

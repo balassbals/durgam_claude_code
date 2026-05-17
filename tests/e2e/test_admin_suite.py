@@ -41,7 +41,7 @@ import uuid
 import pytest
 from playwright.sync_api import Page, expect
 
-from tests.e2e._helpers import BASE_URL, _latest_mailpit_email, _login
+from tests.e2e._helpers import BASE_URL, _latest_mailpit_email, _login, get_seeded_user_id
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("DURGAM_E2E") != "1",
@@ -263,9 +263,16 @@ class TestRoleConstructionAndPermission:
         """Gate Steps 5-7: create role → verify via check widget (✗ Denied for ungranted).
 
         This is the core M2 gate clause demonstration.
+
+        Uses seeded user student_001 (not an ephemeral user) because the widget's
+        user dropdown filters out e2e_* users by design (exclude_ephemeral=True).
+        Gate-verification tests use seeded users for permission assertions.
+        student_001 has no department:read permission — ✗ Denied assertion holds.
         """
         role_code = f"GATE_{uuid.uuid4().hex[:6].upper()}"
-        username, email, user_id = _create_ephemeral_user(role_code="STUDENT")
+        # student_001 is a seeded read-only fixture — this test reads their UUID only,
+        # never modifies the user row.
+        student_id = get_seeded_user_id("student_001")
         try:
             _login(page, _ADMIN_USER, _ADMIN_PASS)
 
@@ -304,6 +311,7 @@ class TestRoleConstructionAndPermission:
 
             # Wait for user dropdown to be populated via on_mount load_widget_data.
             # "option:not([value=''])" matches real options, not the placeholder.
+            # Seeded users (including student_001) appear here; e2e_* are excluded.
             expect(
                 user_sel.locator("option:not([value=''])").first
             ).to_be_attached(timeout=15_000)
@@ -322,21 +330,22 @@ class TestRoleConstructionAndPermission:
             # scope_type does NOT re-filter actions — simple sync setter, no wait needed.
             scope_sel.select_option("department")
 
-            # Wait for specific user option to be attached before selecting by value.
+            # Wait for the specific student_001 option to be attached before selecting.
+            # student_001 is a seeded user — always visible in the widget dropdown.
             expect(
-                user_sel.locator(f"option[value='{user_id}']")
+                user_sel.locator(f"option[value='{student_id}']")
             ).to_be_attached(timeout=10_000)
-            user_sel.select_option(value=user_id)
+            user_sel.select_option(value=student_id)
 
             # Scope ID disabled at M2 — no scope objects seeded yet.
             page.get_by_role("button", name="Check").click()
 
-            # Ephemeral user has no department:read → ✗ Denied.
+            # student_001 has no department:read permission → ✗ Denied.
             expect(page.get_by_text("✗ Denied")).to_be_visible(timeout=10_000)
 
         finally:
-            _delete_ephemeral_user(username)
             # Soft-delete test role via DB for isolation.
+            # No user teardown needed — student_001 is a seeded read-only fixture.
             try:
                 from sqlalchemy import create_engine, text
 
