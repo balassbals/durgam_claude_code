@@ -148,6 +148,38 @@ class BaseState(rx.State):
         self.admin_authorized = True
         return None
 
+    def _config_guard_any(
+        self, gates: list[tuple[str, str, str | None]]
+    ):
+        """Guard that passes if user can perform ANY of the given (action, resource, scope_type).
+
+        Uses any_scope=True so an HoD scoped to one department still passes when the
+        gate includes department_vision_mission:write:department. Appropriate for pages
+        that serve multiple roles with different permission paths.
+        """
+        self.admin_authorized = False
+        self.flash = ""
+        self.flash_type = "info"
+        self._resolve_session()
+        if not self.current_user_id:
+            return rx.redirect("/login")
+        try:
+            user_id = UUID(self.current_user_id)
+        except ValueError:
+            self.current_user_id = ""
+            return rx.redirect("/login")
+        with open_session() as session:
+            has_access = any(
+                can(user_id, action, resource, scope_type, None, session, any_scope=True)
+                for (action, resource, scope_type) in gates
+            )
+            if not has_access:
+                self.flash = "You do not have permission to access this page."
+                self.flash_type = "warning"
+                return rx.redirect("/")
+        self.admin_authorized = True
+        return None
+
     def _dismiss_generated_password(self) -> None:
         """Clear the one-time temp-password display. Call from Dismiss button."""
         self.generated_password = ""

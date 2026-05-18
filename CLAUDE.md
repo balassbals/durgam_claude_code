@@ -691,6 +691,42 @@ Bugs found at Session 5: CRUD didn't persist (missing session.commit); _config_g
 admitted all authenticated users (checked read permission which BASIC_USER has). Both
 were invisible to pytest; only manual UI testing revealed them.
 
+### Nav entry visibility: permission_any for multi-role entries
+
+When a nav entry should be visible to multiple roles via different permission paths (e.g.
+Vision & Mission — Registrar via `university_vision_mission:write:*` AND HoD via
+`department_vision_mission:write:department`), use `permission_any`:
+
+```python
+register(NavEntry(
+    label="Vision & Mission",
+    href="/admin/config/vision-mission",
+    icon="target",
+    group="Config",
+    permission_any=(
+        ("write", "university_vision_mission", None),
+        ("write", "department_vision_mission",  "department"),
+    ),
+))
+```
+
+The entry shows if the user passes `can()` for ANY tuple. All nav checks use
+`any_scope=True` — a scoped role (e.g. HoD scoped to DMACS) is treated as "has
+this permission for any department" rather than "has it for DMACS specifically". The
+page does the specific-scope authorization; nav is a discovery signal only.
+
+Single-gate entries (only one role path) continue to use `permission_action /
+permission_resource / permission_scope_type`. Both forms cannot be set on the same entry.
+
+When adding ANY new nav entry, ask: "which distinct user types should see this, and do
+they reach it via different permission paths?" If multiple paths → `permission_any`. If
+one path → single-gate.
+
+`can(any_scope=True)` is also available for multi-gate page guards via
+`_config_guard_any(gates: list[tuple[action, resource, scope_type]])` on BaseState.
+Use this for pages that multiple roles can reach via different permissions (e.g. the
+vision/mission page is accessible to Registrar AND HoD).
+
 ### Never name a service method `list`
 
 Naming a service method `list` shadows the Python builtin `list` type in class-body

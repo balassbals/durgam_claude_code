@@ -2,30 +2,38 @@
 
 Import this module to register config nav entries. Called from durgam.py.
 
-The "Configuration" group is visible to users who can edit ANY config resource:
-- SYSTEM_ADMIN: all write/configure permissions → sees all 9 tiles
-- REGISTRAR family: university_vision_mission:write:*, class_timings:configure,
-  working_days:configure → sees 3 tiles (Vision & Mission, Class Timings, Working Days)
-- HOD: has department_vision_mission:write:department (scoped) — scoped permissions
-  are NOT matchable by the nav registry (scope_id=None check; M2 scope discrimination).
-  HOD accesses dept vision/mission via the department detail page (Session 6+).
-- STUDENT / BASIC_USER: no write/configure permissions → no Config nav.
+Nav visibility (any_scope=True semantics):
+  SYSTEM_ADMIN: all 9 tiles — has all write/configure permissions.
+  REGISTRAR family: sees Configuration, Vision & Mission, Class Timings, Working Days.
+  HOD (scoped): sees Configuration + Vision & Mission (has dept_vm:write for their dept).
+  STUDENT / BASIC_USER: no Config nav — has no write/configure config permissions.
 
-Each nav entry is gated by the SAME write/configure permission that the target
-page's _config_guard checks. Nav gate must match page guard (M3 pattern rule).
+Each nav entry gate must match the page's _config_guard (or _config_guard_any) check.
+Entries with a single role path use single-gate; entries visible to multiple role
+paths via different permissions use permission_any (OR-list semantics).
 """
 
 from durgam.nav.registry import NavEntry, register
 
-# The "Configuration" landing entry uses university_vision_mission:write:* so
-# REGISTRAR (who has this) sees the landing page; campus:write:* alone would hide it.
+# "Configuration" landing: show to any user who can edit ANY config resource.
+# Using permission_any with all 10 write/configure gates.
 register(NavEntry(
     label="Configuration",
     href="/admin/config",
     icon="settings",
     group="Config",
-    permission_action="write",
-    permission_resource="university_vision_mission",
+    permission_any=(
+        ("write",     "campus",                    None),
+        ("write",     "school",                    None),
+        ("write",     "department",                None),
+        ("write",     "centre",                    None),
+        ("write",     "program",                   None),
+        ("write",     "course",                    None),
+        ("write",     "university_vision_mission", None),
+        ("write",     "department_vision_mission", "department"),
+        ("configure", "class_timings_config",      None),
+        ("configure", "working_days_config",        None),
+    ),
 ))
 register(NavEntry(
     label="Campuses",
@@ -75,13 +83,17 @@ register(NavEntry(
     permission_action="write",
     permission_resource="course",
 ))
+# Vision & Mission: Registrar via university_vision_mission:write AND HoD via
+# department_vision_mission:write:department → requires permission_any.
 register(NavEntry(
     label="Vision & Mission",
     href="/admin/config/vision-mission",
     icon="target",
     group="Config",
-    permission_action="write",
-    permission_resource="university_vision_mission",
+    permission_any=(
+        ("write", "university_vision_mission", None),
+        ("write", "department_vision_mission",  "department"),
+    ),
 ))
 register(NavEntry(
     label="Class Timings",
