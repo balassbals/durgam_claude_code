@@ -89,6 +89,65 @@ class TestHardDelete:
         repo.hard_delete.assert_called_once()
 
 
+class TestUpdate:
+    def test_update_nonexistent_raises(self):
+        repo = MagicMock()
+        repo.get_by_id.return_value = None
+        svc = _make_svc(dept_repo=repo)
+        with pytest.raises(DepartmentError, match="not found"):
+            svc.update(uuid4(), {"name": "New Name"}, uuid4())
+
+    def test_update_changes_fields(self):
+        repo = MagicMock()
+        fake = MagicMock()
+        repo.get_by_id.return_value = fake
+        repo.save.return_value = fake
+        actor_id = uuid4()
+        svc = _make_svc(dept_repo=repo)
+        result = svc.update(uuid4(), {"name": "Updated Name"}, actor_id)
+        assert result is fake
+        assert fake.name == "Updated Name"
+        assert fake.updated_by == actor_id
+        repo.save.assert_called_once_with(fake)
+
+
+class TestAddCampus:
+    def test_add_campus_nonexistent_dept_raises(self):
+        repo = MagicMock()
+        repo.get_by_id.return_value = None
+        svc = _make_svc(dept_repo=repo)
+        with pytest.raises(DepartmentError, match="not found"):
+            svc.add_campus(uuid4(), uuid4(), uuid4())
+
+    def test_add_campus_calls_upsert(self):
+        repo = MagicMock()
+        repo.get_by_id.return_value = MagicMock()
+        svc = _make_svc(dept_repo=repo)
+        dept_id = uuid4()
+        campus_id = uuid4()
+        svc.add_campus(dept_id, campus_id, uuid4())
+        repo.upsert_campus_link.assert_called_once_with(dept_id, campus_id, has_ahod=False)
+
+
+class TestRemoveCampus:
+    def test_remove_campus_calls_remove_link(self):
+        repo = MagicMock()
+        svc = _make_svc(dept_repo=repo)
+        dept_id = uuid4()
+        campus_id = uuid4()
+        svc.remove_campus(dept_id, campus_id, uuid4())
+        repo.remove_campus_link.assert_called_once_with(dept_id, campus_id)
+
+
+class TestSoftDelete:
+    def test_soft_delete_nonexistent_raises(self):
+        repo = MagicMock()
+        repo.get_by_id.return_value = None
+        svc = _make_svc(dept_repo=repo)
+        with pytest.raises(DepartmentError, match="not found"):
+            svc.soft_delete(uuid4(), uuid4())
+
+
 class TestSubDepartmentCreate:
     def test_empty_code_raises(self):
         svc = _make_svc()

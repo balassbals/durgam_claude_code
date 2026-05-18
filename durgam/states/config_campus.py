@@ -21,6 +21,7 @@ def _svc(session) -> CampusService:
 class CampusConfigState(BaseState):
     # List
     campuses: list[dict[str, str]] = []
+    loading: bool = True
 
     # Inline form (shared for create and edit)
     show_form: bool = False
@@ -40,6 +41,7 @@ class CampusConfigState(BaseState):
         guard = self._config_guard("campus", "write")
         if guard is not None:
             return guard
+        self.loading = True
         self.campuses = []  # reset before query (page-on-load data refresh rule)
         self.show_form = False
         with open_session() as session:
@@ -51,6 +53,7 @@ class CampusConfigState(BaseState):
                     "address": c.address or "",
                 })
         self._load_nav_entries()
+        self.loading = False
 
     # Explicit setters — Reflex 0.9.2 does not auto-generate set_* for
     # sub-state classes; on_change handlers require explicit methods.

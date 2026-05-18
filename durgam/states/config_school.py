@@ -20,6 +20,7 @@ def _svc(session) -> SchoolService:
 
 class SchoolConfigState(BaseState):
     schools: list[dict[str, str]] = []
+    loading: bool = True
 
     show_form: bool = False
     editing_id: str = ""
@@ -36,6 +37,7 @@ class SchoolConfigState(BaseState):
         guard = self._config_guard("school", "write")
         if guard is not None:
             return guard
+        self.loading = True
         self.schools = []
         self.show_form = False
         with open_session() as session:
@@ -47,6 +49,7 @@ class SchoolConfigState(BaseState):
                     "dean_role_code": s.dean_role_code,
                 })
         self._load_nav_entries()
+        self.loading = False
 
     def set_form_code(self, value: str) -> None:
         self.form_code = value

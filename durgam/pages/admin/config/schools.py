@@ -147,19 +147,23 @@ def admin_config_schools() -> rx.Component:
                 ),
                 typed_flash(SchoolConfigState.flash, SchoolConfigState.flash_type),
                 _inline_form(),
-                data_table(
-                    rows=SchoolConfigState.schools,
-                    columns=[
-                        TableColumn(key="code", label="Code"),
-                        TableColumn(key="name", label="Name"),
-                        TableColumn(
-                            key="dean_role_code", label="Dean Role", hidden_on_card=True
-                        ),
-                    ],
-                    card_primary_key="name",
-                    is_mobile=False,
-                    actions=_kebab,
-                    empty_message="No schools found.",
+                rx.cond(
+                    SchoolConfigState.loading,
+                    rx.center(rx.spinner(), padding="2rem"),
+                    data_table(
+                        rows=SchoolConfigState.schools,
+                        columns=[
+                            TableColumn(key="code", label="Code"),
+                            TableColumn(key="name", label="Name"),
+                            TableColumn(
+                                key="dean_role_code", label="Dean Role", hidden_on_card=True
+                            ),
+                        ],
+                        card_primary_key="name",
+                        is_mobile=False,
+                        actions=_kebab,
+                        empty_message="No schools found.",
+                    ),
                 ),
                 confirmation_dialog(
                     is_open=SchoolConfigState.confirm_open,

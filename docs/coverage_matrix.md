@@ -29,18 +29,18 @@ Errata bindings: E-001 (vision/mission) extends the M3 row.
 |---|---|---|---|---|
 | Campus (code, name, address) | §8.2, §9.3 | M3 | In flight at M3 | Model + seed + CRUD admin page |
 | School (code, name, dean_role_code) | §8.2, §9.3 | M3 | In flight at M3 | Model + seed + CRUD admin page |
-| Department (with school_id FK) | §8.2, §9.3 | M3 | In flight at M3 | Model + seed; CRUD page placeholder |
-| DepartmentCampus join (multi-campus ops) | §8.2 | M3 | In flight at M3 | Model + seed; UI via department detail |
-| SubDepartment + SubDepartmentCampus | §8.2, Appendix A | M3 | In flight at M3 | Model + seed; UI deferred to dept detail |
+| Department (with school_id FK) | §8.2, §9.3 | M3 | In flight at M3 | Session 6: full CRUD page, school FK dropdown, campus link management, sub-dept listing |
+| DepartmentCampus join (multi-campus ops) | §8.2 | M3 | In flight at M3 | Session 6: managed via department detail page; add/remove campus actions |
+| SubDepartment + SubDepartmentCampus | §8.2, Appendix A | M3 | In flight at M3 | Session 6: read-only listing in department detail panel; write UI deferred |
 | CentreOfExcellence | §8.2, §9.3 | M3 | In flight at M3 | Model + seed + CRUD admin page |
-| Program (basic) | §8.2, §9.3 | M3 | In flight at M3 | Model + seed; read-only admin page |
-| ProgramOutcome (PEO/PO/PSO) | §8.2 | M3 | In flight at M3 | Model + seed; rich edit UI → M13 |
-| ProgramRegulation | §8.2 | M3 | In flight at M3 | Model + seed; rich edit UI → M13 |
-| ProgramSchemeOfInstruction | §8.2 | M3 | In flight at M3 | Model + seed; rich edit UI → M13 |
-| ProgramSchemeCourse (course in scheme) | §8.2 | M3 | In flight at M3 | Model + seed; rich edit UI → M13 |
-| ProgramSpecialisation | §8.2 | M3 | In flight at M3 | Model + seed; rich edit UI → M13 |
-| ProgramExitLevel | §8.2 | M3 | In flight at M3 | Model + seed; rich edit UI → M13 |
-| Course (basic — code, name, credits, lecture, tutorial, practical, evaluation) | §8.2, §9.3 | M3 | In flight at M3 | Model + seed; CRUD page placeholder |
+| Program (basic) | §8.2, §9.3 | M3 | In flight at M3 | Session 6: read-only detail page with 6 sub-entity tabs; create/edit defers to M13 |
+| ProgramOutcome (PEO/PO/PSO) | §8.2 | M3 | In flight at M3 | Session 6: read-only Outcomes tab on program detail page (PEO/PO/PSO grouped); rich edit UI → M13 |
+| ProgramRegulation | §8.2 | M3 | In flight at M3 | Session 6: read-only Regulations tab on program detail page; rich edit UI → M13 |
+| ProgramSchemeOfInstruction | §8.2 | M3 | In flight at M3 | Session 6: read-only Scheme tab on program detail page; rich edit UI → M13 |
+| ProgramSchemeCourse (course in scheme) | §8.2 | M3 | In flight at M3 | Session 6: course codes shown in Scheme tab; rich edit UI → M13 |
+| ProgramSpecialisation | §8.2 | M3 | In flight at M3 | Session 6: read-only Specialisations tab on program detail page; rich edit UI → M13 |
+| ProgramExitLevel | §8.2 | M3 | In flight at M3 | Session 6: read-only Exit Levels tab on program detail page; rich edit UI → M13 |
+| Course (basic — code, name, credits, lecture, tutorial, practical, evaluation) | §8.2, §9.3 | M3 | In flight at M3 | Session 6: full CRUD page with M3 fields (code, name, program FK, department FK, credits, lecture, tutorial, practical, evaluation) |
 | Course (extended — course_type, delivery_mode, mooc_agency, IKS flags) | §8.3 | M13 | Planned for M13 | Refinement 3: defers to Program & Course module |
 | University vision/mission | E-001, §9.3 | M3 | In flight at M3 | Model + seed + edit page placeholder |
 | Department vision/mission | E-001, §9.3 | M3 | In flight at M3 | Model + seed + edit page placeholder |

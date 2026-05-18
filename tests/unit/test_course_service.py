@@ -18,6 +18,10 @@ class TestCreate:
         with pytest.raises(CourseError, match="code is required"):
             _make_svc().create("", "Name", uuid4(), uuid4(), 4, 3, 1, 0, "E", uuid4())
 
+    def test_empty_name_raises(self):
+        with pytest.raises(CourseError, match="name is required"):
+            _make_svc().create("MAT101", "", uuid4(), uuid4(), 4, 3, 1, 0, "E", uuid4())
+
     def test_invalid_evaluation_raises(self):
         repo = MagicMock()
         repo.get_by_code.return_value = None
@@ -54,6 +58,24 @@ class TestUpdate:
         with pytest.raises(CourseError, match="Evaluation must be one of"):
             _make_svc(repo).update(uuid4(), {"evaluation": "BAD"}, uuid4())
 
+    def test_update_nonexistent_raises(self):
+        repo = MagicMock()
+        repo.get_by_id.return_value = None
+        with pytest.raises(CourseError, match="not found"):
+            _make_svc(repo).update(uuid4(), {"name": "New Name"}, uuid4())
+
+    def test_update_changes_fields(self):
+        repo = MagicMock()
+        fake = MagicMock()
+        repo.get_by_id.return_value = fake
+        repo.save.return_value = fake
+        actor_id = uuid4()
+        result = _make_svc(repo).update(uuid4(), {"name": "Advanced Calculus"}, actor_id)
+        assert result is fake
+        assert fake.name == "Advanced Calculus"
+        assert fake.updated_by == actor_id
+        repo.save.assert_called_once_with(fake)
+
 
 class TestHardDelete:
     def test_blocked_by_scheme_usages(self):
@@ -82,3 +104,11 @@ class TestHardDelete:
         repo._session.get.return_value = fake
         with pytest.raises(CourseError, match="deactivated"):
             _make_svc(repo).hard_delete(uuid4(), uuid4())
+
+
+class TestSoftDelete:
+    def test_soft_delete_nonexistent_raises(self):
+        repo = MagicMock()
+        repo.get_by_id.return_value = None
+        with pytest.raises(CourseError, match="not found"):
+            _make_svc(repo).soft_delete(uuid4(), uuid4())

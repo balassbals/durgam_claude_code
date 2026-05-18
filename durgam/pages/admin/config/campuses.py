@@ -156,17 +156,21 @@ def admin_config_campuses() -> rx.Component:
                 ),
                 typed_flash(CampusConfigState.flash, CampusConfigState.flash_type),
                 _inline_form(),
-                data_table(
-                    rows=CampusConfigState.campuses,
-                    columns=[
-                        TableColumn(key="code", label="Code"),
-                        TableColumn(key="name", label="Name"),
-                        TableColumn(key="address", label="Address", hidden_on_card=True),
-                    ],
-                    card_primary_key="name",
-                    is_mobile=False,
-                    actions=_kebab,
-                    empty_message="No campuses found.",
+                rx.cond(
+                    CampusConfigState.loading,
+                    rx.center(rx.spinner(), padding="2rem"),
+                    data_table(
+                        rows=CampusConfigState.campuses,
+                        columns=[
+                            TableColumn(key="code", label="Code"),
+                            TableColumn(key="name", label="Name"),
+                            TableColumn(key="address", label="Address", hidden_on_card=True),
+                        ],
+                        card_primary_key="name",
+                        is_mobile=False,
+                        actions=_kebab,
+                        empty_message="No campuses found.",
+                    ),
                 ),
                 confirmation_dialog(
                     is_open=CampusConfigState.confirm_open,

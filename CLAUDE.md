@@ -727,6 +727,43 @@ one path → single-gate.
 Use this for pages that multiple roles can reach via different permissions (e.g. the
 vision/mission page is accessible to Registrar AND HoD).
 
+### List page loading state rule
+
+Every list page must have a `loading: bool = True` state variable.
+The page renders a spinner while `loading` is `True`; the real list (or genuine
+empty state) when `False`. The `on_load` handler sets `loading = True` after the
+guard passes, populates the list, then sets `loading = False`. Starting at `True`
+means the spinner shows on first mount rather than the empty state.
+
+```python
+class SomeConfigState(BaseState):
+    items: list[dict] = []
+    loading: bool = True   # True so first render shows spinner, not empty state
+
+    async def load_items(self) -> None:
+        guard = self._config_guard("resource", "write")
+        if guard is not None:
+            return guard
+        self.loading = True
+        self.items = []       # reset before query (page-on-load data refresh rule)
+        with open_session() as session:
+            ...               # query and populate self.items
+        self.loading = False
+        self._load_nav_entries()
+```
+
+Page pattern — wrap the data_table in a loading cond:
+```python
+rx.cond(
+    State.loading,
+    rx.center(rx.spinner(), padding="2rem"),
+    data_table(rows=State.items, ..., empty_message="No items found."),
+)
+```
+
+Without this, list pages flash an empty state for ~100–200ms before the DB
+query returns. Discovered and fixed at Session 6.
+
 ### Never name a service method `list`
 
 Naming a service method `list` shadows the Python builtin `list` type in class-body

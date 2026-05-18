@@ -26,6 +26,7 @@ def _svc(session) -> CentreService:
 class CentreConfigState(BaseState):
     centres: list[dict[str, str]] = []
     campus_codes: list[str] = []  # for rx.select — Reflex 0.9.2 accepts flat list[str]
+    loading: bool = True
 
     show_form: bool = False
     editing_id: str = ""
@@ -42,6 +43,7 @@ class CentreConfigState(BaseState):
         guard = self._config_guard("centre", "write")
         if guard is not None:
             return guard
+        self.loading = True
         self.centres = []
         self.campus_codes = []
         self.show_form = False
@@ -60,6 +62,7 @@ class CentreConfigState(BaseState):
                     "campus_code": campus.code if campus else "",
                 })
         self._load_nav_entries()
+        self.loading = False
 
     def set_form_code(self, value: str) -> None:
         self.form_code = value

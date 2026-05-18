@@ -150,17 +150,21 @@ def admin_config_centres() -> rx.Component:
                 ),
                 typed_flash(CentreConfigState.flash, CentreConfigState.flash_type),
                 _inline_form(),
-                data_table(
-                    rows=CentreConfigState.centres,
-                    columns=[
-                        TableColumn(key="code", label="Code"),
-                        TableColumn(key="name", label="Name"),
-                        TableColumn(key="campus", label="Campus"),
-                    ],
-                    card_primary_key="name",
-                    is_mobile=False,
-                    actions=_kebab,
-                    empty_message="No centres found.",
+                rx.cond(
+                    CentreConfigState.loading,
+                    rx.center(rx.spinner(), padding="2rem"),
+                    data_table(
+                        rows=CentreConfigState.centres,
+                        columns=[
+                            TableColumn(key="code", label="Code"),
+                            TableColumn(key="name", label="Name"),
+                            TableColumn(key="campus", label="Campus"),
+                        ],
+                        card_primary_key="name",
+                        is_mobile=False,
+                        actions=_kebab,
+                        empty_message="No centres found.",
+                    ),
                 ),
                 confirmation_dialog(
                     is_open=CentreConfigState.confirm_open,
