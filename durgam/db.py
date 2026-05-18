@@ -30,6 +30,12 @@ def _get_engine():
 
 @contextmanager
 def open_session() -> Generator[Session]:
-    """Yield a SQLModel Session; commits and closes automatically."""
+    """Yield a SQLModel Session.
+
+    Does NOT auto-commit. SQLAlchemy 2.x Session.__exit__ calls session.close()
+    only — not session.commit(). Every handler that writes to the DB must call
+    session.commit() inside the with block after all service/repo calls succeed.
+    Read-only handlers do not need a commit.
+    """
     with Session(_get_engine()) as session:
         yield session

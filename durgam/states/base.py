@@ -120,11 +120,13 @@ class BaseState(rx.State):
         self.admin_authorized = True
         return None
 
-    def _config_guard(self, resource: str):
-        """Resolve session and verify read access to a config resource.
+    def _config_guard(self, resource: str, action: str = "write"):
+        """Resolve session and verify config-level access.
 
-        Parallel to _admin_guard() but checks can("read", resource) rather than
-        can("read","user"). Redirects to "/" (not "/admin") on permission failure.
+        Parallel to _admin_guard() but checks can(action, resource) rather than
+        can("read","user"). Defaults to action="write" so only users who can
+        mutate the resource (not just read it) can reach config pages.
+        Redirects to "/" (not "/admin") on permission failure.
         Sets admin_authorized=True on success so admin_page() shows content.
         """
         self.admin_authorized = False
@@ -139,7 +141,7 @@ class BaseState(rx.State):
             self.current_user_id = ""
             return rx.redirect("/login")
         with open_session() as session:
-            if not can(user_id, "read", resource, None, None, session):
+            if not can(user_id, action, resource, None, None, session):
                 self.flash = "You do not have permission to access this page."
                 self.flash_type = "warning"
                 return rx.redirect("/")

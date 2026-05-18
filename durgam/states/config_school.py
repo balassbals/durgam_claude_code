@@ -33,7 +33,7 @@ class SchoolConfigState(BaseState):
     confirm_body: str = ""
 
     async def load_schools(self) -> None:
-        guard = self._config_guard("school")
+        guard = self._config_guard("school", "write")
         if guard is not None:
             return guard
         self.schools = []
@@ -80,24 +80,24 @@ class SchoolConfigState(BaseState):
 
     @require_role(action="write", resource="school")
     @audit_action(action="write", resource="school")
-    async def save_school(self) -> None:
+    async def save_school(self, form_data: dict) -> None:
+        code = form_data.get("form_code", "").strip()
+        name = form_data.get("form_name", "").strip()
+        dean_role_code = form_data.get("form_dean_role_code", "").strip()
+        editing_id = form_data.get("editing_id", "").strip()
         try:
             with open_session() as session:
                 svc = _svc(session)
                 actor_id = UUID(self.current_user_id)
-                if not self.editing_id:
-                    svc.create(
-                        self.form_code,
-                        self.form_name,
-                        self.form_dean_role_code,
-                        actor_id,
-                    )
+                if not editing_id:
+                    svc.create(code, name, dean_role_code, actor_id)
                 else:
                     svc.update(
-                        UUID(self.editing_id),
-                        {"name": self.form_name, "dean_role_code": self.form_dean_role_code},
+                        UUID(editing_id),
+                        {"name": name, "dean_role_code": dean_role_code},
                         actor_id,
                     )
+                session.commit()  # open_session() does NOT auto-commit
             self.flash = "School saved."
             self.flash_type = "success"
         except SchoolError as e:
@@ -120,6 +120,7 @@ class SchoolConfigState(BaseState):
                 _svc(session).soft_delete(
                     UUID(self.confirm_school_id), UUID(self.current_user_id)
                 )
+                session.commit()  # open_session() does NOT auto-commit
             self.flash = "School deactivated."
             self.flash_type = "success"
         except (SchoolError, HardDeleteBlockedError) as e:

@@ -56,54 +56,68 @@ def _inline_form() -> rx.Component:
                 font_family="var(--font-sans)",
                 margin_bottom="1rem",
             ),
-            rx.vstack(
+            rx.form(
                 rx.vstack(
-                    rx.text("Code", font_size="0.85rem", color="var(--color-muted)"),
                     rx.input(
-                        value=CentreConfigState.form_code,
-                        on_change=CentreConfigState.set_form_code,
-                        placeholder="e.g. CMB",
-                        disabled=CentreConfigState.editing_id != "",
-                        max_length=10,
+                        type="hidden",
+                        name="editing_id",
+                        value=CentreConfigState.editing_id,
+                    ),
+                    rx.vstack(
+                        rx.text("Code", font_size="0.85rem", color="var(--color-muted)"),
+                        rx.input(
+                            name="form_code",
+                            value=CentreConfigState.form_code,
+                            on_change=CentreConfigState.set_form_code,
+                            placeholder="e.g. CMB",
+                            disabled=CentreConfigState.editing_id != "",
+                            max_length=10,
+                            width="100%",
+                        ),
+                        align="start",
+                        gap="0.25rem",
                         width="100%",
                     ),
-                    align="start",
-                    gap="0.25rem",
-                    width="100%",
-                ),
-                rx.vstack(
-                    rx.text("Name", font_size="0.85rem", color="var(--color-muted)"),
-                    rx.input(
-                        value=CentreConfigState.form_name,
-                        on_change=CentreConfigState.set_form_name,
-                        placeholder="Centre name",
+                    rx.vstack(
+                        rx.text("Name", font_size="0.85rem", color="var(--color-muted)"),
+                        rx.input(
+                            name="form_name",
+                            value=CentreConfigState.form_name,
+                            on_change=CentreConfigState.set_form_name,
+                            placeholder="Centre name",
+                            width="100%",
+                        ),
+                        align="start",
+                        gap="0.25rem",
                         width="100%",
                     ),
-                    align="start",
-                    gap="0.25rem",
-                    width="100%",
-                ),
-                rx.vstack(
-                    rx.text("Campus", font_size="0.85rem", color="var(--color-muted)"),
-                    # rx.select with a flat list[str] state var — Reflex 0.9.2 compatible.
-                    rx.select(
-                        CentreConfigState.campus_codes,
-                        value=CentreConfigState.form_campus_code,
-                        on_change=CentreConfigState.set_form_campus_code,
+                    rx.vstack(
+                        rx.text("Campus", font_size="0.85rem", color="var(--color-muted)"),
+                        # rx.select with flat list[str] — Reflex 0.9.2 compatible.
+                        # Campus code value is kept in state via set_form_campus_code;
+                        # it is NOT submitted via form_data (select isn't a named HTML input
+                        # in Reflex 0.9.x), so save_centre reads self.form_campus_code.
+                        rx.select(
+                            CentreConfigState.campus_codes,
+                            value=CentreConfigState.form_campus_code,
+                            on_change=CentreConfigState.set_form_campus_code,
+                            width="100%",
+                        ),
+                        align="start",
+                        gap="0.25rem",
                         width="100%",
                     ),
+                    rx.hstack(
+                        primary_btn("Save", type="submit"),
+                        secondary_btn("Cancel", on_click=CentreConfigState.cancel_form),
+                        gap="0.75rem",
+                    ),
+                    gap="1rem",
                     align="start",
-                    gap="0.25rem",
                     width="100%",
                 ),
-                rx.hstack(
-                    primary_btn("Save", on_click=CentreConfigState.save_centre),
-                    secondary_btn("Cancel", on_click=CentreConfigState.cancel_form),
-                    gap="0.75rem",
-                ),
-                gap="1rem",
-                align="start",
-                width="100%",
+                on_submit=CentreConfigState.save_centre,
+                reset_on_submit=False,
             ),
             background="white",
             border="1px solid var(--color-rule)",

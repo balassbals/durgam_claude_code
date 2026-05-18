@@ -36,10 +36,11 @@ class CampusConfigState(BaseState):
     confirm_body: str = ""
 
     async def load_campuses(self) -> None:
-        guard = self._config_guard("campus")
+        # campus:write:* gates this page — SYSTEM_ADMIN only (Refinement viii).
+        guard = self._config_guard("campus", "write")
         if guard is not None:
             return guard
-        self.campuses = []  # reset before query
+        self.campuses = []  # reset before query (page-on-load data refresh rule)
         self.show_form = False
         with open_session() as session:
             for c in _svc(session).list():
@@ -85,24 +86,25 @@ class CampusConfigState(BaseState):
 
     @require_role(action="write", resource="campus")
     @audit_action(action="write", resource="campus")
-    async def save_campus(self) -> None:
+    async def save_campus(self, form_data: dict) -> None:
+        """Receives form_data from rx.form on_submit — authoritative values."""
+        code = form_data.get("form_code", "").strip()
+        name = form_data.get("form_name", "").strip()
+        address = form_data.get("form_address", "").strip()
+        editing_id = form_data.get("editing_id", "").strip()
         try:
             with open_session() as session:
                 svc = _svc(session)
                 actor_id = UUID(self.current_user_id)
-                if not self.editing_id:
-                    svc.create(
-                        self.form_code,
-                        self.form_name,
-                        actor_id,
-                        address=self.form_address.strip() or None,
-                    )
+                if not editing_id:
+                    svc.create(code, name, actor_id, address=address or None)
                 else:
                     svc.update(
-                        UUID(self.editing_id),
-                        {"name": self.form_name, "address": self.form_address.strip() or None},
+                        UUID(editing_id),
+                        {"name": name, "address": address or None},
                         actor_id,
                     )
+                session.commit()  # open_session() does NOT auto-commit
             self.flash = "Campus saved."
             self.flash_type = "success"
         except CampusError as e:
@@ -128,6 +130,7 @@ class CampusConfigState(BaseState):
                 _svc(session).soft_delete(
                     UUID(self.confirm_campus_id), UUID(self.current_user_id)
                 )
+                session.commit()  # open_session() does NOT auto-commit
             self.flash = "Campus deactivated."
             self.flash_type = "success"
         except (CampusError, HardDeleteBlockedError) as e:

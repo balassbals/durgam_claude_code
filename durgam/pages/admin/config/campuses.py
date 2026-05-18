@@ -56,53 +56,74 @@ def _inline_form() -> rx.Component:
                 font_family="var(--font-sans)",
                 margin_bottom="1rem",
             ),
-            rx.vstack(
+            # rx.form collects all named inputs and sends them as form_data dict
+            # to save_campus. This guarantees the handler receives current values
+            # even if on_change round-trips were dropped (M3 Bug 1 fix).
+            rx.form(
                 rx.vstack(
-                    rx.text("Code", font_size="0.85rem", color="var(--color-muted)"),
+                    # Hidden field carries editing_id so save_campus knows
+                    # whether this is a create or edit operation.
                     rx.input(
-                        value=CampusConfigState.form_code,
-                        on_change=CampusConfigState.set_form_code,
-                        placeholder="e.g. PSN",
-                        disabled=CampusConfigState.editing_id != "",
-                        max_length=10,
+                        type="hidden",
+                        name="editing_id",
+                        value=CampusConfigState.editing_id,
+                    ),
+                    rx.vstack(
+                        rx.text("Code", font_size="0.85rem", color="var(--color-muted)"),
+                        rx.input(
+                            name="form_code",
+                            value=CampusConfigState.form_code,
+                            on_change=CampusConfigState.set_form_code,
+                            placeholder="e.g. PSN",
+                            disabled=CampusConfigState.editing_id != "",
+                            max_length=10,
+                            width="100%",
+                        ),
+                        align="start",
+                        gap="0.25rem",
                         width="100%",
                     ),
-                    align="start",
-                    gap="0.25rem",
-                    width="100%",
-                ),
-                rx.vstack(
-                    rx.text("Name", font_size="0.85rem", color="var(--color-muted)"),
-                    rx.input(
-                        value=CampusConfigState.form_name,
-                        on_change=CampusConfigState.set_form_name,
-                        placeholder="Campus name",
+                    rx.vstack(
+                        rx.text("Name", font_size="0.85rem", color="var(--color-muted)"),
+                        rx.input(
+                            name="form_name",
+                            value=CampusConfigState.form_name,
+                            on_change=CampusConfigState.set_form_name,
+                            placeholder="Campus name",
+                            width="100%",
+                        ),
+                        align="start",
+                        gap="0.25rem",
                         width="100%",
                     ),
-                    align="start",
-                    gap="0.25rem",
-                    width="100%",
-                ),
-                rx.vstack(
-                    rx.text("Address (optional)", font_size="0.85rem", color="var(--color-muted)"),
-                    rx.input(
-                        value=CampusConfigState.form_address,
-                        on_change=CampusConfigState.set_form_address,
-                        placeholder="Full address",
+                    rx.vstack(
+                        rx.text(
+                            "Address (optional)",
+                            font_size="0.85rem",
+                            color="var(--color-muted)",
+                        ),
+                        rx.input(
+                            name="form_address",
+                            value=CampusConfigState.form_address,
+                            on_change=CampusConfigState.set_form_address,
+                            placeholder="Full address",
+                            width="100%",
+                        ),
+                        align="start",
+                        gap="0.25rem",
                         width="100%",
                     ),
+                    rx.hstack(
+                        primary_btn("Save", type="submit"),
+                        secondary_btn("Cancel", on_click=CampusConfigState.cancel_form),
+                        gap="0.75rem",
+                    ),
+                    gap="1rem",
                     align="start",
-                    gap="0.25rem",
                     width="100%",
                 ),
-                rx.hstack(
-                    primary_btn("Save", on_click=CampusConfigState.save_campus),
-                    secondary_btn("Cancel", on_click=CampusConfigState.cancel_form),
-                    gap="0.75rem",
-                ),
-                gap="1rem",
-                align="start",
-                width="100%",
+                on_submit=CampusConfigState.save_campus,
+                reset_on_submit=False,
             ),
             background="white",
             border="1px solid var(--color-rule)",

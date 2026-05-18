@@ -618,6 +618,87 @@ session fixture's teardown drops all SQLModel tables but leaves `alembic_version
 the current head — creating an inconsistent state. `_reset_test_db()` drops
 `alembic_version` and all SQLModel tables, then runs `upgrade head` from scratch.
 
+## Patterns established at M3
+
+These patterns were discovered at M3 and apply to every subsequent milestone.
+
+### open_session() does NOT auto-commit
+
+`open_session()` in `durgam/db.py` uses `with Session(engine) as session:`. In SQLAlchemy 2.0.49,
+this calls `session.close()` on exit — NOT `session.commit()`. Every state handler that writes
+to the DB must call `session.commit()` inside the `with open_session() as session:` block after
+all service/repo calls succeed:
+
+```python
+with open_session() as session:
+    svc = _svc(session)
+    svc.update(entity_id, fields, actor_id)
+    session.commit()  # REQUIRED — open_session does NOT auto-commit
+```
+
+Read-only handlers do not need a commit. This bug class appeared at Session 5 (campus/school/
+centre CRUD appeared to succeed but no data persisted). Verified by SQLAlchemy test:
+`with Session(engine) as session: session.flush()` → second session sees no data.
+
+### rx.form on_submit is the canonical form pattern
+
+For any form with multiple inputs in Reflex 0.9.x, use `rx.form` with `on_submit=State.handler`
+rather than individual `on_click=State.save` on a button:
+
+```python
+rx.form(
+    rx.input(name="form_name", value=State.form_name, on_change=State.set_form_name),
+    rx.input(type="hidden", name="editing_id", value=State.editing_id),
+    primary_btn("Save", type="submit"),
+    on_submit=State.save_handler,
+    reset_on_submit=False,
+)
+```
+
+The handler receives `form_data: dict` with all named input values:
+```python
+async def save_handler(self, form_data: dict) -> None:
+    name = form_data.get("form_name", "").strip()
+```
+
+This guarantees form data reaches the handler even if intermediate `on_change` round-trips
+were dropped. The handler must still call `session.commit()` for writes.
+
+### _config_guard checks write permission, not read
+
+`_config_guard(resource, action="write")` defaults to checking write (not read) permission.
+All users have read access to M3 resources (via BASIC_USER seed), so checking read would
+let every authenticated user reach admin config pages. Always pass `action="write"` or
+`action="configure"` explicitly for config pages:
+
+- `/admin/config` landing: `_config_guard("university_vision_mission", "write")`
+  (REGISTRAR has this; STUDENT does not)
+- `/admin/config/campuses`: `_config_guard("campus", "write")` (SYSTEM_ADMIN only)
+- `/admin/config/schools`: `_config_guard("school", "write")`
+- `/admin/config/centres`: `_config_guard("centre", "write")`
+- `/admin/config/departments`: `_config_guard("department", "write")`
+- `/admin/config/class-timings`: `_config_guard("class_timings_config", "configure")`
+- `/admin/config/working-days`: `_config_guard("working_days_config", "configure")`
+
+### Page-handler wiring verification (M3)
+
+The unit + integration test suite does NOT cover whether a Reflex form's submit actually
+triggers the right state handler, or whether a page's on_load guard prevents rendering.
+Manual verification of at least one create + edit + delete flow AND one route-guard
+incognito check is required at every session boundary before continuing.
+
+Bugs found at Session 5: CRUD didn't persist (missing session.commit); _config_guard
+admitted all authenticated users (checked read permission which BASIC_USER has). Both
+were invisible to pytest; only manual UI testing revealed them.
+
+### Never name a service method `list`
+
+Naming a service method `list` shadows the Python builtin `list` type in class-body
+annotation evaluation, causing `TypeError: 'function' object is not subscriptable` for
+any return type annotation like `-> list[Campus]` in a later method. Use entity-specific
+names (`list_campuses`, `list_all`) or add `from __future__ import annotations` to the
+service file to defer annotation evaluation. Discovered at Session 4.
+
 ## Current milestone
 **M3 — Configuration — Organisational Core.**
 

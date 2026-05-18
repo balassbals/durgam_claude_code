@@ -1,8 +1,7 @@
 """CentreConfigState — centre list, create, edit (/admin/config/centres).
 
-Campus selection uses codes (PSN/BRN/NDG/ATP) as the form value; the service
-looks up the campus UUID by code at save time. This avoids rx.option / dict
-state vars that are not reliably supported in Reflex 0.9.2.
+Campus selection uses codes (PSN/BRN/NDG/ATP) via rx.select (flat list[str]).
+The campus UUID is resolved from code at save time via CampusRepository.get_by_code.
 """
 
 from __future__ import annotations
@@ -26,14 +25,13 @@ def _svc(session) -> CentreService:
 
 class CentreConfigState(BaseState):
     centres: list[dict[str, str]] = []
-    # Flat list of campus codes for rx.select — Reflex 0.9.2 select accepts list[str].
-    campus_codes: list[str] = []
+    campus_codes: list[str] = []  # for rx.select — Reflex 0.9.2 accepts flat list[str]
 
     show_form: bool = False
     editing_id: str = ""
     form_code: str = ""
     form_name: str = ""
-    form_campus_code: str = ""  # stores campus code, e.g. "PSN"
+    form_campus_code: str = ""
 
     confirm_open: bool = False
     confirm_centre_id: str = ""
@@ -41,7 +39,7 @@ class CentreConfigState(BaseState):
     confirm_body: str = ""
 
     async def load_centres(self) -> None:
-        guard = self._config_guard("centre")
+        guard = self._config_guard("centre", "write")
         if guard is not None:
             return guard
         self.centres = []
@@ -63,7 +61,6 @@ class CentreConfigState(BaseState):
                 })
         self._load_nav_entries()
 
-    # Explicit setters required by Reflex 0.9.2 for sub-state on_change handlers.
     def set_form_code(self, value: str) -> None:
         self.form_code = value
 
@@ -80,9 +77,7 @@ class CentreConfigState(BaseState):
         self.form_campus_code = self.campus_codes[0] if self.campus_codes else ""
         self.show_form = True
 
-    def open_edit(
-        self, centre_id: str, code: str, name: str, campus_code: str
-    ) -> None:
+    def open_edit(self, centre_id: str, code: str, name: str, campus_code: str) -> None:
         self.editing_id = centre_id
         self.form_code = code
         self.form_name = name
@@ -98,25 +93,32 @@ class CentreConfigState(BaseState):
 
     @require_role(action="write", resource="centre")
     @audit_action(action="write", resource="centre")
-    async def save_centre(self) -> None:
+    async def save_centre(self, form_data: dict) -> None:
+        code = form_data.get("form_code", "").strip()
+        name = form_data.get("form_name", "").strip()
+        # rx.select value comes via state var; form_data may not include it.
+        # Use self.form_campus_code (updated by set_form_campus_code on_change).
+        campus_code = self.form_campus_code.strip()
+        editing_id = form_data.get("editing_id", "").strip()
         try:
             with open_session() as session:
                 campus_repo = CampusRepository(session)
-                campus = campus_repo.get_by_code(self.form_campus_code)
+                campus = campus_repo.get_by_code(campus_code)
                 if campus is None:
-                    self.flash = f"Campus '{self.form_campus_code}' not found."
+                    self.flash = f"Campus '{campus_code}' not found."
                     self.flash_type = "error"
                     return
                 svc = _svc(session)
                 actor_id = UUID(self.current_user_id)
-                if not self.editing_id:
-                    svc.create(self.form_code, self.form_name, campus.id, actor_id)
+                if not editing_id:
+                    svc.create(code, name, campus.id, actor_id)
                 else:
                     svc.update(
-                        UUID(self.editing_id),
-                        {"name": self.form_name, "campus_id": campus.id},
+                        UUID(editing_id),
+                        {"name": name, "campus_id": campus.id},
                         actor_id,
                     )
+                session.commit()  # open_session() does NOT auto-commit
             self.flash = "Centre saved."
             self.flash_type = "success"
         except CentreError as e:
@@ -139,6 +141,7 @@ class CentreConfigState(BaseState):
                 _svc(session).soft_delete(
                     UUID(self.confirm_centre_id), UUID(self.current_user_id)
                 )
+                session.commit()  # open_session() does NOT auto-commit
             self.flash = "Centre deactivated."
             self.flash_type = "success"
         except (CentreError, HardDeleteBlockedError) as e:
