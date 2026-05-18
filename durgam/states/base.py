@@ -120,6 +120,32 @@ class BaseState(rx.State):
         self.admin_authorized = True
         return None
 
+    def _config_guard(self, resource: str):
+        """Resolve session and verify read access to a config resource.
+
+        Parallel to _admin_guard() but checks can("read", resource) rather than
+        can("read","user"). Redirects to "/" (not "/admin") on permission failure.
+        Sets admin_authorized=True on success so admin_page() shows content.
+        """
+        self.admin_authorized = False
+        self.flash = ""
+        self.flash_type = "info"
+        self._resolve_session()
+        if not self.current_user_id:
+            return rx.redirect("/login")
+        try:
+            user_id = UUID(self.current_user_id)
+        except ValueError:
+            self.current_user_id = ""
+            return rx.redirect("/login")
+        with open_session() as session:
+            if not can(user_id, "read", resource, None, None, session):
+                self.flash = "You do not have permission to access this page."
+                self.flash_type = "warning"
+                return rx.redirect("/")
+        self.admin_authorized = True
+        return None
+
     def _dismiss_generated_password(self) -> None:
         """Clear the one-time temp-password display. Call from Dismiss button."""
         self.generated_password = ""

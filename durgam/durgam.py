@@ -3,6 +3,7 @@ import reflex as rx
 from durgam.config import settings
 from durgam.logging import configure_logging
 from durgam.pages.admin import index as _admin_nav_register  # noqa: F401 — registers nav entries
+from durgam.pages.admin.config import __init__ as _config_nav_register  # noqa: F401 — registers config nav entries
 from durgam.pages.admin.import_users import admin_import_users
 from durgam.pages.admin.index import admin_index
 from durgam.pages.admin.permissions import AdminPermissionsState, admin_permissions
@@ -68,3 +69,22 @@ app.add_page(admin_permissions, route="/admin/permissions",
 app.add_page(admin_import_users, route="/admin/import",
              on_load=BulkImportState.reset_import)
 app.add_page(audit_log, route="/audit", on_load=AuditLogState.load_audit)
+
+# ── M3 Config routes ────────────────────────────────────────────────────────────
+from durgam.pages.admin.config.index import admin_config_index
+from durgam.pages.admin.config.campuses import admin_config_campuses
+from durgam.pages.admin.config.schools import admin_config_schools
+from durgam.pages.admin.config.centres import admin_config_centres
+from durgam.states.config_landing import ConfigLandingState
+from durgam.states.config_campus import CampusConfigState
+from durgam.states.config_school import SchoolConfigState
+from durgam.states.config_centre import CentreConfigState
+
+app.add_page(admin_config_index, route="/admin/config",
+             on_load=ConfigLandingState.load_config_landing)
+app.add_page(admin_config_campuses, route="/admin/config/campuses",
+             on_load=CampusConfigState.load_campuses)
+app.add_page(admin_config_schools, route="/admin/config/schools",
+             on_load=SchoolConfigState.load_schools)
+app.add_page(admin_config_centres, route="/admin/config/centres",
+             on_load=CentreConfigState.load_centres)
