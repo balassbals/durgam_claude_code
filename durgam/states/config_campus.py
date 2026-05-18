@@ -51,6 +51,17 @@ class CampusConfigState(BaseState):
                 })
         self._load_nav_entries()
 
+    # Explicit setters — Reflex 0.9.2 does not auto-generate set_* for
+    # sub-state classes; on_change handlers require explicit methods.
+    def set_form_code(self, value: str) -> None:
+        self.form_code = value
+
+    def set_form_name(self, value: str) -> None:
+        self.form_name = value
+
+    def set_form_address(self, value: str) -> None:
+        self.form_address = value
+
     def open_create(self) -> None:
         self.editing_id = ""
         self.form_code = ""

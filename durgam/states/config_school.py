@@ -48,6 +48,15 @@ class SchoolConfigState(BaseState):
                 })
         self._load_nav_entries()
 
+    def set_form_code(self, value: str) -> None:
+        self.form_code = value
+
+    def set_form_name(self, value: str) -> None:
+        self.form_name = value
+
+    def set_form_dean_role_code(self, value: str) -> None:
+        self.form_dean_role_code = value
+
     def open_create(self) -> None:
         self.editing_id = ""
         self.form_code = ""
