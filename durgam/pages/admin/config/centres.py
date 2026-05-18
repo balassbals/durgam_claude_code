@@ -32,7 +32,7 @@ def _kebab(row: dict) -> rx.Component:
             rx.menu.item(
                 "Edit",
                 on_click=CentreConfigState.open_edit(  # type: ignore[call-arg, func-returns-value]
-                    row["id"], row["code"], row["name"], row["campus_id"]
+                    row["id"], row["code"], row["name"], row["campus_code"]
                 ),
             ),
             rx.menu.item(
@@ -44,10 +44,6 @@ def _kebab(row: dict) -> rx.Component:
             ),
         ),
     )
-
-
-def _campus_option(campus: dict) -> rx.Component:
-    return rx.option(campus["name"], value=campus["id"])
 
 
 def _inline_form() -> rx.Component:
@@ -89,10 +85,11 @@ def _inline_form() -> rx.Component:
                 ),
                 rx.vstack(
                     rx.text("Campus", font_size="0.85rem", color="var(--color-muted)"),
+                    # rx.select with a flat list[str] state var — Reflex 0.9.2 compatible.
                     rx.select(
-                        rx.foreach(CentreConfigState.campus_options, _campus_option),
-                        value=CentreConfigState.form_campus_id,
-                        on_change=CentreConfigState.set_form_campus_id,
+                        CentreConfigState.campus_codes,
+                        value=CentreConfigState.form_campus_code,
+                        on_change=CentreConfigState.set_form_campus_code,
                         width="100%",
                     ),
                     align="start",
