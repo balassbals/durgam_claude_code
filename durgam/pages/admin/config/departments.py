@@ -149,7 +149,7 @@ def _inline_form() -> rx.Component:
                     ),
                     rx.hstack(
                         primary_btn("Save", type="submit"),
-                        secondary_btn("Cancel", on_click=AdminDepartmentsState.cancel_form),
+                        secondary_btn("Cancel", on_click=AdminDepartmentsState.cancel_form, type="button"),
                         gap="0.75rem",
                     ),
                     gap="1rem",
@@ -299,12 +299,22 @@ def _detail_panel() -> rx.Component:
         ),
         rx.divider(margin_y="0.75rem"),
         # ── Sub-departments section ───────────────────────────────────────────
-        rx.text(
-            "Sub-Departments",
-            font_weight="600",
-            font_size="0.9rem",
-            font_family="var(--font-sans)",
-            color="var(--color-muted)",
+        rx.hstack(
+            rx.text(
+                "Sub-Departments",
+                font_weight="600",
+                font_size="0.9rem",
+                font_family="var(--font-sans)",
+                color="var(--color-muted)",
+            ),
+            rx.text(
+                "(read-only at M3 — management deferred to a future milestone)",
+                font_size="0.78rem",
+                color="var(--color-muted)",
+                font_family="var(--font-sans)",
+            ),
+            align="center",
+            gap="0.5rem",
             margin_bottom="0.5rem",
         ),
         rx.cond(

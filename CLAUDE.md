@@ -727,6 +727,71 @@ one path → single-gate.
 Use this for pages that multiple roles can reach via different permissions (e.g. the
 vision/mission page is accessible to Registrar AND HoD).
 
+### Auto-create implicit join rows on entity creation
+
+When an entity has a required FK to another entity AND a separate join table
+that represents the same relationship, the create handler must write BOTH the
+FK row AND the join row in the same transaction. The join table is the source
+of truth for queries that count relationships; a missing join row shows zero
+even though the FK is set.
+
+Example: `Department` has `main_campus_id` (FK to `campuses`) AND
+`department_campuses` join table. The `save_department` create path calls
+`svc.create(...)` AND `svc.add_campus(new_dept.id, main_campus_id, actor_id)`
+before `session.commit()`. The seed script does both; the UI handler must too.
+
+Same pattern applies wherever dual-representation exists (FK + join table
+for the same relationship). Discovered as Bug 1 at M3 Session 6.
+
+### Form Cancel button separation rule
+
+Cancel buttons inside `rx.form` must carry `type="button"` to prevent the
+browser from submitting the form. Without it, `<button>` defaults to
+`type="submit"` and triggers the form's `on_submit` handler (including
+validation), which is Bug 2's root cause at M3 Session 6.
+
+```python
+# In the page:
+primary_btn("Save", type="submit"),
+secondary_btn("Cancel", on_click=State.cancel_form, type="button"),
+
+# In the state:
+def cancel_form(self) -> None:
+    self.show_form = False
+    # ... reset form fields ...
+    self.flash = ""          # clear any validation errors shown before cancel
+    self.flash_type = "info"
+```
+
+### Flash lifecycle in handlers that call load_*
+
+`_config_guard()` (called inside every `load_*` handler) clears `self.flash`.
+If a handler sets flash and then calls `load_*`, the flash is erased before
+Reflex sends the final state to the client — the success message is never seen.
+
+Fix: set `self.flash` and `self.flash_type` AFTER the `await self.load_*()` call.
+On error paths that return early without calling `load_*`, set flash before return.
+
+```python
+# Wrong — flash set before load; _config_guard inside load clears it
+self.flash = "Saved."
+await self.load_items()    # clears flash!
+
+# Correct — flash set after load so the message survives
+await self.load_items()
+self.flash = "Saved."      # set after _config_guard has already run
+self.flash_type = "success"
+
+# Error paths return early and don't call load — set flash before return
+except SomeError as e:
+    self.flash = e.message
+    self.flash_type = "error"
+    return
+```
+
+This pattern applies to every `save_*`, `soft_delete_*`, and inline action
+handler in M3 and all subsequent milestones. Discovered as Bug 3 at M3 Session 6.
+
 ### List page loading state rule
 
 Every list page must have a `loading: bool = True` state variable.

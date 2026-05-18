@@ -155,6 +155,8 @@ class AdminDepartmentsState(BaseState):
         self.form_name = ""
         self.form_school_id = ""
         self.form_main_campus_id = ""
+        self.flash = ""
+        self.flash_type = "info"
 
     # ── Save ──────────────────────────────────────────────────────────────────
 
@@ -179,11 +181,15 @@ class AdminDepartmentsState(BaseState):
                 actor_id = UUID(self.current_user_id)
                 svc = _dept_svc(session)
                 if not editing_id:
-                    svc.create(
+                    new_dept = svc.create(
                         code, name,
                         UUID(school_id_str), UUID(main_campus_id_str),
                         actor_id,
                     )
+                    # Auto-create the main-campus join row.  The list query
+                    # counts DepartmentCampus rows; without this the campus
+                    # count shows 0 immediately after create (Bug 1).
+                    svc.add_campus(new_dept.id, UUID(main_campus_id_str), actor_id)
                 else:
                     svc.update(
                         UUID(editing_id),
@@ -195,14 +201,18 @@ class AdminDepartmentsState(BaseState):
                         actor_id,
                     )
                 session.commit()  # open_session() does NOT auto-commit
-            self.flash = "Department saved."
-            self.flash_type = "success"
+            success_msg = "Department saved."
         except DepartmentError as e:
             self.flash = e.message
             self.flash_type = "error"
+            return
         self.show_form = False
         self.editing_id = ""
+        # load_departments calls _config_guard which clears flash.
+        # Set flash AFTER load so the success message is visible (Bug 3).
         await self.load_departments()
+        self.flash = success_msg
+        self.flash_type = "success"
 
     # ── Soft delete ───────────────────────────────────────────────────────────
 
@@ -223,14 +233,16 @@ class AdminDepartmentsState(BaseState):
                     UUID(self.confirm_dept_id), UUID(self.current_user_id)
                 )
                 session.commit()  # open_session() does NOT auto-commit
-            self.flash = "Department deactivated."
-            self.flash_type = "success"
         except (DepartmentError, HardDeleteBlockedError) as e:
             self.flash = e.message
             self.flash_type = "error"
+            self.confirm_open = False
+            return
         self.confirm_open = False
         self.confirm_dept_id = ""
         await self.load_departments()
+        self.flash = "Department deactivated."
+        self.flash_type = "success"
 
     def cancel_confirm(self) -> None:
         self.confirm_open = False
@@ -287,6 +299,7 @@ class AdminDepartmentsState(BaseState):
     async def add_campus_link(self) -> None:
         if not self.add_campus_id:
             return
+        self.flash = ""  # clear stale flash before this action (Bug 3)
         try:
             with open_session() as session:
                 _dept_svc(session).add_campus(
@@ -295,12 +308,14 @@ class AdminDepartmentsState(BaseState):
                     UUID(self.current_user_id),
                 )
                 session.commit()  # open_session() does NOT auto-commit
-            self.flash = "Campus linked."
-            self.flash_type = "success"
         except DepartmentError as e:
             self.flash = e.message
             self.flash_type = "error"
+            return
+        # open_detail does not call _config_guard, so flash set here survives.
         await self.open_detail(self.detail_dept_id, self.detail_dept_name)
+        self.flash = "Campus linked."
+        self.flash_type = "success"
 
     def open_remove_campus_confirm(self, campus_id: str) -> None:
         self.confirm_remove_campus_id = campus_id
@@ -309,6 +324,7 @@ class AdminDepartmentsState(BaseState):
     @require_role(action="write", resource="department")
     @audit_action(action="write", resource="department")
     async def remove_campus_link(self) -> None:
+        self.flash = ""  # clear stale flash before this action (Bug 3)
         try:
             with open_session() as session:
                 _dept_svc(session).remove_campus(
@@ -317,13 +333,15 @@ class AdminDepartmentsState(BaseState):
                     UUID(self.current_user_id),
                 )
                 session.commit()  # open_session() does NOT auto-commit
-            self.flash = "Campus removed."
-            self.flash_type = "success"
         except DepartmentError as e:
             self.flash = e.message
             self.flash_type = "error"
+            self.confirm_remove_campus_open = False
+            return
         self.confirm_remove_campus_open = False
         await self.open_detail(self.detail_dept_id, self.detail_dept_name)
+        self.flash = "Campus removed."
+        self.flash_type = "success"
 
     def cancel_remove_campus(self) -> None:
         self.confirm_remove_campus_open = False

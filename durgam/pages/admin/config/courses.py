@@ -238,7 +238,7 @@ def _inline_form() -> rx.Component:
                     ),
                     rx.hstack(
                         primary_btn("Save", type="submit"),
-                        secondary_btn("Cancel", on_click=AdminCoursesState.cancel_form),
+                        secondary_btn("Cancel", on_click=AdminCoursesState.cancel_form, type="button"),
                         gap="0.75rem",
                     ),
                     gap="1rem",

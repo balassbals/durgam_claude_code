@@ -187,6 +187,8 @@ class AdminCoursesState(BaseState):
         self.form_tutorial = ""
         self.form_practical = ""
         self.form_evaluation = "I"
+        self.flash = ""
+        self.flash_type = "info"
 
     # ── Save ──────────────────────────────────────────────────────────────────
 
@@ -244,14 +246,15 @@ class AdminCoursesState(BaseState):
                         actor_id,
                     )
                 session.commit()  # open_session() does NOT auto-commit
-            self.flash = "Course saved."
-            self.flash_type = "success"
         except CourseError as e:
             self.flash = e.message
             self.flash_type = "error"
+            return
         self.show_form = False
         self.editing_id = ""
         await self.load_courses()
+        self.flash = "Course saved."
+        self.flash_type = "success"
 
     # ── Soft delete ───────────────────────────────────────────────────────────
 
@@ -272,14 +275,16 @@ class AdminCoursesState(BaseState):
                     UUID(self.confirm_course_id), UUID(self.current_user_id)
                 )
                 session.commit()  # open_session() does NOT auto-commit
-            self.flash = "Course deactivated."
-            self.flash_type = "success"
         except (CourseError, HardDeleteBlockedError) as e:
             self.flash = e.message
             self.flash_type = "error"
+            self.confirm_open = False
+            return
         self.confirm_open = False
         self.confirm_course_id = ""
         await self.load_courses()
+        self.flash = "Course deactivated."
+        self.flash_type = "success"
 
     def cancel_confirm(self) -> None:
         self.confirm_open = False
