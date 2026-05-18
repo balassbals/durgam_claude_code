@@ -109,15 +109,16 @@ def _inline_form() -> rx.Component:
                     ),
                     rx.vstack(
                         rx.text("School", font_size="0.85rem", color="var(--color-muted)"),
-                        rx.select(
-                            rx.foreach(
-                                AdminDepartmentsState.schools_dropdown,
-                                lambda s: rx.select.item(s["label"], value=s["id"]),
+                        rx.select.root(
+                            rx.select.trigger(placeholder="Select school"),
+                            rx.select.content(
+                                rx.foreach(
+                                    AdminDepartmentsState.schools_dropdown,
+                                    lambda s: rx.select.item(s["label"], value=s["id"]),
+                                ),
                             ),
                             value=AdminDepartmentsState.form_school_id,
                             on_change=AdminDepartmentsState.set_form_school_id,
-                            placeholder="Select school",
-                            name="form_school_id",
                             width="100%",
                         ),
                         align="start",
@@ -130,15 +131,16 @@ def _inline_form() -> rx.Component:
                             font_size="0.85rem",
                             color="var(--color-muted)",
                         ),
-                        rx.select(
-                            rx.foreach(
-                                AdminDepartmentsState.campuses_dropdown,
-                                lambda c: rx.select.item(c["label"], value=c["id"]),
+                        rx.select.root(
+                            rx.select.trigger(placeholder="Select main campus"),
+                            rx.select.content(
+                                rx.foreach(
+                                    AdminDepartmentsState.campuses_dropdown,
+                                    lambda c: rx.select.item(c["label"], value=c["id"]),
+                                ),
                             ),
                             value=AdminDepartmentsState.form_main_campus_id,
                             on_change=AdminDepartmentsState.set_form_main_campus_id,
-                            placeholder="Select main campus",
-                            name="form_main_campus_id",
                             width="100%",
                         ),
                         align="start",
@@ -274,14 +276,16 @@ def _detail_panel() -> rx.Component:
         ),
         # Add campus row
         rx.hstack(
-            rx.select(
-                rx.foreach(
-                    AdminDepartmentsState.available_campuses,
-                    lambda c: rx.select.item(c["label"], value=c["id"]),
+            rx.select.root(
+                rx.select.trigger(placeholder="Add campus…"),
+                rx.select.content(
+                    rx.foreach(
+                        AdminDepartmentsState.available_campuses,
+                        lambda c: rx.select.item(c["label"], value=c["id"]),
+                    ),
                 ),
                 value=AdminDepartmentsState.add_campus_id,
                 on_change=AdminDepartmentsState.set_add_campus_id,
-                placeholder="Add campus…",
                 width="12rem",
             ),
             primary_btn(

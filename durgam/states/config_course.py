@@ -196,9 +196,10 @@ class AdminCoursesState(BaseState):
         """Receives form_data from rx.form on_submit — authoritative values."""
         code = form_data.get("form_code", "").strip()
         name = form_data.get("form_name", "").strip()
-        program_id_str = form_data.get("form_program_id", "").strip()
-        department_id_str = form_data.get("form_department_id", "").strip()
-        evaluation = form_data.get("form_evaluation", "I").strip()
+        # Dropdowns use rx.select.root (no name= attr) — read from state vars.
+        program_id_str = self.form_program_id.strip()
+        department_id_str = self.form_department_id.strip()
+        evaluation = self.form_evaluation.strip() or "I"
         editing_id = form_data.get("editing_id", "").strip()
 
         try:

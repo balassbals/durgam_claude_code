@@ -107,15 +107,16 @@ def _inline_form() -> rx.Component:
                     ),
                     rx.vstack(
                         rx.text("Program", font_size="0.85rem", color="var(--color-muted)"),
-                        rx.select(
-                            rx.foreach(
-                                AdminCoursesState.programs_dropdown,
-                                lambda p: rx.select.item(p["label"], value=p["id"]),
+                        rx.select.root(
+                            rx.select.trigger(placeholder="Select program"),
+                            rx.select.content(
+                                rx.foreach(
+                                    AdminCoursesState.programs_dropdown,
+                                    lambda p: rx.select.item(p["label"], value=p["id"]),
+                                ),
                             ),
                             value=AdminCoursesState.form_program_id,
                             on_change=AdminCoursesState.set_form_program_id,
-                            placeholder="Select program",
-                            name="form_program_id",
                             width="100%",
                         ),
                         align="start",
@@ -126,15 +127,16 @@ def _inline_form() -> rx.Component:
                         rx.text(
                             "Department", font_size="0.85rem", color="var(--color-muted)"
                         ),
-                        rx.select(
-                            rx.foreach(
-                                AdminCoursesState.departments_dropdown,
-                                lambda d: rx.select.item(d["label"], value=d["id"]),
+                        rx.select.root(
+                            rx.select.trigger(placeholder="Select department"),
+                            rx.select.content(
+                                rx.foreach(
+                                    AdminCoursesState.departments_dropdown,
+                                    lambda d: rx.select.item(d["label"], value=d["id"]),
+                                ),
                             ),
                             value=AdminCoursesState.form_department_id,
                             on_change=AdminCoursesState.set_form_department_id,
-                            placeholder="Select department",
-                            name="form_department_id",
                             width="100%",
                         ),
                         align="start",
@@ -219,13 +221,15 @@ def _inline_form() -> rx.Component:
                         rx.text(
                             "Evaluation", font_size="0.85rem", color="var(--color-muted)"
                         ),
-                        rx.select(
-                            rx.select.item("I — Internal only", value="I"),
-                            rx.select.item("E — External only", value="E"),
-                            rx.select.item("IE — Internal + External", value="IE"),
+                        rx.select.root(
+                            rx.select.trigger(placeholder="Select evaluation"),
+                            rx.select.content(
+                                rx.select.item("I — Internal only", value="I"),
+                                rx.select.item("E — External only", value="E"),
+                                rx.select.item("IE — Internal + External", value="IE"),
+                            ),
                             value=AdminCoursesState.form_evaluation,
                             on_change=AdminCoursesState.set_form_evaluation,
-                            name="form_evaluation",
                             width="100%",
                         ),
                         align="start",

@@ -164,8 +164,9 @@ class AdminDepartmentsState(BaseState):
         """Receives form_data from rx.form on_submit — authoritative values."""
         code = form_data.get("form_code", "").strip()
         name = form_data.get("form_name", "").strip()
-        school_id_str = form_data.get("form_school_id", "").strip()
-        main_campus_id_str = form_data.get("form_main_campus_id", "").strip()
+        # Dropdowns use rx.select.root (no name= attr) — read from state vars.
+        school_id_str = self.form_school_id.strip()
+        main_campus_id_str = self.form_main_campus_id.strip()
         editing_id = form_data.get("editing_id", "").strip()
 
         if not school_id_str or not main_campus_id_str:
