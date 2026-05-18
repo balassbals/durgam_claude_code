@@ -110,10 +110,7 @@ def _inline_form() -> rx.Component:
                         rx.select(
                             rx.foreach(
                                 AdminCoursesState.programs_dropdown,
-                                lambda p: rx.select.item(
-                                    p["code"] + " — " + p["name"],
-                                    value=p["id"],
-                                ),
+                                lambda p: rx.select.item(p["label"], value=p["id"]),
                             ),
                             value=AdminCoursesState.form_program_id,
                             on_change=AdminCoursesState.set_form_program_id,
@@ -132,10 +129,7 @@ def _inline_form() -> rx.Component:
                         rx.select(
                             rx.foreach(
                                 AdminCoursesState.departments_dropdown,
-                                lambda d: rx.select.item(
-                                    d["code"] + " — " + d["name"],
-                                    value=d["id"],
-                                ),
+                                lambda d: rx.select.item(d["label"], value=d["id"]),
                             ),
                             value=AdminCoursesState.form_department_id,
                             on_change=AdminCoursesState.set_form_department_id,

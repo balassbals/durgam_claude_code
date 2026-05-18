@@ -112,10 +112,7 @@ def _inline_form() -> rx.Component:
                         rx.select(
                             rx.foreach(
                                 AdminDepartmentsState.schools_dropdown,
-                                lambda s: rx.select.item(
-                                    s["code"] + " — " + s["name"],
-                                    value=s["id"],
-                                ),
+                                lambda s: rx.select.item(s["label"], value=s["id"]),
                             ),
                             value=AdminDepartmentsState.form_school_id,
                             on_change=AdminDepartmentsState.set_form_school_id,
@@ -136,10 +133,7 @@ def _inline_form() -> rx.Component:
                         rx.select(
                             rx.foreach(
                                 AdminDepartmentsState.campuses_dropdown,
-                                lambda c: rx.select.item(
-                                    c["code"] + " — " + c["name"],
-                                    value=c["id"],
-                                ),
+                                lambda c: rx.select.item(c["label"], value=c["id"]),
                             ),
                             value=AdminDepartmentsState.form_main_campus_id,
                             on_change=AdminDepartmentsState.set_form_main_campus_id,
@@ -283,7 +277,7 @@ def _detail_panel() -> rx.Component:
             rx.select(
                 rx.foreach(
                     AdminDepartmentsState.available_campuses,
-                    lambda c: rx.select.item(c["code"], value=c["id"]),
+                    lambda c: rx.select.item(c["label"], value=c["id"]),
                 ),
                 value=AdminDepartmentsState.add_campus_id,
                 on_change=AdminDepartmentsState.set_add_campus_id,

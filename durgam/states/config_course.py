@@ -93,11 +93,11 @@ class AdminCoursesState(BaseState):
     def _load_dropdowns(self) -> None:
         with open_session() as session:
             self.programs_dropdown = [
-                {"id": str(p.id), "code": p.code, "name": p.name}
+                {"id": str(p.id), "label": f"{p.code} — {p.name}"}
                 for p in ProgramService(ProgramRepository(session)).list()
             ]
             self.departments_dropdown = [
-                {"id": str(d.id), "code": d.code, "name": d.name}
+                {"id": str(d.id), "label": f"{d.code} — {d.name}"}
                 for d in DepartmentService(
                     DepartmentRepository(session),
                     SubDepartmentRepository(session),

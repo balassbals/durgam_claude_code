@@ -96,11 +96,11 @@ class AdminDepartmentsState(BaseState):
     def _load_dropdowns(self) -> None:
         with open_session() as session:
             self.schools_dropdown = [
-                {"id": str(s.id), "code": s.code, "name": s.name}
+                {"id": str(s.id), "label": f"{s.code} — {s.name}"}
                 for s in SchoolService(SchoolRepository(session)).list()
             ]
             self.campuses_dropdown = [
-                {"id": str(c.id), "code": c.code, "name": c.name}
+                {"id": str(c.id), "label": f"{c.code} — {c.name}"}
                 for c in CampusService(CampusRepository(session)).list()
             ]
 
@@ -262,7 +262,7 @@ class AdminDepartmentsState(BaseState):
                 for link in links
             ]
             self.available_campuses = [
-                {"id": str(c.id), "code": c.code}
+                {"id": str(c.id), "label": c.code}
                 for c in all_campuses
                 if str(c.id) not in linked_campus_ids
             ]
