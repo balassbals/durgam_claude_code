@@ -1,4 +1,8 @@
-"""Config landing page — /admin/config."""
+"""Config landing page — /admin/config.
+
+Tiles are filtered by the user's write/configure permissions: sys_admin sees all 9,
+registrar sees 3 (Vision & Mission, Class Timings, Working Days), students see none.
+"""
 
 import reflex as rx
 
@@ -6,12 +10,17 @@ from durgam.pages.components import admin_page, nav_shell, page_footer
 from durgam.states.config_landing import ConfigLandingState
 
 
-def _config_tile(label: str, href: str, description: str) -> rx.Component:
+def _config_tile(tile: dict) -> rx.Component:
+    """Render one config tile from a state-var dict {label, href, description}."""
     return rx.link(
         rx.box(
-            rx.text(label, font_weight="600", font_family="var(--font-sans)"),
             rx.text(
-                description,
+                tile["label"],
+                font_weight="600",
+                font_family="var(--font-sans)",
+            ),
+            rx.text(
+                tile["description"],
                 font_size="0.8rem",
                 color="var(--color-muted)",
                 font_family="var(--font-sans)",
@@ -26,7 +35,7 @@ def _config_tile(label: str, href: str, description: str) -> rx.Component:
             },
             transition="border-color 0.15s, box-shadow 0.15s",
         ),
-        href=href,
+        href=tile["href"],
         text_decoration="none",
         color="var(--color-body)",
     )
@@ -51,42 +60,7 @@ def admin_config_index() -> rx.Component:
                     font_family="var(--font-sans)",
                 ),
                 rx.grid(
-                    _config_tile(
-                        "Campuses", "/admin/config/campuses",
-                        "Manage the four SSSIHL campuses",
-                    ),
-                    _config_tile(
-                        "Schools", "/admin/config/schools",
-                        "Four academic schools headed by Deans",
-                    ),
-                    _config_tile(
-                        "Departments", "/admin/config/departments",
-                        "Ten departments with school and campus mappings",
-                    ),
-                    _config_tile(
-                        "Centres", "/admin/config/centres",
-                        "Centres of Excellence",
-                    ),
-                    _config_tile(
-                        "Programs", "/admin/config/programs",
-                        "Academic programs with outcomes and regulations",
-                    ),
-                    _config_tile(
-                        "Courses", "/admin/config/courses",
-                        "Course catalogue (basic fields)",
-                    ),
-                    _config_tile(
-                        "Vision & Mission", "/admin/config/vision-mission",
-                        "University and department vision/mission statements",
-                    ),
-                    _config_tile(
-                        "Class Timings", "/admin/config/class-timings",
-                        "Institute-wide period timings",
-                    ),
-                    _config_tile(
-                        "Working Days", "/admin/config/working-days",
-                        "5-day or 6-day work week",
-                    ),
+                    rx.foreach(ConfigLandingState.config_tiles, _config_tile),
                     columns="repeat(auto-fill, minmax(220px, 1fr))",
                     gap="1rem",
                 ),

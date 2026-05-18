@@ -259,7 +259,8 @@ def seed(session: Session) -> dict[str, int]:
         ("university_vision_mission",  "write",     "*"),
         ("class_timings_config",       "configure", "*"),
         ("working_days_config",        "configure", "*"),
-        ("department",                 "write",     "*"),
+        # department:write:* intentionally NOT included — §9.3: only SYSTEM_ADMIN
+        # manages department structure. Registrar has read access via _PUBLIC_READ.
     ]
 
     _HOD_SPECIFIC = [
@@ -307,6 +308,21 @@ def seed(session: Session) -> dict[str, int]:
             )
 
     counts["role_permissions"] = rp_inserted
+
+    # ── Cleanup: remove incorrect REGISTRAR-department:write:* assignments ────
+    # department:write:* was erroneously assigned to the Registrar family at M3
+    # Session 2. Only SYSTEM_ADMIN manages department structure per §9.3.
+    # This DELETE is idempotent — safe to re-run if already cleaned up.
+    if ("department", "write", "*") in perms:
+        dept_write_perm = perms[("department", "write", "*")]
+        for role_code in ("REGISTRAR", "DEPUTY_REGISTRAR", "REGISTRAR_OFFICE"):
+            if role_code in roles:
+                session.execute(
+                    sa.delete(RolePermission).where(
+                        RolePermission.role_id == roles[role_code].id,
+                        RolePermission.permission_id == dept_write_perm.id,
+                    )
+                )
 
     # ── Users ─────────────────────────────────────────────────────────────────
     # Read-only seeded fixtures (CLAUDE.md Testing rules):
