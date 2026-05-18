@@ -21,6 +21,16 @@ class DepartmentRepository(BaseRepository[Department]):
     def __init__(self, session: Session) -> None:
         super().__init__(Department, session)
 
+    def list_active(self) -> list[Department]:
+        """Return all active departments ordered by code."""
+        return list(
+            self._session.exec(
+                select(Department)
+                .where(Department.is_deleted == False)  # noqa: E712
+                .order_by(Department.code)  # type: ignore[attr-defined]
+            ).all()
+        )
+
     def get_by_code(self, code: str) -> Department | None:
         return self._session.exec(
             select(Department).where(

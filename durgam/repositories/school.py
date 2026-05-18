@@ -12,6 +12,16 @@ class SchoolRepository(BaseRepository[School]):
     def __init__(self, session: Session) -> None:
         super().__init__(School, session)
 
+    def list_active(self) -> list[School]:
+        """Return all active schools ordered by code (stable alphabetical order)."""
+        return list(
+            self._session.exec(
+                select(School)
+                .where(School.is_deleted == False)  # noqa: E712
+                .order_by(School.code)  # type: ignore[attr-defined]
+            ).all()
+        )
+
     def get_by_code(self, code: str) -> School | None:
         return self._session.exec(
             select(School).where(

@@ -12,6 +12,16 @@ class CourseRepository(BaseRepository[Course]):
     def __init__(self, session: Session) -> None:
         super().__init__(Course, session)
 
+    def list_active(self) -> list[Course]:
+        """Return all active courses ordered by code."""
+        return list(
+            self._session.exec(
+                select(Course)
+                .where(Course.is_deleted == False)  # noqa: E712
+                .order_by(Course.code)  # type: ignore[attr-defined]
+            ).all()
+        )
+
     def get_by_code(self, code: str) -> Course | None:
         return self._session.exec(
             select(Course).where(

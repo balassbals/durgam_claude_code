@@ -24,6 +24,16 @@ class ProgramRepository(BaseRepository[Program]):
     def __init__(self, session: Session) -> None:
         super().__init__(Program, session)
 
+    def list_active(self) -> list[Program]:
+        """Return all active programs ordered by code."""
+        return list(
+            self._session.exec(
+                select(Program)
+                .where(Program.is_deleted == False)  # noqa: E712
+                .order_by(Program.code)  # type: ignore[attr-defined]
+            ).all()
+        )
+
     def get_by_code(self, code: str) -> Program | None:
         return self._session.exec(
             select(Program).where(
