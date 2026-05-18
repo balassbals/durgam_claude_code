@@ -88,3 +88,29 @@ app.add_page(admin_config_schools, route="/admin/config/schools",
              on_load=SchoolConfigState.load_schools)
 app.add_page(admin_config_centres, route="/admin/config/centres",
              on_load=CentreConfigState.load_centres)
+
+# ── M3 Config placeholder routes (Session 5b) — full implementation in Session 6 and 7
+from durgam.pages.admin.config.departments import admin_config_departments
+from durgam.pages.admin.config.programs import admin_config_programs
+from durgam.pages.admin.config.courses import admin_config_courses
+from durgam.pages.admin.config.vision_mission import admin_config_vision_mission
+from durgam.pages.admin.config.class_timings import admin_config_class_timings
+from durgam.pages.admin.config.working_days import admin_config_working_days
+from durgam.states.config_department import DepartmentConfigState
+from durgam.states.config_program import ProgramConfigState
+from durgam.states.config_course import CourseConfigState
+from durgam.states.config_vision_mission import VisionMissionConfigState
+from durgam.states.config_timings import ClassTimingsConfigState, WorkingDaysConfigState
+
+app.add_page(admin_config_departments, route="/admin/config/departments",
+             on_load=DepartmentConfigState.load_departments)
+app.add_page(admin_config_programs, route="/admin/config/programs",
+             on_load=ProgramConfigState.load_programs)
+app.add_page(admin_config_courses, route="/admin/config/courses",
+             on_load=CourseConfigState.load_courses)
+app.add_page(admin_config_vision_mission, route="/admin/config/vision-mission",
+             on_load=VisionMissionConfigState.load_vision_mission)
+app.add_page(admin_config_class_timings, route="/admin/config/class-timings",
+             on_load=ClassTimingsConfigState.load_class_timings)
+app.add_page(admin_config_working_days, route="/admin/config/working-days",
+             on_load=WorkingDaysConfigState.load_working_days)
