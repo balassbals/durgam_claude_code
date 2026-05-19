@@ -787,6 +787,28 @@ Session 6 (Bug 2: "Code required" error appearing on edit open).
 This pattern was established at M3 Session 6 after two failed rounds of the on_load
 lifecycle approach.
 
+### Permission triple completeness rule
+
+When a service method or UI handler exists for an action on a resource, the
+corresponding permission triple MUST exist in `scripts/seed.py` AND be assigned
+to at least one role that has the UI for that action.
+
+At each session boundary, audit all three together:
+- Every service method's action (create → write, update → write, soft_delete → delete)
+- Every UI handler's `@require_role(action=..., resource=...)` decorator
+- Every `(resource, action, scope)` triple in `scripts/seed.py`
+
+If a handler has `@require_role(action="delete", resource="X")` but `X:delete:*`
+is not in the seed, the call raises `PermissionDenied` for every user.
+
+Gap discovered at M3: `course:delete:*` was absent from the seed while
+`soft_delete_course` was decorated `@require_role(action="delete", resource="course")`.
+sys_admin got PermissionDenied on soft-delete despite having all other course
+permissions.
+
+When adding a new resource: seed read + write + delete triples. Only omit delete
+if no delete UI exists at that milestone (e.g., program and subdepartment at M3).
+
 ### Auto-create implicit join rows on entity creation
 
 When an entity has a required FK to another entity AND a separate join table

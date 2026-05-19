@@ -195,6 +195,7 @@ def seed(session: Session) -> dict[str, int]:
         # Course
         {"resource": "course",                     "action": "read",      "scope": "*"},
         {"resource": "course",                     "action": "write",     "scope": "*"},
+        {"resource": "course",                     "action": "delete",    "scope": "*"},
         # University vision/mission (E-001)
         {"resource": "university_vision_mission",  "action": "read",      "scope": "*"},
         {"resource": "university_vision_mission",  "action": "write",     "scope": "*"},
