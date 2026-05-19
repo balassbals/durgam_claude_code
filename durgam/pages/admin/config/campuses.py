@@ -8,7 +8,7 @@ from durgam.pages.components import (
     page_footer,
     primary_btn,
     secondary_btn,
-    typed_flash,
+    config_toast,
 )
 from durgam.pages.shared.confirmation_dialog import confirmation_dialog
 from durgam.pages.shared.data_table import TableColumn, data_table
@@ -154,7 +154,7 @@ def admin_config_campuses() -> rx.Component:
                     width="100%",
                     margin_bottom="1.5rem",
                 ),
-                typed_flash(CampusConfigState.flash, CampusConfigState.flash_type),
+                config_toast(CampusConfigState.flash, CampusConfigState.flash_type, CampusConfigState.dismiss_flash),
                 _inline_form(),
                 rx.cond(
                     CampusConfigState.loading,

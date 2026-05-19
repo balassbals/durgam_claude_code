@@ -136,6 +136,8 @@ class AdminDepartmentsState(BaseState):
     # ── Form open/close ───────────────────────────────────────────────────────
 
     def open_create(self) -> None:
+        self.flash = ""
+        self.flash_type = "info"
         self.editing_id = ""
         self.form_code = ""
         self.form_name = ""
@@ -152,6 +154,8 @@ class AdminDepartmentsState(BaseState):
         school_id: str,
         main_campus_id: str,
     ) -> None:
+        self.flash = ""
+        self.flash_type = "info"
         self.editing_id = dept_id
         self.form_code = code
         self.form_name = name
@@ -272,6 +276,8 @@ class AdminDepartmentsState(BaseState):
     # ── Detail view ───────────────────────────────────────────────────────────
 
     async def open_detail(self, dept_id: str, dept_name: str) -> None:
+        self.flash = ""
+        self.flash_type = "info"
         self.detail_dept_id = dept_id
         self.detail_dept_name = dept_name
         self.detail_campus_links = []

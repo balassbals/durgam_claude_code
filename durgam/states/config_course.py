@@ -137,6 +137,8 @@ class AdminCoursesState(BaseState):
     # ── Form open/close ───────────────────────────────────────────────────────
 
     def open_create(self) -> None:
+        self.flash = ""
+        self.flash_type = "info"
         self.editing_id = ""
         self.form_code = ""
         self.form_name = ""
@@ -163,6 +165,8 @@ class AdminCoursesState(BaseState):
         practical: str,
         evaluation: str,
     ) -> None:
+        self.flash = ""
+        self.flash_type = "info"
         self.editing_id = course_id
         self.form_code = code
         self.form_name = name

@@ -61,6 +61,8 @@ class SchoolConfigState(BaseState):
         self.form_dean_role_code = value
 
     def open_create(self) -> None:
+        self.flash = ""
+        self.flash_type = "info"
         self.editing_id = ""
         self.form_code = ""
         self.form_name = ""
@@ -68,6 +70,8 @@ class SchoolConfigState(BaseState):
         self.show_form = True
 
     def open_edit(self, school_id: str, code: str, name: str, dean_role_code: str) -> None:
+        self.flash = ""
+        self.flash_type = "info"
         self.editing_id = school_id
         self.form_code = code
         self.form_name = name

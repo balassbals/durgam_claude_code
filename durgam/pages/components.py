@@ -7,6 +7,11 @@ import reflex as rx
 from durgam.states.auth import AuthState
 from durgam.states.base import BaseState
 
+# Seconds before a config-page toast notification auto-dismisses.
+# Auto-dismiss is not yet implemented (requires decorated-handler changes);
+# this constant is reserved for a future UI Polish milestone.
+NOTIFICATION_DISPLAY_SECONDS = 4
+
 
 def _nav_link(entry: dict) -> rx.Component:
     return rx.link(
@@ -327,6 +332,114 @@ def typed_flash(flash: rx.Var, flash_type: rx.Var) -> rx.Component:
                     flash_info(flash),
                 ),
             ),
+        ),
+        rx.fragment(),
+    )
+
+
+def config_toast(flash: rx.Var, flash_type: rx.Var, dismiss_handler) -> rx.Component:
+    """Fixed-position toast notification for config pages.
+
+    Renders in the top-right corner above all content so it is visible
+    regardless of scroll position (Bug 3 fix). Includes an ✕ close button
+    that calls dismiss_handler immediately (Bug 1 fix).
+
+    Usage:
+        config_toast(State.flash, State.flash_type, State.dismiss_flash)
+    """
+    return rx.cond(
+        flash != "",
+        rx.box(
+            rx.hstack(
+                rx.cond(
+                    flash_type == "success",
+                    rx.hstack(
+                        rx.text("✓", color="var(--color-success-border)"),
+                        rx.text(flash),
+                        gap="0.5rem",
+                        align="center",
+                        flex="1",
+                    ),
+                    rx.cond(
+                        flash_type == "error",
+                        rx.hstack(
+                            rx.text("✗", color="var(--color-error-border)"),
+                            rx.text(flash),
+                            gap="0.5rem",
+                            align="center",
+                            flex="1",
+                        ),
+                        rx.cond(
+                            flash_type == "warning",
+                            rx.hstack(
+                                rx.text("⚠", color="var(--color-warning-border)"),
+                                rx.text(flash),
+                                gap="0.5rem",
+                                align="center",
+                                flex="1",
+                            ),
+                            rx.hstack(
+                                rx.text("ℹ", color="var(--color-info-border)"),
+                                rx.text(flash),
+                                gap="0.5rem",
+                                align="center",
+                                flex="1",
+                            ),
+                        ),
+                    ),
+                ),
+                rx.button(
+                    "✕",
+                    on_click=dismiss_handler,
+                    background="transparent",
+                    border="none",
+                    cursor="pointer",
+                    font_size="0.85rem",
+                    color="var(--color-muted)",
+                    padding="0 0 0 0.5rem",
+                    flex_shrink="0",
+                ),
+                align="center",
+                width="100%",
+                gap="0.5rem",
+            ),
+            background=rx.cond(
+                flash_type == "success",
+                "var(--color-success-bg)",
+                rx.cond(
+                    flash_type == "error",
+                    "var(--color-error-bg)",
+                    rx.cond(
+                        flash_type == "warning",
+                        "var(--color-warning-bg)",
+                        "var(--color-info-bg)",
+                    ),
+                ),
+            ),
+            border=rx.cond(
+                flash_type == "success",
+                "1px solid var(--color-success-border)",
+                rx.cond(
+                    flash_type == "error",
+                    "1px solid var(--color-error-border)",
+                    rx.cond(
+                        flash_type == "warning",
+                        "1px solid var(--color-warning-border)",
+                        "1px solid var(--color-info-border)",
+                    ),
+                ),
+            ),
+            border_radius="6px",
+            padding="0.75rem 1rem",
+            font_size="0.875rem",
+            font_family="var(--font-sans)",
+            position="fixed",
+            top="4.5rem",
+            right="1.5rem",
+            z_index="1000",
+            min_width="16rem",
+            max_width="26rem",
+            box_shadow="0 2px 10px rgba(0,0,0,0.12)",
         ),
         rx.fragment(),
     )

@@ -74,6 +74,8 @@ class CentreConfigState(BaseState):
         self.form_campus_code = value
 
     def open_create(self) -> None:
+        self.flash = ""
+        self.flash_type = "info"
         self.editing_id = ""
         self.form_code = ""
         self.form_name = ""
@@ -81,6 +83,8 @@ class CentreConfigState(BaseState):
         self.show_form = True
 
     def open_edit(self, centre_id: str, code: str, name: str, campus_code: str) -> None:
+        self.flash = ""
+        self.flash_type = "info"
         self.editing_id = centre_id
         self.form_code = code
         self.form_name = name

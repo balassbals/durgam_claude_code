@@ -54,6 +54,11 @@ class BaseState(rx.State):
     def clear_flash(self) -> None:
         self.flash = ""
 
+    def dismiss_flash(self) -> None:
+        """Close-button handler: immediately clear the active notification."""
+        self.flash = ""
+        self.flash_type = "info"
+
     def _resolve_session(self) -> None:
         """Resolve session cookie and populate current_user_id / current_username.
 

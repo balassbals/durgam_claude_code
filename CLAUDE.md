@@ -727,6 +727,35 @@ one path → single-gate.
 Use this for pages that multiple roles can reach via different permissions (e.g. the
 vision/mission page is accessible to Registrar AND HoD).
 
+### Notification pattern for config pages
+
+Config pages use inline state changes (not full page redirects) for sub-navigation
+(list → detail → form). The on_load-based flash lifecycle rule does NOT apply: on_load
+only fires on full page navigation, not on state-change-based sub-navigation.
+
+Instead, config pages use `config_toast` — a fixed-position toast component:
+
+```python
+# In page:
+config_toast(State.flash, State.flash_type, State.dismiss_flash)
+```
+
+`config_toast` renders in the top-right corner, fixed position, z-index 1000 — always
+visible regardless of scroll position. Includes an ✕ close button that calls
+`BaseState.dismiss_flash`. Both bugs (sticky + scroll-to-bottom) are solved in one component.
+
+Auto-dismiss (timer) is deferred to the UI Polish milestone — `@rx.event(background=True)`
+cannot be yielded from handlers decorated with `@require_role` + `@audit_action` without
+refactoring the auth decorator chain.
+
+Additional rule: `open_create`, `open_edit`, and `open_detail` must clear flash at their
+start (`self.flash = ""; self.flash_type = "info"`) so stale notifications from prior
+actions don't appear when the user opens a new form or detail panel. Discovered at M3
+Session 6 (Bug 2: "Code required" error appearing on edit open).
+
+This pattern was established at M3 Session 6 after two failed rounds of the on_load
+lifecycle approach.
+
 ### Auto-create implicit join rows on entity creation
 
 When an entity has a required FK to another entity AND a separate join table
