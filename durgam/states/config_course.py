@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from uuid import UUID
 
+import reflex as rx
+
 from durgam.auth.decorators import audit_action, require_role
 from durgam.db import open_session
 from durgam.repositories.course import CourseRepository

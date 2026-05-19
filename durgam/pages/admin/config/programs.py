@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import reflex as rx
 
-from durgam.pages.components import admin_page, nav_shell, page_footer, typed_flash
+from durgam.pages.components import admin_page, config_toast, nav_shell, page_footer
 from durgam.pages.shared.data_table import TableColumn, data_table
 from durgam.states.config_program import AdminProgramsState
 
@@ -167,6 +167,7 @@ def _tab_outcomes() -> rx.Component:
         _outcome_section("Program Educational Objectives (PEOs)", AdminProgramsState.detail_peos),
         _outcome_section("Program Outcomes (POs)", AdminProgramsState.detail_pos),
         _outcome_section("Program Specific Outcomes (PSOs)", AdminProgramsState.detail_psos),
+        _m13_note("Rich management UI for Outcomes (PEO/PO/PSO editing forms) ships at M13."),
         align="start",
         gap="0",
         width="100%",
@@ -436,9 +437,35 @@ def _list_view() -> rx.Component:
             "Programs",
             size="5",
             font_family="var(--font-sans)",
-            margin_bottom="1.5rem",
+            margin_bottom="1rem",
         ),
-        typed_flash(AdminProgramsState.flash, AdminProgramsState.flash_type),
+        rx.box(
+            rx.hstack(
+                rx.text(
+                    "ℹ",
+                    color="var(--color-info-border)",
+                    font_weight="700",
+                    flex_shrink="0",
+                ),
+                rx.text(
+                    "Programs are seeded at M3 and fully managed at M13 (Program & Course Management). "
+                    "Use View Details to inspect program structure — outcomes, regulations, scheme, "
+                    "specialisations, and exit levels. Rich management UI ships at M13.",
+                    font_size="0.875rem",
+                    color="var(--color-body)",
+                    flex="1",
+                ),
+                align="start",
+                gap="0.6rem",
+            ),
+            background="var(--color-info-bg)",
+            border="1px solid var(--color-info-border)",
+            border_radius="6px",
+            padding="0.75rem 1rem",
+            margin_bottom="1.5rem",
+            font_family="var(--font-sans)",
+        ),
+        config_toast(AdminProgramsState.flash, AdminProgramsState.flash_type, AdminProgramsState.dismiss_flash),
         rx.cond(
             AdminProgramsState.loading,
             rx.center(rx.spinner(), padding="2rem"),

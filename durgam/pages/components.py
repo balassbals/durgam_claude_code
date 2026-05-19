@@ -340,53 +340,44 @@ def typed_flash(flash: rx.Var, flash_type: rx.Var) -> rx.Component:
 def config_toast(flash: rx.Var, flash_type: rx.Var, dismiss_handler) -> rx.Component:
     """Fixed-position toast notification for config pages.
 
-    Top-right corner, z-index 1100, strong shadow so it reads as floating above
-    content rather than inline with it (Issue 2 fix).
+    Bottom-right corner, white background, 4px colored left border, strong drop
+    shadow — reads as a floating overlay, not inline page content.
 
     Usage:
         config_toast(State.flash, State.flash_type, State.dismiss_flash)
     """
+    left_border_color = rx.cond(
+        flash_type == "success",
+        "var(--color-success-border)",
+        rx.cond(
+            flash_type == "error",
+            "var(--color-error-border)",
+            rx.cond(
+                flash_type == "warning",
+                "var(--color-warning-border)",
+                "var(--color-info-border)",
+            ),
+        ),
+    )
+    icon = rx.cond(
+        flash_type == "success",
+        rx.text("✓", color="var(--color-success-border)", font_weight="700", flex_shrink="0"),
+        rx.cond(
+            flash_type == "error",
+            rx.text("✗", color="var(--color-error-border)", font_weight="700", flex_shrink="0"),
+            rx.cond(
+                flash_type == "warning",
+                rx.text("⚠", color="var(--color-warning-border)", font_weight="700", flex_shrink="0"),
+                rx.text("ℹ", color="var(--color-info-border)", font_weight="700", flex_shrink="0"),
+            ),
+        ),
+    )
     return rx.cond(
         flash != "",
         rx.box(
             rx.hstack(
-                rx.cond(
-                    flash_type == "success",
-                    rx.hstack(
-                        rx.text("✓", color="var(--color-success-border)", font_weight="700"),
-                        rx.text(flash, flex="1"),
-                        gap="0.5rem",
-                        align="center",
-                        flex="1",
-                    ),
-                    rx.cond(
-                        flash_type == "error",
-                        rx.hstack(
-                            rx.text("✗", color="var(--color-error-border)", font_weight="700"),
-                            rx.text(flash, flex="1"),
-                            gap="0.5rem",
-                            align="center",
-                            flex="1",
-                        ),
-                        rx.cond(
-                            flash_type == "warning",
-                            rx.hstack(
-                                rx.text("⚠", color="var(--color-warning-border)", font_weight="700"),
-                                rx.text(flash, flex="1"),
-                                gap="0.5rem",
-                                align="center",
-                                flex="1",
-                            ),
-                            rx.hstack(
-                                rx.text("ℹ", color="var(--color-info-border)", font_weight="700"),
-                                rx.text(flash, flex="1"),
-                                gap="0.5rem",
-                                align="center",
-                                flex="1",
-                            ),
-                        ),
-                    ),
-                ),
+                icon,
+                rx.text(flash, flex="1", font_size="0.875rem", color="var(--color-body)"),
                 rx.button(
                     "✕",
                     on_click=dismiss_handler,
@@ -395,51 +386,31 @@ def config_toast(flash: rx.Var, flash_type: rx.Var, dismiss_handler) -> rx.Compo
                     cursor="pointer",
                     font_size="1rem",
                     color="var(--color-muted)",
-                    padding="0 0 0 0.75rem",
+                    padding="0 0 0 0.5rem",
                     flex_shrink="0",
                     line_height="1",
                 ),
                 align="center",
+                gap="0.6rem",
                 width="100%",
-                gap="0.5rem",
             ),
-            background=rx.cond(
-                flash_type == "success",
-                "var(--color-success-bg)",
-                rx.cond(
-                    flash_type == "error",
-                    "var(--color-error-bg)",
-                    rx.cond(
-                        flash_type == "warning",
-                        "var(--color-warning-bg)",
-                        "var(--color-info-bg)",
-                    ),
-                ),
-            ),
-            border=rx.cond(
-                flash_type == "success",
-                "1px solid var(--color-success-border)",
-                rx.cond(
-                    flash_type == "error",
-                    "1px solid var(--color-error-border)",
-                    rx.cond(
-                        flash_type == "warning",
-                        "1px solid var(--color-warning-border)",
-                        "1px solid var(--color-info-border)",
-                    ),
-                ),
-            ),
-            border_radius="8px",
+            background="white",
             padding="0.875rem 1rem",
-            font_size="0.875rem",
             font_family="var(--font-sans)",
             position="fixed",
-            top="1rem",
-            right="1rem",
-            z_index="1100",
-            min_width="14rem",
+            bottom="1.5rem",
+            right="1.5rem",
+            z_index="9999",
+            min_width="16rem",
             max_width="22rem",
-            box_shadow="0 4px 16px rgba(0,0,0,0.18)",
+            border_radius="0.5rem",
+            box_shadow="0 8px 24px rgba(0,0,0,0.18), 0 2px 6px rgba(0,0,0,0.08)",
+            border_top="1px solid var(--color-rule)",
+            border_right="1px solid var(--color-rule)",
+            border_bottom="1px solid var(--color-rule)",
+            border_left_width="4px",
+            border_left_style="solid",
+            border_left_color=left_border_color,
         ),
         rx.fragment(),
     )
