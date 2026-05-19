@@ -51,7 +51,8 @@ class AdminCoursesState(BaseState):
     # ── Load ──────────────────────────────────────────────────────────────────
 
     async def load_courses(self) -> None:
-        # course:write:* gates this page — SYSTEM_ADMIN only.
+        self.flash = ""
+        self.flash_type = "info"
         guard = self._config_guard("course", "write")
         if guard is not None:
             return guard
@@ -214,8 +215,17 @@ class AdminCoursesState(BaseState):
             self.flash_type = "error"
             return
 
-        if not program_id_str or not department_id_str:
-            self.flash = "Program and department are required."
+        missing = []
+        if not code:
+            missing.append("code")
+        if not name:
+            missing.append("name")
+        if not program_id_str:
+            missing.append("program")
+        if not department_id_str:
+            missing.append("department")
+        if missing:
+            self.flash = f"Required: {', '.join(missing)}"
             self.flash_type = "error"
             return
 

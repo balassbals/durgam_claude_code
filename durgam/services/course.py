@@ -91,6 +91,12 @@ class CourseService:
 
     def soft_delete(self, course_id: UUID, actor_id: UUID) -> Course:
         course = self.get(course_id)
+        n_scheme = self._courses.count_scheme_usages(course_id)
+        if n_scheme > 0:
+            raise CourseError(
+                f"Course is used in {n_scheme} scheme(s) and cannot be deactivated. "
+                "Remove it from all schemes first."
+            )
         return self._courses.soft_delete(course, actor_id)
 
     def hard_delete(self, course_id: UUID, actor_id: UUID) -> None:

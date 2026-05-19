@@ -132,11 +132,21 @@ class TestAddCampus:
 class TestRemoveCampus:
     def test_remove_campus_calls_remove_link(self):
         repo = MagicMock()
+        # Two links exist — removal of one is allowed.
+        repo.list_campus_links.return_value = [MagicMock(), MagicMock()]
         svc = _make_svc(dept_repo=repo)
         dept_id = uuid4()
         campus_id = uuid4()
         svc.remove_campus(dept_id, campus_id, uuid4())
         repo.remove_campus_link.assert_called_once_with(dept_id, campus_id)
+
+    def test_remove_last_campus_raises(self):
+        repo = MagicMock()
+        # Only one link — removal would leave zero campuses.
+        repo.list_campus_links.return_value = [MagicMock()]
+        svc = _make_svc(dept_repo=repo)
+        with pytest.raises(DepartmentError, match="last campus"):
+            svc.remove_campus(uuid4(), uuid4(), uuid4())
 
 
 class TestSoftDelete:

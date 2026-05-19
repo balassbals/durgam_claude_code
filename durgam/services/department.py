@@ -130,6 +130,13 @@ class DepartmentService:
         self._depts.upsert_campus_link(dept_id, campus_id, has_ahod=has_ahod)
 
     def remove_campus(self, dept_id: UUID, campus_id: UUID, actor_id: UUID) -> None:
+        self.get(dept_id)  # verify dept exists and is active
+        links = self._depts.list_campus_links(dept_id)
+        if len(links) <= 1:
+            raise DepartmentError(
+                "Cannot remove the last campus. "
+                "A department must be associated with at least one campus."
+            )
         self._depts.remove_campus_link(dept_id, campus_id)
 
     # ── SubDepartment management ──────────────────────────────────────────────

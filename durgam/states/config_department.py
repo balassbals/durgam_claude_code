@@ -66,20 +66,19 @@ class AdminDepartmentsState(BaseState):
 
     # ── Load ──────────────────────────────────────────────────────────────────
 
-    async def load_departments(self) -> None:
-        guard = self._config_guard("department", "write")
-        if guard is not None:
-            return guard
-        self.loading = True
-        self.departments = []   # reset before query (page-on-load data refresh rule)
-        self.show_form = False
-        self.show_detail = False
+    def _refresh_departments_list(self) -> None:
+        """Reload the department list rows without touching form/detail/loading state.
+
+        Called from load_departments (after guard) and from campus-link handlers
+        (Bug 2: list count must update live without closing the detail panel).
+        """
         with open_session() as session:
+            new_rows = []
             for d in _dept_svc(session).list():
                 campus_links = DepartmentRepository(session).list_campus_links(d.id)
                 school = SchoolRepository(session).get_by_id(d.school_id)
                 school_code = school.code if school else ""
-                self.departments.append({
+                new_rows.append({
                     "id": str(d.id),
                     "code": d.code,
                     "name": d.name,
@@ -88,6 +87,19 @@ class AdminDepartmentsState(BaseState):
                     "main_campus_id": str(d.main_campus_id),
                     "campus_count": str(len(campus_links)),
                 })
+            self.departments = new_rows
+
+    async def load_departments(self) -> None:
+        self.flash = ""
+        self.flash_type = "info"
+        guard = self._config_guard("department", "write")
+        if guard is not None:
+            return guard
+        self.loading = True
+        self.departments = []   # reset before query (page-on-load data refresh rule)
+        self.show_form = False
+        self.show_detail = False
+        self._refresh_departments_list()
         self._load_nav_entries()
         self.loading = False
 
@@ -171,8 +183,17 @@ class AdminDepartmentsState(BaseState):
         main_campus_id_str = self.form_main_campus_id.strip()
         editing_id = form_data.get("editing_id", "").strip()
 
-        if not school_id_str or not main_campus_id_str:
-            self.flash = "School and campus are required."
+        missing = []
+        if not code:
+            missing.append("code")
+        if not name:
+            missing.append("name")
+        if not school_id_str:
+            missing.append("school")
+        if not main_campus_id_str:
+            missing.append("main campus")
+        if missing:
+            self.flash = f"Required: {', '.join(missing)}"
             self.flash_type = "error"
             return
 
@@ -312,7 +333,8 @@ class AdminDepartmentsState(BaseState):
             self.flash = e.message
             self.flash_type = "error"
             return
-        # open_detail does not call _config_guard, so flash set here survives.
+        # Refresh list (campus_count) and detail (campus chips) in one round-trip.
+        self._refresh_departments_list()
         await self.open_detail(self.detail_dept_id, self.detail_dept_name)
         self.flash = "Campus linked."
         self.flash_type = "success"
@@ -339,6 +361,7 @@ class AdminDepartmentsState(BaseState):
             self.confirm_remove_campus_open = False
             return
         self.confirm_remove_campus_open = False
+        self._refresh_departments_list()
         await self.open_detail(self.detail_dept_id, self.detail_dept_name)
         self.flash = "Campus removed."
         self.flash_type = "success"
