@@ -40,8 +40,8 @@ Errata bindings: E-001 (vision/mission) extends the M3 row.
 | ProgramSchemeCourse (course in scheme) | §8.2 | M3 | In flight at M3 | Session 6: course codes shown in Scheme tab; rich edit UI → M13 |
 | ProgramSpecialisation | §8.2 | M3 | In flight at M3 | Session 6: read-only Specialisations tab on program detail page; rich edit UI → M13 |
 | ProgramExitLevel | §8.2 | M3 | In flight at M3 | Session 6: read-only Exit Levels tab on program detail page; rich edit UI → M13 |
-| Course (basic — code, name, credits, lecture, tutorial, practical, evaluation) | §8.2, §9.3 | M3 | In flight at M3 | Session 6: full CRUD page with M3 fields (code, name, program FK, department FK, credits, lecture, tutorial, practical, evaluation) |
-| Course (extended — course_type, delivery_mode, mooc_agency, IKS flags) | §8.3 | M13 | Planned for M13 | Refinement 3: defers to Program & Course module |
+| Course (basic — code, name, credits, lecture, tutorial, practical, evaluation) | §8.2, §9.3 | M3 | In flight at M3 | Session 6: CRUD page; credits auto-derived from L+T+P/2 (global 2:1 practical ratio); M13 moves ratio to ProgramRegulation |
+| Course (extended — course_type, delivery_mode, mooc_agency, IKS flags) | §8.3 | M13 | Planned for M13 | Refinement 3: defers to Program & Course module. M13 must also implement course_type-based department dropdown filtering: DSC/DSE/MDC restricts to departments running the program (auto-lock if single dept); AEC/SEC/VAC/Internship/Research/Minor allows all departments. Source: informal requirements doc, Course Module section. |
 | University vision/mission | E-001, §9.3 | M3 | In flight at M3 | Model + seed + edit page placeholder |
 | Department vision/mission | E-001, §9.3 | M3 | In flight at M3 | Model + seed + edit page placeholder |
 | AcademicYear (code, dates, is_locked) | §8.5, §9.3 | M0/M3 | Shipped at M0 | Locked state management → M4 |

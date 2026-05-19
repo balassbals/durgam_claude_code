@@ -38,7 +38,6 @@ def _kebab(row: dict) -> rx.Component:
                     row["name"],
                     row["program_id"],
                     row["department_id"],
-                    row["credits"],
                     row["lecture"],
                     row["tutorial"],
                     row["practical"],
@@ -146,20 +145,29 @@ def _inline_form() -> rx.Component:
                     rx.hstack(
                         rx.vstack(
                             rx.text(
-                                "Credits", font_size="0.85rem", color="var(--color-muted)"
+                                "Credits (auto)",
+                                font_size="0.85rem",
+                                color="var(--color-muted)",
                             ),
-                            rx.input(
-                                name="form_credits",
-                                value=AdminCoursesState.form_credits,
-                                on_change=AdminCoursesState.set_form_credits,
-                                placeholder="0",
-                                type="number",
-                                min="0",
-                                width="100%",
+                            rx.box(
+                                AdminCoursesState.computed_credits_display,
+                                background="var(--color-background, #f5f0eb)",
+                                border="1px solid var(--color-rule)",
+                                border_radius="4px",
+                                padding="0.4rem 0.75rem",
+                                font_size="0.875rem",
+                                font_weight="600",
+                                min_width="4rem",
+                                text_align="center",
                             ),
-                            align="start",
-                            gap="0.25rem",
-                            width="100%",
+                            rx.text(
+                                "L + T + P/2",
+                                font_size="0.72rem",
+                                color="var(--color-muted)",
+                                font_style="italic",
+                            ),
+                            align="center",
+                            gap="0.2rem",
                         ),
                         rx.vstack(
                             rx.text(

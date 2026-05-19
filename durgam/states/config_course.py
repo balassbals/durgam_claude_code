@@ -1,4 +1,12 @@
-"""AdminCoursesState — course list, create, edit, soft-delete (/admin/config/courses)."""
+"""AdminCoursesState — course list, create, edit, soft-delete (/admin/config/courses).
+
+Credit computation rule (M3 default):
+    credits = lecture + tutorial + (practical // PRACTICAL_CREDIT_RATIO)
+
+This applies a global 2:1 practical-to-credit ratio. At M13, the ratio will become
+a field on ProgramRegulation so different programs can have different ratios. See
+docs/milestones/M13.md → 'Inherited from M3'.
+"""
 
 from __future__ import annotations
 
@@ -18,6 +26,10 @@ from durgam.services.program import ProgramService
 from durgam.states.base import BaseState
 
 
+# Global practical-to-credit ratio for M3. Moves to ProgramRegulation at M13.
+PRACTICAL_CREDIT_RATIO = 2
+
+
 def _svc(session) -> CourseService:
     return CourseService(course_repo=CourseRepository(session))
 
@@ -34,10 +46,11 @@ class AdminCoursesState(BaseState):
     form_name: str = ""
     form_program_id: str = ""
     form_department_id: str = ""
-    form_credits: str = ""
-    form_lecture: str = ""
-    form_tutorial: str = ""
-    form_practical: str = ""
+    # Credits are derived from L/T/P; not a user-editable field.
+    computed_credits_display: str = "0"
+    form_lecture: str = "0"
+    form_tutorial: str = "0"
+    form_practical: str = "0"
     form_evaluation: str = "I"   # default: Internal
 
     # Dropdowns for form
@@ -121,17 +134,29 @@ class AdminCoursesState(BaseState):
     def set_form_department_id(self, value: str) -> None:
         self.form_department_id = value
 
-    def set_form_credits(self, value: str) -> None:
-        self.form_credits = value
+    def _update_credits_display(self) -> None:
+        """Recompute computed_credits_display from current L/T/P state vars."""
+        try:
+            lec = int(self.form_lecture or "0")
+            tut = int(self.form_tutorial or "0")
+            prac = int(self.form_practical or "0")
+            self.computed_credits_display = str(
+                lec + tut + (prac // PRACTICAL_CREDIT_RATIO)
+            )
+        except (ValueError, ZeroDivisionError):
+            self.computed_credits_display = "0"
 
     def set_form_lecture(self, value: str) -> None:
         self.form_lecture = value
+        self._update_credits_display()
 
     def set_form_tutorial(self, value: str) -> None:
         self.form_tutorial = value
+        self._update_credits_display()
 
     def set_form_practical(self, value: str) -> None:
         self.form_practical = value
+        self._update_credits_display()
 
     def set_form_evaluation(self, value: str) -> None:
         self.form_evaluation = value
@@ -146,11 +171,11 @@ class AdminCoursesState(BaseState):
         self.form_name = ""
         self.form_program_id = ""
         self.form_department_id = ""
-        self.form_credits = ""
-        self.form_lecture = ""
-        self.form_tutorial = ""
-        self.form_practical = ""
+        self.form_lecture = "0"
+        self.form_tutorial = "0"
+        self.form_practical = "0"
         self.form_evaluation = "I"
+        self.computed_credits_display = "0"
         self._load_dropdowns()
         self.show_form = True
         return rx.scroll_to("course-page-top")
@@ -162,7 +187,6 @@ class AdminCoursesState(BaseState):
         name: str,
         program_id: str,
         department_id: str,
-        credits: str,
         lecture: str,
         tutorial: str,
         practical: str,
@@ -175,11 +199,11 @@ class AdminCoursesState(BaseState):
         self.form_name = name
         self.form_program_id = program_id
         self.form_department_id = department_id
-        self.form_credits = credits
         self.form_lecture = lecture
         self.form_tutorial = tutorial
         self.form_practical = practical
         self.form_evaluation = evaluation
+        self._update_credits_display()
         self._load_dropdowns()
         self.show_form = True
         return rx.scroll_to("course-page-top")
@@ -191,11 +215,11 @@ class AdminCoursesState(BaseState):
         self.form_name = ""
         self.form_program_id = ""
         self.form_department_id = ""
-        self.form_credits = ""
-        self.form_lecture = ""
-        self.form_tutorial = ""
-        self.form_practical = ""
+        self.form_lecture = "0"
+        self.form_tutorial = "0"
+        self.form_practical = "0"
         self.form_evaluation = "I"
+        self.computed_credits_display = "0"
         self.flash = ""
         self.flash_type = "info"
         return rx.scroll_to("course-page-top")
@@ -215,14 +239,28 @@ class AdminCoursesState(BaseState):
         editing_id = form_data.get("editing_id", "").strip()
 
         try:
-            credits = int(form_data.get("form_credits", "0") or "0")
             lecture = int(form_data.get("form_lecture", "0") or "0")
             tutorial = int(form_data.get("form_tutorial", "0") or "0")
             practical = int(form_data.get("form_practical", "0") or "0")
         except ValueError:
-            self.flash = "Credits and hours must be integers."
+            self.flash = "Contact hours must be integers."
             self.flash_type = "error"
             return
+
+        if lecture + tutorial + practical == 0:
+            self.flash = "Course must have at least one contact hour (lecture, tutorial, or practical)."
+            self.flash_type = "error"
+            return
+        if practical % PRACTICAL_CREDIT_RATIO != 0:
+            self.flash = (
+                f"Practical hours must be a multiple of {PRACTICAL_CREDIT_RATIO} "
+                f"(1 credit per {PRACTICAL_CREDIT_RATIO} practical hours)."
+            )
+            self.flash_type = "error"
+            return
+
+        # Credits are derived — never from user input.
+        credits = lecture + tutorial + (practical // PRACTICAL_CREDIT_RATIO)
 
         missing = []
         # Code is disabled in edit mode — not submitted by browser (Bug 1 fix).
