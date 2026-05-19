@@ -177,6 +177,7 @@ def admin_config_centres() -> rx.Component:
                 padding="2rem",
                 max_width="1200px",
                 width="100%",
+                id="centre-page-top",
             ),
             page_footer(),
             align="start",

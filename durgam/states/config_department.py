@@ -135,7 +135,7 @@ class AdminDepartmentsState(BaseState):
 
     # ── Form open/close ───────────────────────────────────────────────────────
 
-    def open_create(self) -> None:
+    def open_create(self):
         self.flash = ""
         self.flash_type = "info"
         self.editing_id = ""
@@ -145,6 +145,7 @@ class AdminDepartmentsState(BaseState):
         self.form_main_campus_id = ""
         self._load_dropdowns()
         self.show_form = True
+        return rx.scroll_to("dept-page-top")
 
     def open_edit(
         self,
@@ -153,7 +154,7 @@ class AdminDepartmentsState(BaseState):
         name: str,
         school_id: str,
         main_campus_id: str,
-    ) -> None:
+    ):
         self.flash = ""
         self.flash_type = "info"
         self.editing_id = dept_id
@@ -163,8 +164,9 @@ class AdminDepartmentsState(BaseState):
         self.form_main_campus_id = main_campus_id
         self._load_dropdowns()
         self.show_form = True
+        return rx.scroll_to("dept-page-top")
 
-    def cancel_form(self) -> None:
+    def cancel_form(self):
         self.show_form = False
         self.editing_id = ""
         self.form_code = ""
@@ -173,6 +175,7 @@ class AdminDepartmentsState(BaseState):
         self.form_main_campus_id = ""
         self.flash = ""
         self.flash_type = "info"
+        return rx.scroll_to("dept-page-top")
 
     # ── Save ──────────────────────────────────────────────────────────────────
 
@@ -188,7 +191,10 @@ class AdminDepartmentsState(BaseState):
         editing_id = form_data.get("editing_id", "").strip()
 
         missing = []
-        if not code:
+        # Code is read-only (disabled) in edit mode — disabled inputs are not
+        # submitted by the browser, so form_data["form_code"] is always empty
+        # during edit. Only validate code on create (Bug 1 fix).
+        if not editing_id and not code:
             missing.append("code")
         if not name:
             missing.append("name")
@@ -238,6 +244,7 @@ class AdminDepartmentsState(BaseState):
         await self.load_departments()
         self.flash = success_msg
         self.flash_type = "success"
+        return rx.scroll_to("dept-page-top")
 
     # ── Soft delete ───────────────────────────────────────────────────────────
 
@@ -268,6 +275,7 @@ class AdminDepartmentsState(BaseState):
         await self.load_departments()
         self.flash = "Department deactivated."
         self.flash_type = "success"
+        return rx.scroll_to("dept-page-top")
 
     def cancel_confirm(self) -> None:
         self.confirm_open = False
@@ -275,7 +283,7 @@ class AdminDepartmentsState(BaseState):
 
     # ── Detail view ───────────────────────────────────────────────────────────
 
-    async def open_detail(self, dept_id: str, dept_name: str) -> None:
+    async def open_detail(self, dept_id: str, dept_name: str):
         self.flash = ""
         self.flash_type = "info"
         self.detail_dept_id = dept_id
@@ -311,6 +319,7 @@ class AdminDepartmentsState(BaseState):
                 {"id": str(sd.id), "code": sd.code, "name": sd.name}
                 for sd in subdepts
             ]
+        return rx.scroll_to("dept-page-top")
 
     def close_detail(self) -> None:
         self.show_detail = False

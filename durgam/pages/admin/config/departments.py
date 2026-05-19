@@ -418,6 +418,7 @@ def admin_config_departments() -> rx.Component:
                 padding="2rem",
                 max_width="1200px",
                 width="100%",
+                id="dept-page-top",
             ),
             page_footer(),
             align="start",

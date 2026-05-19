@@ -66,7 +66,7 @@ class CampusConfigState(BaseState):
     def set_form_address(self, value: str) -> None:
         self.form_address = value
 
-    def open_create(self) -> None:
+    def open_create(self):
         self.flash = ""
         self.flash_type = "info"
         self.editing_id = ""
@@ -74,8 +74,9 @@ class CampusConfigState(BaseState):
         self.form_name = ""
         self.form_address = ""
         self.show_form = True
+        return rx.scroll_to("campus-page-top")
 
-    def open_edit(self, campus_id: str, code: str, name: str, address: str) -> None:
+    def open_edit(self, campus_id: str, code: str, name: str, address: str):
         self.flash = ""
         self.flash_type = "info"
         self.editing_id = campus_id
@@ -83,13 +84,15 @@ class CampusConfigState(BaseState):
         self.form_name = name
         self.form_address = address
         self.show_form = True
+        return rx.scroll_to("campus-page-top")
 
-    def cancel_form(self) -> None:
+    def cancel_form(self):
         self.show_form = False
         self.editing_id = ""
         self.form_code = ""
         self.form_name = ""
         self.form_address = ""
+        return rx.scroll_to("campus-page-top")
 
     @require_role(action="write", resource="campus")
     @audit_action(action="write", resource="campus")
@@ -120,6 +123,7 @@ class CampusConfigState(BaseState):
         self.show_form = False
         self.editing_id = ""
         await self.load_campuses()
+        return rx.scroll_to("campus-page-top")
 
     def open_soft_delete_confirm(self, campus_id: str, name: str) -> None:
         self.confirm_campus_id = campus_id
@@ -146,6 +150,7 @@ class CampusConfigState(BaseState):
         self.confirm_open = False
         self.confirm_campus_id = ""
         await self.load_campuses()
+        return rx.scroll_to("campus-page-top")
 
     def cancel_confirm(self) -> None:
         self.confirm_open = False

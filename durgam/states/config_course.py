@@ -136,7 +136,7 @@ class AdminCoursesState(BaseState):
 
     # ── Form open/close ───────────────────────────────────────────────────────
 
-    def open_create(self) -> None:
+    def open_create(self):
         self.flash = ""
         self.flash_type = "info"
         self.editing_id = ""
@@ -151,6 +151,7 @@ class AdminCoursesState(BaseState):
         self.form_evaluation = "I"
         self._load_dropdowns()
         self.show_form = True
+        return rx.scroll_to("course-page-top")
 
     def open_edit(
         self,
@@ -164,7 +165,7 @@ class AdminCoursesState(BaseState):
         tutorial: str,
         practical: str,
         evaluation: str,
-    ) -> None:
+    ):
         self.flash = ""
         self.flash_type = "info"
         self.editing_id = course_id
@@ -179,8 +180,9 @@ class AdminCoursesState(BaseState):
         self.form_evaluation = evaluation
         self._load_dropdowns()
         self.show_form = True
+        return rx.scroll_to("course-page-top")
 
-    def cancel_form(self) -> None:
+    def cancel_form(self):
         self.show_form = False
         self.editing_id = ""
         self.form_code = ""
@@ -194,6 +196,7 @@ class AdminCoursesState(BaseState):
         self.form_evaluation = "I"
         self.flash = ""
         self.flash_type = "info"
+        return rx.scroll_to("course-page-top")
 
     # ── Save ──────────────────────────────────────────────────────────────────
 
@@ -220,7 +223,8 @@ class AdminCoursesState(BaseState):
             return
 
         missing = []
-        if not code:
+        # Code is disabled in edit mode — not submitted by browser (Bug 1 fix).
+        if not editing_id and not code:
             missing.append("code")
         if not name:
             missing.append("name")
@@ -269,6 +273,7 @@ class AdminCoursesState(BaseState):
         await self.load_courses()
         self.flash = "Course saved."
         self.flash_type = "success"
+        return rx.scroll_to("course-page-top")
 
     # ── Soft delete ───────────────────────────────────────────────────────────
 
@@ -299,6 +304,7 @@ class AdminCoursesState(BaseState):
         await self.load_courses()
         self.flash = "Course deactivated."
         self.flash_type = "success"
+        return rx.scroll_to("course-page-top")
 
     def cancel_confirm(self) -> None:
         self.confirm_open = False

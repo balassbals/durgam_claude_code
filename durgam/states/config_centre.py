@@ -73,7 +73,7 @@ class CentreConfigState(BaseState):
     def set_form_campus_code(self, value: str) -> None:
         self.form_campus_code = value
 
-    def open_create(self) -> None:
+    def open_create(self):
         self.flash = ""
         self.flash_type = "info"
         self.editing_id = ""
@@ -81,8 +81,9 @@ class CentreConfigState(BaseState):
         self.form_name = ""
         self.form_campus_code = self.campus_codes[0] if self.campus_codes else ""
         self.show_form = True
+        return rx.scroll_to("centre-page-top")
 
-    def open_edit(self, centre_id: str, code: str, name: str, campus_code: str) -> None:
+    def open_edit(self, centre_id: str, code: str, name: str, campus_code: str):
         self.flash = ""
         self.flash_type = "info"
         self.editing_id = centre_id
@@ -90,13 +91,15 @@ class CentreConfigState(BaseState):
         self.form_name = name
         self.form_campus_code = campus_code
         self.show_form = True
+        return rx.scroll_to("centre-page-top")
 
-    def cancel_form(self) -> None:
+    def cancel_form(self):
         self.show_form = False
         self.editing_id = ""
         self.form_code = ""
         self.form_name = ""
         self.form_campus_code = ""
+        return rx.scroll_to("centre-page-top")
 
     @require_role(action="write", resource="centre")
     @audit_action(action="write", resource="centre")
@@ -133,6 +136,7 @@ class CentreConfigState(BaseState):
             self.flash_type = "error"
         self.show_form = False
         await self.load_centres()
+        return rx.scroll_to("centre-page-top")
 
     def open_soft_delete_confirm(self, centre_id: str, name: str) -> None:
         self.confirm_centre_id = centre_id
@@ -156,6 +160,7 @@ class CentreConfigState(BaseState):
             self.flash_type = "error"
         self.confirm_open = False
         await self.load_centres()
+        return rx.scroll_to("centre-page-top")
 
     def cancel_confirm(self) -> None:
         self.confirm_open = False

@@ -60,7 +60,7 @@ class SchoolConfigState(BaseState):
     def set_form_dean_role_code(self, value: str) -> None:
         self.form_dean_role_code = value
 
-    def open_create(self) -> None:
+    def open_create(self):
         self.flash = ""
         self.flash_type = "info"
         self.editing_id = ""
@@ -68,8 +68,9 @@ class SchoolConfigState(BaseState):
         self.form_name = ""
         self.form_dean_role_code = ""
         self.show_form = True
+        return rx.scroll_to("school-page-top")
 
-    def open_edit(self, school_id: str, code: str, name: str, dean_role_code: str) -> None:
+    def open_edit(self, school_id: str, code: str, name: str, dean_role_code: str):
         self.flash = ""
         self.flash_type = "info"
         self.editing_id = school_id
@@ -77,13 +78,15 @@ class SchoolConfigState(BaseState):
         self.form_name = name
         self.form_dean_role_code = dean_role_code
         self.show_form = True
+        return rx.scroll_to("school-page-top")
 
-    def cancel_form(self) -> None:
+    def cancel_form(self):
         self.show_form = False
         self.editing_id = ""
         self.form_code = ""
         self.form_name = ""
         self.form_dean_role_code = ""
+        return rx.scroll_to("school-page-top")
 
     @require_role(action="write", resource="school")
     @audit_action(action="write", resource="school")
@@ -112,6 +115,7 @@ class SchoolConfigState(BaseState):
             self.flash_type = "error"
         self.show_form = False
         await self.load_schools()
+        return rx.scroll_to("school-page-top")
 
     def open_soft_delete_confirm(self, school_id: str, name: str) -> None:
         self.confirm_school_id = school_id
@@ -136,6 +140,7 @@ class SchoolConfigState(BaseState):
         self.confirm_open = False
         self.confirm_school_id = ""
         await self.load_schools()
+        return rx.scroll_to("school-page-top")
 
     def cancel_confirm(self) -> None:
         self.confirm_open = False
