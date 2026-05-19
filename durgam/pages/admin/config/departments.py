@@ -4,11 +4,12 @@ import reflex as rx
 
 from durgam.pages.components import (
     admin_page,
+    config_toast,
+    form_modal,
     nav_shell,
     page_footer,
     primary_btn,
     secondary_btn,
-    config_toast,
 )
 from durgam.pages.shared.confirmation_dialog import confirmation_dialog
 from durgam.pages.shared.data_table import TableColumn, data_table
@@ -54,9 +55,8 @@ def _kebab(row: dict) -> rx.Component:
 
 
 def _inline_form() -> rx.Component:
-    return rx.cond(
-        AdminDepartmentsState.show_form,
-        rx.box(
+    return form_modal(
+        content=rx.vstack(
             rx.heading(
                 rx.cond(
                     AdminDepartmentsState.editing_id == "",
@@ -67,13 +67,8 @@ def _inline_form() -> rx.Component:
                 font_family="var(--font-sans)",
                 margin_bottom="1rem",
             ),
-            # rx.form collects all named inputs and sends them as form_data dict
-            # to save_department. This guarantees the handler receives current values
-            # even if on_change round-trips were dropped (M3 pattern).
             rx.form(
                 rx.vstack(
-                    # Hidden field carries editing_id so save_department knows
-                    # whether this is a create or edit operation.
                     rx.input(
                         type="hidden",
                         name="editing_id",
@@ -159,15 +154,11 @@ def _inline_form() -> rx.Component:
                 on_submit=AdminDepartmentsState.save_department,
                 reset_on_submit=False,
             ),
-            background="white",
-            border="1px solid var(--color-rule)",
-            border_radius="8px",
-            padding="1.5rem",
-            margin_bottom="1.5rem",
+            gap="0",
+            align="start",
             width="100%",
-            max_width="560px",
         ),
-        rx.fragment(),
+        is_open=AdminDepartmentsState.show_form,
     )
 
 
@@ -223,8 +214,9 @@ def _subdept_row(sd: dict) -> rx.Component:
 
 
 def _detail_panel() -> rx.Component:
-    """Inline detail panel showing campus links and sub-departments."""
-    return rx.box(
+    """Modal detail panel showing campus links and sub-departments."""
+    return form_modal(
+        content=rx.vstack(
         rx.hstack(
             rx.heading(
                 AdminDepartmentsState.detail_dept_name,
@@ -331,13 +323,12 @@ def _detail_panel() -> rx.Component:
                 gap="0",
             ),
         ),
-        background="white",
-        border="1px solid var(--color-rule)",
-        border_radius="8px",
-        padding="1.5rem",
-        margin_bottom="1.5rem",
-        width="100%",
-        max_width="600px",
+            align="start",
+            gap="0.5rem",
+            width="100%",
+        ),
+        is_open=AdminDepartmentsState.show_detail,
+        max_width="700px",
     )
 
 
@@ -367,11 +358,7 @@ def admin_config_departments() -> rx.Component:
                     AdminDepartmentsState.dismiss_flash,
                 ),
                 _inline_form(),
-                rx.cond(
-                    AdminDepartmentsState.show_detail,
-                    _detail_panel(),
-                    rx.fragment(),
-                ),
+                _detail_panel(),
                 rx.cond(
                     AdminDepartmentsState.loading,
                     rx.center(rx.spinner(), padding="2rem"),

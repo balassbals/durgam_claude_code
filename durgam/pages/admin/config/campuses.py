@@ -4,11 +4,12 @@ import reflex as rx
 
 from durgam.pages.components import (
     admin_page,
+    config_toast,
+    form_modal,
     nav_shell,
     page_footer,
     primary_btn,
     secondary_btn,
-    config_toast,
 )
 from durgam.pages.shared.confirmation_dialog import confirmation_dialog
 from durgam.pages.shared.data_table import TableColumn, data_table
@@ -47,22 +48,16 @@ def _kebab(row: dict) -> rx.Component:
 
 
 def _inline_form() -> rx.Component:
-    return rx.cond(
-        CampusConfigState.show_form,
-        rx.box(
+    return form_modal(
+        content=rx.vstack(
             rx.heading(
                 rx.cond(CampusConfigState.editing_id == "", "New Campus", "Edit Campus"),
                 size="4",
                 font_family="var(--font-sans)",
                 margin_bottom="1rem",
             ),
-            # rx.form collects all named inputs and sends them as form_data dict
-            # to save_campus. This guarantees the handler receives current values
-            # even if on_change round-trips were dropped (M3 Bug 1 fix).
             rx.form(
                 rx.vstack(
-                    # Hidden field carries editing_id so save_campus knows
-                    # whether this is a create or edit operation.
                     rx.input(
                         type="hidden",
                         name="editing_id",
@@ -115,7 +110,7 @@ def _inline_form() -> rx.Component:
                     ),
                     rx.hstack(
                         primary_btn("Save", type="submit"),
-                        secondary_btn("Cancel", on_click=CampusConfigState.cancel_form),
+                        secondary_btn("Cancel", on_click=CampusConfigState.cancel_form, type="button"),
                         gap="0.75rem",
                     ),
                     gap="1rem",
@@ -125,15 +120,11 @@ def _inline_form() -> rx.Component:
                 on_submit=CampusConfigState.save_campus,
                 reset_on_submit=False,
             ),
-            background="white",
-            border="1px solid var(--color-rule)",
-            border_radius="8px",
-            padding="1.5rem",
-            margin_bottom="1.5rem",
+            gap="0",
+            align="start",
             width="100%",
-            max_width="480px",
         ),
-        rx.fragment(),
+        is_open=CampusConfigState.show_form,
     )
 
 

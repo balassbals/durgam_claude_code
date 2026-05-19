@@ -9,6 +9,7 @@ from durgam.pages.components import (
     primary_btn,
     secondary_btn,
     config_toast,
+    form_modal,
 )
 from durgam.pages.shared.confirmation_dialog import confirmation_dialog
 from durgam.pages.shared.data_table import TableColumn, data_table
@@ -56,9 +57,8 @@ def _kebab(row: dict) -> rx.Component:
 
 
 def _inline_form() -> rx.Component:
-    return rx.cond(
-        AdminCoursesState.show_form,
-        rx.box(
+    return form_modal(
+        content=rx.vstack(
             rx.heading(
                 rx.cond(AdminCoursesState.editing_id == "", "New Course", "Edit Course"),
                 size="4",
@@ -248,15 +248,12 @@ def _inline_form() -> rx.Component:
                 on_submit=AdminCoursesState.save_course,
                 reset_on_submit=False,
             ),
-            background="white",
-            border="1px solid var(--color-rule)",
-            border_radius="8px",
-            padding="1.5rem",
-            margin_bottom="1.5rem",
+            gap="0",
+            align="start",
             width="100%",
-            max_width="600px",
         ),
-        rx.fragment(),
+        is_open=AdminCoursesState.show_form,
+        max_width="600px",
     )
 
 

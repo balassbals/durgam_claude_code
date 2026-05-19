@@ -9,6 +9,7 @@ from durgam.pages.components import (
     primary_btn,
     secondary_btn,
     config_toast,
+    form_modal,
 )
 from durgam.pages.shared.confirmation_dialog import confirmation_dialog
 from durgam.pages.shared.data_table import TableColumn, data_table
@@ -47,9 +48,8 @@ def _kebab(row: dict) -> rx.Component:
 
 
 def _inline_form() -> rx.Component:
-    return rx.cond(
-        SchoolConfigState.show_form,
-        rx.box(
+    return form_modal(
+        content=rx.vstack(
             rx.heading(
                 rx.cond(SchoolConfigState.editing_id == "", "New School", "Edit School"),
                 size="4",
@@ -110,7 +110,7 @@ def _inline_form() -> rx.Component:
                     ),
                     rx.hstack(
                         primary_btn("Save", type="submit"),
-                        secondary_btn("Cancel", on_click=SchoolConfigState.cancel_form),
+                        secondary_btn("Cancel", on_click=SchoolConfigState.cancel_form, type="button"),
                         gap="0.75rem",
                     ),
                     gap="1rem",
@@ -120,15 +120,11 @@ def _inline_form() -> rx.Component:
                 on_submit=SchoolConfigState.save_school,
                 reset_on_submit=False,
             ),
-            background="white",
-            border="1px solid var(--color-rule)",
-            border_radius="8px",
-            padding="1.5rem",
-            margin_bottom="1.5rem",
+            gap="0",
+            align="start",
             width="100%",
-            max_width="480px",
         ),
-        rx.fragment(),
+        is_open=SchoolConfigState.show_form,
     )
 
 

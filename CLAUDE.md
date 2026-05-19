@@ -727,6 +727,37 @@ one path → single-gate.
 Use this for pages that multiple roles can reach via different permissions (e.g. the
 vision/mission page is accessible to Registrar AND HoD).
 
+### Modal overlay pattern for config page forms and detail panels
+
+Config pages with a list + create/edit/detail sub-view must render create, edit, and
+detail content as **fixed-position modal overlays** — not inline at the top of the page.
+Inline content renders at a known DOM position; the viewport does not move to show it
+when the user triggered the action from a scrolled position.
+
+Use `form_modal(content, is_open, max_width="520px")` from `durgam/pages/components.py`:
+
+```python
+def _inline_form() -> rx.Component:
+    return form_modal(
+        content=rx.vstack(
+            rx.heading("New Campus"),
+            rx.form(... on_submit=State.save_campus ...),
+            gap="0", align="start", width="100%",
+        ),
+        is_open=CampusConfigState.show_form,
+    )
+```
+
+`form_modal` uses the same `position="fixed"` + semi-transparent backdrop pattern as
+`confirmation_dialog`. The modal appears centered in the viewport regardless of scroll
+position. Closing it (Cancel / Save) returns the user to their scroll position in the
+underlying list.
+
+**Note**: `rx.scroll_to()` was attempted first but is unreliable in Reflex 0.9.x for
+this use case (fires before new content renders). Modal overlay is the correct pattern.
+
+Applied at M3 Session 6 to: campuses, schools, centres, departments, courses.
+
 ### Notification pattern for config pages
 
 Config pages use inline state changes (not full page redirects) for sub-navigation

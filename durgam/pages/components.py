@@ -340,9 +340,8 @@ def typed_flash(flash: rx.Var, flash_type: rx.Var) -> rx.Component:
 def config_toast(flash: rx.Var, flash_type: rx.Var, dismiss_handler) -> rx.Component:
     """Fixed-position toast notification for config pages.
 
-    Renders in the top-right corner above all content so it is visible
-    regardless of scroll position (Bug 3 fix). Includes an ✕ close button
-    that calls dismiss_handler immediately (Bug 1 fix).
+    Top-right corner, z-index 1100, strong shadow so it reads as floating above
+    content rather than inline with it (Issue 2 fix).
 
     Usage:
         config_toast(State.flash, State.flash_type, State.dismiss_flash)
@@ -354,8 +353,8 @@ def config_toast(flash: rx.Var, flash_type: rx.Var, dismiss_handler) -> rx.Compo
                 rx.cond(
                     flash_type == "success",
                     rx.hstack(
-                        rx.text("✓", color="var(--color-success-border)"),
-                        rx.text(flash),
+                        rx.text("✓", color="var(--color-success-border)", font_weight="700"),
+                        rx.text(flash, flex="1"),
                         gap="0.5rem",
                         align="center",
                         flex="1",
@@ -363,8 +362,8 @@ def config_toast(flash: rx.Var, flash_type: rx.Var, dismiss_handler) -> rx.Compo
                     rx.cond(
                         flash_type == "error",
                         rx.hstack(
-                            rx.text("✗", color="var(--color-error-border)"),
-                            rx.text(flash),
+                            rx.text("✗", color="var(--color-error-border)", font_weight="700"),
+                            rx.text(flash, flex="1"),
                             gap="0.5rem",
                             align="center",
                             flex="1",
@@ -372,15 +371,15 @@ def config_toast(flash: rx.Var, flash_type: rx.Var, dismiss_handler) -> rx.Compo
                         rx.cond(
                             flash_type == "warning",
                             rx.hstack(
-                                rx.text("⚠", color="var(--color-warning-border)"),
-                                rx.text(flash),
+                                rx.text("⚠", color="var(--color-warning-border)", font_weight="700"),
+                                rx.text(flash, flex="1"),
                                 gap="0.5rem",
                                 align="center",
                                 flex="1",
                             ),
                             rx.hstack(
-                                rx.text("ℹ", color="var(--color-info-border)"),
-                                rx.text(flash),
+                                rx.text("ℹ", color="var(--color-info-border)", font_weight="700"),
+                                rx.text(flash, flex="1"),
                                 gap="0.5rem",
                                 align="center",
                                 flex="1",
@@ -394,10 +393,11 @@ def config_toast(flash: rx.Var, flash_type: rx.Var, dismiss_handler) -> rx.Compo
                     background="transparent",
                     border="none",
                     cursor="pointer",
-                    font_size="0.85rem",
+                    font_size="1rem",
                     color="var(--color-muted)",
-                    padding="0 0 0 0.5rem",
+                    padding="0 0 0 0.75rem",
                     flex_shrink="0",
+                    line_height="1",
                 ),
                 align="center",
                 width="100%",
@@ -429,17 +429,70 @@ def config_toast(flash: rx.Var, flash_type: rx.Var, dismiss_handler) -> rx.Compo
                     ),
                 ),
             ),
-            border_radius="6px",
-            padding="0.75rem 1rem",
+            border_radius="8px",
+            padding="0.875rem 1rem",
             font_size="0.875rem",
             font_family="var(--font-sans)",
             position="fixed",
-            top="4.5rem",
-            right="1.5rem",
-            z_index="1000",
-            min_width="16rem",
-            max_width="26rem",
-            box_shadow="0 2px 10px rgba(0,0,0,0.12)",
+            top="1rem",
+            right="1rem",
+            z_index="1100",
+            min_width="14rem",
+            max_width="22rem",
+            box_shadow="0 4px 16px rgba(0,0,0,0.18)",
+        ),
+        rx.fragment(),
+    )
+
+
+def form_modal(
+    content: rx.Component,
+    is_open: rx.Var,
+    max_width: str = "520px",
+) -> rx.Component:
+    """Full-viewport modal overlay for create/edit/detail forms on config pages.
+
+    Uses the same fixed-position backdrop pattern as confirmation_dialog so the
+    modal is always centered in the viewport regardless of scroll position.
+    z_index 1050 — above toast (1100) … actually below toast so toast remains
+    visible during a save.  Set to 1000 to match confirmation_dialog.
+
+    Usage:
+        form_modal(content=rx.vstack(...), is_open=State.show_form)
+    """
+    return rx.cond(
+        is_open,
+        rx.box(
+            # Backdrop dims the page
+            rx.box(
+                # Centered card
+                rx.box(
+                    content,
+                    background="white",
+                    border_radius="8px",
+                    padding="1.5rem",
+                    width=f"min({max_width}, 92vw)",
+                    max_height="88vh",
+                    overflow_y="auto",
+                    box_shadow="0 8px 32px rgba(0,0,0,0.20)",
+                ),
+                display="flex",
+                align_items="center",
+                justify_content="center",
+                position="fixed",
+                top="0",
+                left="0",
+                width="100vw",
+                height="100vh",
+                z_index="1000",
+            ),
+            position="fixed",
+            top="0",
+            left="0",
+            width="100vw",
+            height="100vh",
+            background="rgba(0,0,0,0.45)",
+            z_index="999",
         ),
         rx.fragment(),
     )
