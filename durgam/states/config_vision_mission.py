@@ -1,9 +1,8 @@
 """VisionMissionConfigState — /admin/config/vision-mission.
 
-University V&M editor (Registrar family + SYSTEM_ADMIN) + department list for
-navigation to per-department V&M pages. Uses _config_guard_any so both
-registrar and HoD-family users can land here; the page shows only the
-sections relevant to their permission.
+University V&M editor (Registrar family + SYSTEM_ADMIN).
+HoDs are redirected immediately to their own department's V&M page.
+SYSTEM_ADMIN additionally sees a department picker to reach any dept's editor.
 """
 
 from __future__ import annotations
@@ -45,8 +44,9 @@ class VisionMissionConfigState(BaseState):
     editing_mission_id: str = ""   # empty = add mode
     form_mission: str = ""
 
-    # Department list for navigation to dept V&M pages
-    dept_rows: list[dict] = []   # [{code, name, has_vision}]
+    # Department picker — only shown to SYSTEM_ADMIN (has unscoped dept VM write)
+    can_manage_depts: bool = False
+    dept_rows: list[dict] = []   # [{code, name, has_vision, edit_href}]
 
     loading: bool = True
 
@@ -59,6 +59,7 @@ class VisionMissionConfigState(BaseState):
         self.university_missions = []
         self.dept_rows = []
         self.can_edit_university = False
+        self.can_manage_depts = False
         self.show_vision_form = False
         self.show_mission_modal = False
 
@@ -68,33 +69,61 @@ class VisionMissionConfigState(BaseState):
             self.can_edit_university = can(
                 user_id, "write", "university_vision_mission", None, None, session
             )
-            if self.can_edit_university:
-                svc = _svc(session)
-                uvm = svc.get_or_create_university_vm()
-                self.university_vision = uvm.vision
-                self.university_missions = [
-                    {
-                        "id": str(m.id),
-                        "statement": m.statement,
-                        "display_order": str(m.display_order),
-                    }
-                    for m in svc.list_university_missions()
-                ]
 
-            dept_repo = DepartmentRepository(session)
-            vm_repo = VisionMissionRepository(session)
-            rows = []
-            for d in dept_repo.list_active():
-                dvm = vm_repo.get_department_vm(d.id)
+            if not self.can_edit_university:
+                # HoD path: find the department this user is authorised to edit
+                # and redirect there immediately. Iterate active depts, checking
+                # exact scope_id match — first match wins.
+                dept_repo = DepartmentRepository(session)
+                for dept in dept_repo.list_active():
+                    if can(
+                        user_id,
+                        "write",
+                        "department_vision_mission",
+                        "department",
+                        dept.id,
+                        session,
+                    ):
+                        return rx.redirect(  # type: ignore[return-value]
+                            f"/admin/config/vision-mission/departments/{dept.code}"
+                        )
+                # Guard passed but neither permission matched — shouldn't happen
+                return rx.redirect("/")  # type: ignore[return-value]
+
+            # University editor path (Registrar family + SYSTEM_ADMIN)
+            svc = _svc(session)
+            uvm = svc.get_or_create_university_vm()
+            self.university_vision = uvm.vision
+            self.university_missions = [
+                {
+                    "id": str(m.id),
+                    "statement": m.statement,
+                    "display_order": str(m.display_order),
+                }
+                for m in svc.list_university_missions()
+            ]
+
+            # Department picker: visible only to users who can write dept VM
+            # with scope_id=None (i.e. unscoped — SYSTEM_ADMIN only).
+            # Registrar has no department_vision_mission:write permission at all.
+            self.can_manage_depts = can(
+                user_id, "write", "department_vision_mission", "department", None, session
+            )
+            if self.can_manage_depts:
+                dept_repo = DepartmentRepository(session)
+                vm_repo = VisionMissionRepository(session)
                 placeholder = "To be configured by the Head of Department."
-                has_vm = dvm is not None and dvm.vision != placeholder
-                rows.append({
-                    "code": d.code,
-                    "name": d.name,
-                    "has_vision": "Yes" if has_vm else "No",
-                    "edit_href": f"/admin/config/vision-mission/departments/{d.code}",
-                })
-            self.dept_rows = rows
+                rows = []
+                for d in dept_repo.list_active():
+                    dvm = vm_repo.get_department_vm(d.id)
+                    has_vm = dvm is not None and dvm.vision != placeholder
+                    rows.append({
+                        "code": d.code,
+                        "name": d.name,
+                        "has_vision": "Yes" if has_vm else "No",
+                        "edit_href": f"/admin/config/vision-mission/departments/{d.code}",
+                    })
+                self.dept_rows = rows
 
         self._load_nav_entries()
         self.loading = False

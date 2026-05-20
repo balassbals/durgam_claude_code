@@ -15,7 +15,6 @@ from durgam.states.config_vision_mission import VisionMissionConfigState
 
 
 def _vision_section() -> rx.Component:
-    """University vision display + edit form (only shown when can_edit_university)."""
     return rx.vstack(
         rx.hstack(
             rx.heading("University Vision", size="4", font_family="var(--font-sans)"),
@@ -88,6 +87,22 @@ def _vision_edit_modal() -> rx.Component:
     )
 
 
+def _reorder_btn(label: str, on_click) -> rx.Component:
+    """Small reorder button with visible primary-colour styling."""
+    return rx.button(
+        label,
+        on_click=on_click,
+        background="transparent",
+        color="var(--color-primary)",
+        border="1px solid var(--color-primary)",
+        cursor="pointer",
+        padding="0.2rem 0.5rem",
+        font_size="0.85rem",
+        border_radius="4px",
+        font_family="var(--font-sans)",
+    )
+
+
 def _mission_row(m: dict) -> rx.Component:
     return rx.hstack(
         rx.text(
@@ -98,31 +113,13 @@ def _mission_row(m: dict) -> rx.Component:
             color="var(--color-body)",
         ),
         rx.hstack(
-            rx.button(
+            _reorder_btn(
                 "↑",
-                on_click=VisionMissionConfigState.move_mission_up(  # type: ignore[call-arg]
-                    m["id"]
-                ),
-                background="transparent",
-                border="1px solid var(--color-rule)",
-                cursor="pointer",
-                padding="0.2rem 0.5rem",
-                font_size="0.85rem",
-                border_radius="4px",
-                title="Move up",
+                VisionMissionConfigState.move_mission_up(m["id"]),  # type: ignore[call-arg]
             ),
-            rx.button(
+            _reorder_btn(
                 "↓",
-                on_click=VisionMissionConfigState.move_mission_down(  # type: ignore[call-arg]
-                    m["id"]
-                ),
-                background="transparent",
-                border="1px solid var(--color-rule)",
-                cursor="pointer",
-                padding="0.2rem 0.5rem",
-                font_size="0.85rem",
-                border_radius="4px",
-                title="Move down",
+                VisionMissionConfigState.move_mission_down(m["id"]),  # type: ignore[call-arg]
             ),
             rx.button(
                 "Edit",
@@ -130,12 +127,13 @@ def _mission_row(m: dict) -> rx.Component:
                     m["id"], m["statement"]
                 ),
                 background="transparent",
-                border="1px solid var(--color-primary)",
                 color="var(--color-primary)",
+                border="1px solid var(--color-primary)",
                 cursor="pointer",
                 padding="0.2rem 0.6rem",
                 font_size="0.8rem",
                 border_radius="4px",
+                font_family="var(--font-sans)",
             ),
             rx.button(
                 "Remove",
@@ -143,12 +141,13 @@ def _mission_row(m: dict) -> rx.Component:
                     m["id"]
                 ),
                 background="transparent",
-                border="1px solid var(--color-destructive)",
-                color="var(--color-destructive)",
+                color="var(--color-destructive, #c0392b)",
+                border="1px solid var(--color-destructive, #c0392b)",
                 cursor="pointer",
                 padding="0.2rem 0.6rem",
                 font_size="0.8rem",
                 border_radius="4px",
+                font_family="var(--font-sans)",
             ),
             gap="0.4rem",
             flex_shrink="0",
@@ -179,7 +178,7 @@ def _missions_section() -> rx.Component:
             VisionMissionConfigState.university_missions.length() == 0,  # type: ignore[attr-defined]
             rx.box(
                 rx.text(
-                    "No mission statements added yet. Click '+ Add Mission' to add one.",
+                    "No mission statements yet. Click '+ Add Mission' to add one.",
                     color="var(--color-muted)",
                     font_size="0.9rem",
                     font_family="var(--font-sans)",
@@ -257,7 +256,8 @@ def _mission_edit_modal() -> rx.Component:
     )
 
 
-def _dept_row(row: dict) -> rx.Component:
+def _dept_picker_row(row: dict) -> rx.Component:
+    """One row in the SYSTEM_ADMIN department picker."""
     return rx.hstack(
         rx.vstack(
             rx.text(
@@ -280,7 +280,11 @@ def _dept_row(row: dict) -> rx.Component:
             rx.text(
                 rx.cond(row["has_vision"] == "Yes", "Configured", "Not configured"),
                 font_size="0.8rem",
-                color=rx.cond(row["has_vision"] == "Yes", "var(--color-success-border)", "var(--color-muted)"),
+                color=rx.cond(
+                    row["has_vision"] == "Yes",
+                    "var(--color-success-border)",
+                    "var(--color-muted)",
+                ),
                 font_family="var(--font-sans)",
             ),
             rx.link(
@@ -306,7 +310,8 @@ def _dept_row(row: dict) -> rx.Component:
     )
 
 
-def _departments_section() -> rx.Component:
+def _dept_picker_section() -> rx.Component:
+    """Department V&M picker — shown only to SYSTEM_ADMIN (can_manage_depts)."""
     return rx.vstack(
         rx.heading(
             "Department Vision & Mission",
@@ -314,13 +319,13 @@ def _departments_section() -> rx.Component:
             font_family="var(--font-sans)",
         ),
         rx.text(
-            "Each department can configure its own vision and mission. Click 'Edit V&M' to manage.",
+            "Click 'Edit V&M' to manage a department's vision and mission.",
             font_size="0.85rem",
             color="var(--color-muted)",
             font_family="var(--font-sans)",
         ),
         rx.box(
-            rx.foreach(VisionMissionConfigState.dept_rows, _dept_row),
+            rx.foreach(VisionMissionConfigState.dept_rows, _dept_picker_row),
             border="1px solid var(--color-rule)",
             border_radius="6px",
             overflow="hidden",
@@ -363,21 +368,21 @@ def admin_config_vision_mission() -> rx.Component:
                     VisionMissionConfigState.loading,
                     rx.center(rx.spinner(), padding="2rem"),
                     rx.vstack(
-                        # University section — only visible to Registrar family
+                        _vision_section(),
+                        rx.divider(margin_y="1.5rem"),
+                        _missions_section(),
+                        # Department picker: only SYSTEM_ADMIN sees this
                         rx.cond(
-                            VisionMissionConfigState.can_edit_university,
+                            VisionMissionConfigState.can_manage_depts,
                             rx.vstack(
-                                _vision_section(),
                                 rx.divider(margin_y="1.5rem"),
-                                _missions_section(),
-                                rx.divider(margin_y="1.5rem"),
+                                _dept_picker_section(),
                                 align="start",
                                 gap="0",
                                 width="100%",
                             ),
                             rx.fragment(),
                         ),
-                        _departments_section(),
                         align="start",
                         gap="0",
                         width="100%",

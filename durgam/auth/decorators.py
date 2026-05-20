@@ -74,11 +74,24 @@ def require_role(
     action: str,
     resource: str,
     scope: str | None = None,
+    any_scope: bool = False,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Gate a Reflex State event handler on (action, resource, scope).
 
     Reads current_user_id from args[0] (the State instance). Raises
     PermissionDenied if the user is unauthenticated or lacks the permission.
+
+    any_scope (default False):
+        When True, passes any_scope=True to can(), meaning a user with a
+        scope-restricted role (e.g., HoD scoped to DMACS) is NOT filtered out
+        by the decorator. Use this ONLY when the handler body performs its own
+        fine-grained scope check with the exact resource ID.
+
+        Background: the decorator cannot know which specific department/scope
+        the handler is operating on — it only has the state instance. For
+        scoped resources (e.g., department_vision_mission:write:department),
+        use any_scope=True here and call can() with the exact scope_id inside
+        the handler body. This was discovered at M3 gate verification.
     """
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -99,6 +112,7 @@ def require_role(
                     scope_type=scope,
                     scope_id=scope_id,
                     session=session,
+                    any_scope=any_scope,
                 ):
                     raise PermissionDenied(user_id=user_id, action=action, resource=resource)
             return await func(*args, **kwargs)

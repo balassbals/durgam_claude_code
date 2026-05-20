@@ -919,6 +919,44 @@ any return type annotation like `-> list[Campus]` in a later method. Use entity-
 names (`list_campuses`, `list_all`) or add `from __future__ import annotations` to the
 service file to defer annotation evaluation. Discovered at Session 4.
 
+### Fine-grained scope checks in handler body
+
+`@require_role` performs a COARSE permission check: "does this user hold a role
+that grants (action, resource, scope_type) for ANY scope?" It passes `scope_id=None`
+to `can()` unless the state class exposes a `scope_id` attribute.
+
+For scope-restricted resources (e.g. HoD can only edit THEIR department's V&M):
+
+**Problem**: `@require_role(scope="department")` calls `can(scope_id=None)`. In
+`can()`, a `UserRole` with `scope_id=<DMACS UUID>` is skipped when `scope_id=None`
+and `any_scope=False` → `PermissionDenied` even though the user has the permission.
+
+**Fix — two layers**:
+1. Decorator uses `any_scope=True` for the coarse check (passes the guard).
+2. Handler body calls `can()` directly with the **exact** resource UUID for the
+   fine-grained check, rejecting mismatches with a user-friendly error:
+
+```python
+@require_role(action="write", resource="department_vision_mission",
+              scope="department", any_scope=True)   # ← coarse: user has SOME dept write
+@audit_action(action="write", resource="department_vision_mission")
+async def save_dept_vision(self, form_data: dict) -> None:
+    dept_uuid = UUID(self.dept_id)
+    with open_session() as session:
+        if not can(UUID(self.current_user_id), "write",
+                   "department_vision_mission", "department", dept_uuid, session):
+            self.flash = "You can only edit your own department's data."
+            self.flash_type = "error"
+            return                                    # ← fine: exact dept check
+        ...
+```
+
+`any_scope=True` is ONLY appropriate for handler decorators where the handler body
+performs the fine-grained check. Never use it for nav or UI visibility — use the
+existing `any_scope=True` path inside `get_visible_entries()` for that purpose.
+
+Discovered at M3 Session 7 gate verification.
+
 ### Singleton config edit page pattern
 
 Singleton config pages (one row in the table) use a get_or_create-on-load approach:
