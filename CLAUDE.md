@@ -919,6 +919,38 @@ any return type annotation like `-> list[Campus]` in a later method. Use entity-
 names (`list_campuses`, `list_all`) or add `from __future__ import annotations` to the
 service file to defer annotation evaluation. Discovered at Session 4.
 
+### Singleton config edit page pattern
+
+Singleton config pages (one row in the table) use a get_or_create-on-load approach:
+the state's load handler calls `service.get_class_timings()` (or equivalent), which
+calls `repo.get_or_create_*()` to ensure a row exists. The form pre-populates from
+that row. The save handler passes new values to `service.save_*()`, which validates
+and updates the same singleton row. No create/delete UI exists. Pattern established
+at Session 7 for `ClassTimingsConfig` and `WorkingDaysConfig`.
+
+### Update-only entity UI pattern
+
+For entities where the business rule forbids deletion (E-001 — vision/mission):
+- No delete button appears anywhere in the UI.
+- The service `delete_*` stubs always raise `NotDeletableError`.
+- The repository exposes no delete methods (test `test_repo_exposes_no_delete_methods`
+  enforces this).
+- Individual sub-entities (e.g. mission statements) MAY be soft-deleted/removed; only
+  the parent entity (UniversityVisionMission, DepartmentVisionMission) is delete-blocked.
+- Repository remove methods for sub-entities must be named `remove_*` (not `soft_delete_*`)
+  to avoid triggering the no-delete-method test.
+
+### About-page read-only display pattern
+
+Public read-only pages visible to all authenticated users use:
+1. `rx.cond(AuthState.current_user_id != "", content, rx.fragment())` — not `admin_page()`.
+2. In the on_load handler: `self._resolve_session()` + check `self.current_user_id`; redirect to `/login` if absent. No `_admin_guard` or `_config_guard` needed.
+3. Nav entries registered with `permission_action=None` so all authenticated users see them.
+4. No write handlers — no `@require_role` or `@audit_action` decorations needed.
+
+Pattern established at Session 7 for `/about/university`, `/about/departments`,
+`/about/departments/[dept_code]`.
+
 ## Current milestone
 **M3 — Configuration — Organisational Core.**
 

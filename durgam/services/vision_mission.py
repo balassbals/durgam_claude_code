@@ -141,6 +141,51 @@ class VisionMissionService:
         mission.updated_by = actor_id
         return self._vm.save_department_mission(mission)
 
+    def remove_university_mission(self, mission_id: UUID, actor_id: UUID) -> None:
+        """Soft-delete an individual mission statement (not the VM entity itself)."""
+        mission = self._vm._session.get(UniversityMission, mission_id)
+        if mission is None or mission.is_deleted:
+            raise VisionMissionError("Mission not found.")
+        self._vm.remove_university_mission(mission, actor_id)
+        log.info("university_mission_removed", actor=str(actor_id))
+
+    def move_university_mission(
+        self, mission_id: UUID, direction: str, actor_id: UUID
+    ) -> None:
+        """Move a mission up (lower display_order) or down in the ordered list."""
+        uvm = self.get_or_create_university_vm()
+        missions = self._vm.list_university_missions(uvm.id)
+        idx = next((i for i, m in enumerate(missions) if m.id == mission_id), None)
+        if idx is None:
+            raise VisionMissionError("Mission not found.")
+        if direction == "up" and idx > 0:
+            self._vm.swap_university_mission_orders(missions[idx], missions[idx - 1])
+        elif direction == "down" and idx < len(missions) - 1:
+            self._vm.swap_university_mission_orders(missions[idx], missions[idx + 1])
+
+    def remove_department_mission(self, mission_id: UUID, actor_id: UUID) -> None:
+        mission = self._vm._session.get(DepartmentMission, mission_id)
+        if mission is None or mission.is_deleted:
+            raise VisionMissionError("Mission not found.")
+        self._vm.remove_department_mission(mission, actor_id)
+        log.info("department_mission_removed", actor=str(actor_id))
+
+    def move_department_mission(
+        self, mission_id: UUID, direction: str, actor_id: UUID
+    ) -> None:
+        # We need the dvm to list missions; find it via the mission's foreign key
+        mission = self._vm._session.get(DepartmentMission, mission_id)
+        if mission is None or mission.is_deleted:
+            raise VisionMissionError("Mission not found.")
+        missions = self._vm.list_department_missions(mission.department_vision_id)
+        idx = next((i for i, m in enumerate(missions) if m.id == mission_id), None)
+        if idx is None:
+            raise VisionMissionError("Mission not found.")
+        if direction == "up" and idx > 0:
+            self._vm.swap_department_mission_orders(missions[idx], missions[idx - 1])
+        elif direction == "down" and idx < len(missions) - 1:
+            self._vm.swap_department_mission_orders(missions[idx], missions[idx + 1])
+
     # ── Delete stubs — always raise NotDeletableError (E-001) ─────────────────
 
     def delete_university_vm(self, *_args, **_kwargs) -> None:

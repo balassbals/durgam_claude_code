@@ -182,3 +182,43 @@ class VisionMissionRepository:
         self._session.flush()
         self._session.refresh(mission)
         return mission
+
+    # ── Reorder and remove helpers ────────────────────────────────────────────
+
+    def swap_university_mission_orders(
+        self, m1: UniversityMission, m2: UniversityMission
+    ) -> None:
+        m1.display_order, m2.display_order = m2.display_order, m1.display_order
+        self._session.add(m1)
+        self._session.add(m2)
+        self._session.flush()
+
+    def remove_university_mission(
+        self, mission: UniversityMission, actor_id: UUID | None = None
+    ) -> None:
+        from datetime import UTC, datetime
+
+        mission.is_deleted = True
+        mission.deleted_at = datetime.now(UTC)
+        mission.deleted_by = actor_id
+        self._session.add(mission)
+        self._session.flush()
+
+    def swap_department_mission_orders(
+        self, m1: DepartmentMission, m2: DepartmentMission
+    ) -> None:
+        m1.display_order, m2.display_order = m2.display_order, m1.display_order
+        self._session.add(m1)
+        self._session.add(m2)
+        self._session.flush()
+
+    def remove_department_mission(
+        self, mission: DepartmentMission, actor_id: UUID | None = None
+    ) -> None:
+        from datetime import UTC, datetime
+
+        mission.is_deleted = True
+        mission.deleted_at = datetime.now(UTC)
+        mission.deleted_by = actor_id
+        self._session.add(mission)
+        self._session.flush()

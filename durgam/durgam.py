@@ -114,3 +114,22 @@ app.add_page(admin_config_class_timings, route="/admin/config/class-timings",
              on_load=ClassTimingsConfigState.load_class_timings)
 app.add_page(admin_config_working_days, route="/admin/config/working-days",
              on_load=WorkingDaysConfigState.load_working_days)
+
+# ── M3 Session 7 — Dept V&M + About pages ─────────────────────────────────────
+from durgam.pages.admin.config.dept_vm import admin_config_dept_vm
+from durgam.pages.about import __init__ as _about_nav_register  # noqa: F401 — registers About nav entries
+from durgam.pages.about.university import about_university
+from durgam.pages.about.departments import about_departments
+from durgam.pages.about.dept_detail import about_dept_detail
+from durgam.states.config_dept_vm import DeptVMConfigState
+from durgam.states.about import AboutUniversityState, AboutDeptListState, AboutDeptDetailState
+
+app.add_page(admin_config_dept_vm,
+             route="/admin/config/vision-mission/departments/[dept_code]",
+             on_load=DeptVMConfigState.load_dept_vm)
+app.add_page(about_university, route="/about/university",
+             on_load=AboutUniversityState.load_university_about)
+app.add_page(about_departments, route="/about/departments",
+             on_load=AboutDeptListState.load_dept_list)
+app.add_page(about_dept_detail, route="/about/departments/[dept_code]",
+             on_load=AboutDeptDetailState.load_dept_detail)
