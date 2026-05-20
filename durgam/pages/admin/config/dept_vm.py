@@ -272,7 +272,7 @@ def admin_config_dept_vm() -> rx.Component:
                     margin_bottom="0.5rem",
                 ),
                 rx.text(
-                    "Department code: " + DeptVMConfigState.dept_code,
+                    "Department code: " + DeptVMConfigState.active_dept_code,
                     font_size="0.85rem",
                     color="var(--color-muted)",
                     font_family="var(--font-sans)",

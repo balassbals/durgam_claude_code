@@ -25,8 +25,9 @@ def _svc(session) -> VisionMissionService:
 
 
 class DeptVMConfigState(BaseState):
-    # Current department
-    dept_code: str = ""
+    # Current department — named active_dept_code to avoid shadowing the [dept_code]
+    # dynamic route arg which Reflex exposes automatically as a state var.
+    active_dept_code: str = ""
     dept_name: str = ""
     dept_id: str = ""
 
@@ -64,7 +65,7 @@ class DeptVMConfigState(BaseState):
             return rx.redirect("/admin/config/vision-mission")  # type: ignore[return-value]
 
         self.loading = True
-        self.dept_code = dept_code
+        self.active_dept_code = dept_code
         self.dept_vision = ""
         self.dept_missions = []
         self.show_vision_form = False

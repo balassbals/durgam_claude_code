@@ -77,7 +77,8 @@ class AboutDeptListState(BaseState):
 
 
 class AboutDeptDetailState(BaseState):
-    dept_code: str = ""
+    # named active_dept_code to avoid shadowing the [dept_code] dynamic route arg
+    active_dept_code: str = ""
     dept_name: str = ""
     dept_vision: str = ""
     dept_missions: list[dict] = []
@@ -92,7 +93,7 @@ class AboutDeptDetailState(BaseState):
 
         dept_code = self.router.page.params.get("dept_code", "")
         self.loading = True
-        self.dept_code = dept_code
+        self.active_dept_code = dept_code
         self.dept_name = ""
         self.dept_vision = ""
         self.dept_missions = []
