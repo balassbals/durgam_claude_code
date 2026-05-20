@@ -285,7 +285,7 @@ def _dept_row(row: dict) -> rx.Component:
             ),
             rx.link(
                 "Edit V&M",
-                href="/admin/config/vision-mission/departments/" + row["code"],
+                href=row["edit_href"],
                 font_size="0.85rem",
                 color="var(--color-primary)",
                 font_family="var(--font-sans)",

@@ -36,7 +36,7 @@ def _dept_row(row: dict) -> rx.Component:
             ),
             rx.link(
                 "View",
-                href="/about/departments/" + row["code"],
+                href=row["view_href"],
                 font_size="0.85rem",
                 color="var(--color-primary)",
                 font_family="var(--font-sans)",

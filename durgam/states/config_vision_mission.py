@@ -88,7 +88,12 @@ class VisionMissionConfigState(BaseState):
                 dvm = vm_repo.get_department_vm(d.id)
                 placeholder = "To be configured by the Head of Department."
                 has_vm = dvm is not None and dvm.vision != placeholder
-                rows.append({"code": d.code, "name": d.name, "has_vision": "Yes" if has_vm else "No"})
+                rows.append({
+                    "code": d.code,
+                    "name": d.name,
+                    "has_vision": "Yes" if has_vm else "No",
+                    "edit_href": f"/admin/config/vision-mission/departments/{d.code}",
+                })
             self.dept_rows = rows
 
         self._load_nav_entries()

@@ -70,7 +70,12 @@ class AboutDeptListState(BaseState):
             for d in dept_repo.list_active():
                 dvm = vm_repo.get_department_vm(d.id)
                 has_vm = dvm is not None and dvm.vision != placeholder
-                rows.append({"code": d.code, "name": d.name, "has_vision": "Yes" if has_vm else "No"})
+                rows.append({
+                    "code": d.code,
+                    "name": d.name,
+                    "has_vision": "Yes" if has_vm else "No",
+                    "view_href": f"/about/departments/{d.code}",
+                })
             self.dept_rows = rows
         self._load_nav_entries()
         self.loading = False
