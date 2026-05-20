@@ -71,27 +71,30 @@ Reflex values. Custom animation tuning deferred to UI Polish milestone.
 
 ---
 
-## Notification persistence
+## Notification persistence (RESOLVED at M3)
 
-Permission-denial notifications on `/admin/*` and `/admin/config/*` redirects clear on
-the same render cycle as the redirect, making them appear for < 100ms in practice.
-Real users perceive this as "something flashed but I couldn't read it." The flash
-lifecycle rule (cleared on next navigation, M2 pattern) is correct for preventing
-notification leakage, but sacrifices readability for one-time informational messages.
+Resolved at M3 Session 7. Toast notification pattern implemented:
+bottom-right position, 4-second auto-dismiss, X close button.
+Applied to all config pages and home page. See CLAUDE.md →
+"Notification pattern for config pages (M3)" for canonical implementation.
 
-**Observed at M3 Session 5:** `student_001` redirected from `/admin/config` sees an
-amber permission-denial notification that disappears before it can be read.
+---
 
-**Proposed fix for UI Polish milestone:** implement a toast-style notification with
-auto-dismiss after 3–5 seconds, independent of page navigation state. Toast queue
-persists until the timer fires or the user dismisses explicitly.
+## Permission-denied redirect notification rendering
 
-Notifications that **should** use the persistent-toast pattern:
-- Permission denials (informational, not destructive; user needs to read it).
-- Save-success confirmations (so the user actually sees "Campus saved.").
-- Login failures (already partially handled — consistency pass).
+When a non-permitted user attempts to reach an admin route (e.g.,
+`student_001` typing `/admin/config`), the route guard redirects to `/`
+and shows an amber notification "you do not have permission to access
+this page". The redirect is correct security behaviour. The notification
+UX is acceptable but not polished: the notification briefly overlaps
+the landing page's content before the user re-orients to the home page.
 
-Notifications that **should keep** the current per-page-flash pattern:
-- Temp password displays (Bug 8 at M2 — one-time, requires explicit Dismiss).
-- Forced-flow prompts (`must_change_password` banner).
-- Error states that block the page from rendering normally (inline, not toast).
+**Observed at M3 Sessions 5–7.** User feedback during manual
+verification: "looks ugly."
+
+**Proposed fix for UI Polish milestone:** standardise the redirect
+notification on the same toast pattern used for in-page success/error
+notifications (bottom-right, 4-second auto-dismiss, X close). Currently
+the redirect notification fires via `typed_flash()` on the home page's
+render, which is a different lifecycle from the in-page toast. Unify
+the rendering.

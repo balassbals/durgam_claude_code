@@ -88,7 +88,8 @@ docker compose exec db psql -U durgam -d durgam -c \
   "SELECT username, must_change_password, failed_login_count,
    locked_until, is_deleted FROM users
    WHERE username IN ('sys_admin', 'dean_sci', 'firstlogin_user',
-                       'inactive_user', 'student_001')
+                       'inactive_user', 'student_001',
+                       'registrar_user', 'hod_dmacs')
    ORDER BY username;"
 ```
 
@@ -132,6 +133,14 @@ Note any issue. Write them down. The agent will need them if there
 are gaps.
 
 ## Step 5: Three-width responsiveness check (5 minutes)
+
+> **NOTE (M3+):** Three-width responsiveness verification is deferred
+> to the UI Polish milestone per `docs/ui_polish_backlog.md` and
+> `tech_debt.md` TD-007. For M3 onward, this step is reduced to:
+> confirm the desktop layout (1280px) works correctly for all
+> milestone-introduced pages. Mobile (360px) and tablet (768px)
+> verification will be performed at the UI Polish milestone across
+> all accumulated modules.
 
 Open browser DevTools (F12). Click the device-toolbar icon.
 

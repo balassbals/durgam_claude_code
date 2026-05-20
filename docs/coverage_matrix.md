@@ -42,11 +42,11 @@ Errata bindings: E-001 (vision/mission) extends the M3 row.
 | ProgramExitLevel | §8.2 | M3 | Shipped at M3 | Session 6: read-only Exit Levels tab on program detail page; rich edit UI → M13 |
 | Course (basic — code, name, credits, lecture, tutorial, practical, evaluation) | §8.2, §9.3 | M3 | Shipped at M3 | Session 6: CRUD page; credits auto-derived from L+T+P/2 (global 2:1 practical ratio); M13 moves ratio to ProgramRegulation |
 | Course (extended — course_type, delivery_mode, mooc_agency, IKS flags) | §8.3 | M13 | Planned for M13 | Refinement 3: defers to Program & Course module. M13 must also implement course_type-based department dropdown filtering: DSC/DSE/MDC restricts to departments running the program (auto-lock if single dept); AEC/SEC/VAC/Internship/Research/Minor allows all departments. Source: informal requirements doc, Course Module section. |
-| University vision/mission | E-001, §9.3 | M3 | Shipped at M3 | Model + seed + edit page placeholder |
-| Department vision/mission | E-001, §9.3 | M3 | Shipped at M3 | Model + seed + edit page placeholder |
+| University vision/mission | E-001, §9.3 | M3 | Shipped at M3 | Model + seed + edit page (Session 7); update-only enforced via NotDeletableError; /about/university displays read-only |
+| Department vision/mission | E-001, §9.3 | M3 | Shipped at M3 | Model + seed + edit page (Session 7); scope-restricted to HoD's own dept; update-only; /about/departments/{code} displays read-only |
 | AcademicYear (code, dates, is_locked) | §8.5, §9.3 | M0/M3 | Shipped at M0 | Locked state management → M4 |
-| ClassTimingsConfig (singleton) | §9.3 | M3 | Shipped at M3 | Model + seed; edit page placeholder |
-| WorkingDaysConfig (singleton) | §9.3 | M3 | Shipped at M3 | Model + seed; edit page placeholder |
+| ClassTimingsConfig (singleton) | §9.3 | M3 | Shipped at M3 | Singleton edit page (Session 7); HH:MM validation; configure action only |
+| WorkingDaysConfig (singleton) | §9.3 | M3 | Shipped at M3 | Singleton edit page (Session 7); 5/6-day radio; configure action only |
 | Faculty (basic info in config module) | §9.3 | M10 | Planned for M10 | Faculty profile module |
 | Student (basic info in config module) | §9.3 | M12 | Planned for M12 | Student profile module |
 | RoleEmail (email bound to role/scope) | §9.3 | M2/M5 | Shipped at M2 (model); M5 for UI | M2 seeded; UI for admin in M5 |

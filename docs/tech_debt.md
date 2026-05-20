@@ -97,6 +97,32 @@ resource names matching any value in the seeded Permission table at test-collect
 time. Or generate test resources from a fixed namespace (e.g. `nonexistent_resource_*`) 
 that's known not to be seeded.
 
+### TD-007 — Mobile and tablet responsiveness deferred across modules
+
+**Location:** Every admin and config page (multiple files in `durgam/pages/`).
+
+**What it is:** The two-tier responsive table component code exists
+(`durgam/pages/shared/data_table.py`) and is wired into all list pages.
+However, actual rendering at 360px and 768px viewports has not been verified
+or tuned. At 360px, tables don't consistently convert to cards. At 768px,
+the navbar layout cramps. Forms reflow acceptably but not gracefully.
+
+**Why this is not a production issue at M3:** All M3 admin and config
+workflows are used by university administrators (Registrar, HoDs, sys_admin)
+who work primarily at desktop. Students who reach the read-only `/about`
+pages can read them on any device, though formatting is not ideal on mobile.
+
+**Compensating decision:** Three-width responsiveness checks have been removed
+from the M3+ gate verification ritual (see `docs/prompts/gate_verification.md`
+Step 5). The UI Polish milestone (scheduled before M20) will conduct dedicated
+mobile and tablet polish across all modules accumulated through M19.
+
+**Trigger to re-open:** (a) Mobile usage by faculty becomes an operational need
+(e.g., approving leave requests on phone); (b) university mandates an
+accessibility audit; (c) UI Polish milestone arrives per project plan.
+
+---
+
 ## Resolved
 
 ### TD-002 — SAWarning: transaction already deassociated from connection (resolved in m0-cleanup)

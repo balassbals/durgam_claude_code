@@ -955,7 +955,9 @@ async def save_dept_vision(self, form_data: dict) -> None:
 performs the fine-grained check. Never use it for nav or UI visibility — use the
 existing `any_scope=True` path inside `get_visible_entries()` for that purpose.
 
-Discovered at M3 Session 7 gate verification.
+Discovered at M3 Session 7 gate verification when `hod_dmacs` got
+`PermissionDenied` on `save_department_vision` despite having the correct
+scope binding (`HOD` role with `scope_id=<DMACS UUID>` in `user_roles`).
 
 ### Singleton config edit page pattern
 
