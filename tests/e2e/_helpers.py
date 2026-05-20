@@ -85,6 +85,32 @@ def _wait_for_admin_page(page: Page, stable_text: str, timeout: int = 15_000) ->
     expect(page.get_by_text(stable_text)).to_be_visible(timeout=timeout)
 
 
+def _hard_delete_by_code(table: str, code: str) -> None:
+    """Hard-delete a config entity by its code column.
+
+    Used in CRUD test finally-blocks to ensure cleanup even when a test
+    fails before the soft-delete step. Also pre-cleans leftover entities
+    from previous failed runs so tests are order-independent.
+
+    Tables supported: campuses, schools, centres_of_excellence,
+    departments, courses (and their FKs are cascade-deleted).
+    """
+    from sqlalchemy import create_engine, text
+
+    from durgam.config import settings
+
+    engine = create_engine(settings.database_url_sync)
+    try:
+        with engine.connect() as conn:
+            conn.execute(
+                text(f"DELETE FROM {table} WHERE code = :code"),  # noqa: S608
+                {"code": code},
+            )
+            conn.commit()
+    finally:
+        engine.dispose()
+
+
 def _latest_mailpit_email(
     to_address: str, subject_contains: str, timeout: int = 15
 ) -> dict:

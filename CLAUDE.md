@@ -980,6 +980,30 @@ For entities where the business rule forbids deletion (E-001 — vision/mission)
 - Repository remove methods for sub-entities must be named `remove_*` (not `soft_delete_*`)
   to avoid triggering the no-delete-method test.
 
+### E2E CRUD test isolation pattern
+
+Every E2E test that creates a system entity (campus, school, centre, department,
+course) MUST:
+
+1. **Pre-clean at the start**: call `_hard_delete_by_code(table, code)` before
+   the test body. This ensures a leftover entity from a previous failed run
+   does not cause a unique-constraint error on create.
+
+2. **Wrap body in `try/finally`**: call `_hard_delete_by_code` in the `finally`
+   block to clean up even if the test fails before the soft-delete step.
+
+3. **Use a stable, non-seeded code**: pick a code that doesn't appear in the
+   seed script (e.g. TST, TSC, TCE, TDE, TST101). Never reuse a seeded code.
+
+Background: soft-deleted entities keep their `code` value with a DB-level unique
+constraint that applies to ALL rows including soft-deleted. If the test fails
+before soft-deleting, the next run tries to create the same code and gets a
+unique constraint error (rather than the intended test failure). The pre-clean
+and finally-cleanup together prevent this.
+
+This pattern was discovered at M3 gate verification when CRUD tests failed
+consistently after the first run.
+
 ### About-page read-only display pattern
 
 Public read-only pages visible to all authenticated users use:
