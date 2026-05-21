@@ -472,6 +472,30 @@ class TestCourseRepository:
         assert not any(c.id == course.id for c in repo.list_by_department(dept.id))
 
 
+# ── Department invariant ──────────────────────────────────────────────────────
+
+class TestDepartmentMainCampusInvariant:
+    """Invariant: departments.main_campus_id always appears in department_campuses."""
+
+    def test_seeded_departments_all_have_main_in_links(self, seeded_session):
+        """After seeding, every active department's main_campus_id is in its campus links."""
+        depts = seeded_session.exec(
+            select(Department).where(Department.is_deleted == False)  # noqa: E712
+        ).all()
+        assert depts, "No seeded departments found — seed may not have run"
+        for dept in depts:
+            links = seeded_session.exec(
+                select(DepartmentCampus).where(
+                    DepartmentCampus.department_id == dept.id
+                )
+            ).all()
+            link_campus_ids = {link.campus_id for link in links}
+            assert dept.main_campus_id in link_campus_ids, (
+                f"Department '{dept.code}': main_campus_id={dept.main_campus_id} "
+                f"not in campus links {link_campus_ids}"
+            )
+
+
 # ── Vision/Mission ────────────────────────────────────────────────────────────
 
 class TestVisionMissionRepository:

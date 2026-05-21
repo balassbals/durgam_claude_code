@@ -5,7 +5,11 @@ from uuid import uuid4
 
 import pytest
 
-from durgam.services.department import DepartmentError, DepartmentService
+from durgam.services.department import (
+    CannotRemoveMainCampusError,
+    DepartmentError,
+    DepartmentService,
+)
 from durgam.services.org_exceptions import HardDeleteBlockedError
 
 
@@ -130,23 +134,94 @@ class TestAddCampus:
 
 
 class TestRemoveCampus:
-    def test_remove_campus_calls_remove_link(self):
+    def _dept_with_main(self, main_campus_id):
+        dept = MagicMock()
+        dept.main_campus_id = main_campus_id
+        return dept
+
+    def test_remove_non_main_campus_calls_remove_link(self):
+        main_id = uuid4()
+        campus_id = uuid4()  # different from main
         repo = MagicMock()
-        # Two links exist — removal of one is allowed.
+        repo.get_by_id.return_value = self._dept_with_main(main_id)
         repo.list_campus_links.return_value = [MagicMock(), MagicMock()]
         svc = _make_svc(dept_repo=repo)
         dept_id = uuid4()
-        campus_id = uuid4()
         svc.remove_campus(dept_id, campus_id, uuid4())
         repo.remove_campus_link.assert_called_once_with(dept_id, campus_id)
 
-    def test_remove_last_campus_raises(self):
+    def test_remove_main_campus_raises(self):
+        """Bug B: removing the main campus raises CannotRemoveMainCampusError."""
+        campus_id = uuid4()
         repo = MagicMock()
-        # Only one link — removal would leave zero campuses.
+        repo.get_by_id.return_value = self._dept_with_main(campus_id)  # same ID = main
+        repo.list_campus_links.return_value = [MagicMock(), MagicMock()]
+        svc = _make_svc(dept_repo=repo)
+        with pytest.raises(CannotRemoveMainCampusError, match="main campus"):
+            svc.remove_campus(uuid4(), campus_id, uuid4())
+
+    def test_remove_last_campus_raises(self):
+        main_id = uuid4()
+        campus_id = uuid4()  # different from main
+        repo = MagicMock()
+        repo.get_by_id.return_value = self._dept_with_main(main_id)
         repo.list_campus_links.return_value = [MagicMock()]
         svc = _make_svc(dept_repo=repo)
         with pytest.raises(DepartmentError, match="last campus"):
-            svc.remove_campus(uuid4(), uuid4(), uuid4())
+            svc.remove_campus(uuid4(), campus_id, uuid4())
+
+
+class TestPromoteAndRemoveMainCampus:
+    def _dept_with_main(self, main_campus_id):
+        dept = MagicMock()
+        dept.main_campus_id = main_campus_id
+        return dept
+
+    def _link_with_campus_id(self, campus_id):
+        link = MagicMock()
+        link.campus_id = campus_id
+        return link
+
+    def test_promote_succeeds(self):
+        old_main_id = uuid4()
+        new_main_id = uuid4()
+        dept = self._dept_with_main(old_main_id)
+        repo = MagicMock()
+        repo.get_by_id.return_value = dept
+        repo.list_campus_links.return_value = [
+            self._link_with_campus_id(old_main_id),
+            self._link_with_campus_id(new_main_id),
+        ]
+        repo.save.return_value = dept
+        svc = _make_svc(dept_repo=repo)
+        dept_id = uuid4()
+        svc.promote_and_remove_main_campus(dept_id, new_main_id, old_main_id, uuid4())
+        assert dept.main_campus_id == new_main_id
+        repo.remove_campus_link.assert_called_once_with(dept_id, old_main_id)
+
+    def test_promote_fails_if_wrong_old_main(self):
+        old_main_id = uuid4()
+        wrong_id = uuid4()
+        dept = self._dept_with_main(old_main_id)
+        repo = MagicMock()
+        repo.get_by_id.return_value = dept
+        svc = _make_svc(dept_repo=repo)
+        with pytest.raises(DepartmentError, match="not the current main"):
+            svc.promote_and_remove_main_campus(uuid4(), uuid4(), wrong_id, uuid4())
+
+    def test_promote_fails_if_new_main_not_a_link(self):
+        old_main_id = uuid4()
+        new_main_id = uuid4()  # not in campus links
+        dept = self._dept_with_main(old_main_id)
+        repo = MagicMock()
+        repo.get_by_id.return_value = dept
+        repo.list_campus_links.return_value = [
+            self._link_with_campus_id(old_main_id),
+            self._link_with_campus_id(uuid4()),  # different campus
+        ]
+        svc = _make_svc(dept_repo=repo)
+        with pytest.raises(DepartmentError, match="not linked"):
+            svc.promote_and_remove_main_campus(uuid4(), new_main_id, old_main_id, uuid4())
 
 
 class TestSoftDelete:

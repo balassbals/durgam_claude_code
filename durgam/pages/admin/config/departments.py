@@ -163,13 +163,29 @@ def _inline_form() -> rx.Component:
 
 
 def _campus_chip(link: dict) -> rx.Component:
-    """A tag-style chip for a linked campus with a Remove button."""
+    """A tag-style chip for a linked campus.
+
+    Bug C: shows a 'main' badge when this campus is the department's main campus.
+    Bug B: Remove triggers either the promote-and-remove flow (main campus) or
+    the standard confirm dialog (non-main campus) — decided in open_remove_campus_confirm.
+    """
+    is_main = AdminDepartmentsState.detail_main_campus_id == link["campus_id"]
     return rx.hstack(
         rx.text(
             link["campus_code"],
             font_size="0.85rem",
             font_family="var(--font-sans)",
             font_weight="500",
+        ),
+        rx.cond(
+            is_main,
+            rx.badge(
+                "main",
+                color_scheme="indigo",
+                variant="soft",
+                font_size="0.7rem",
+            ),
+            rx.fragment(),
         ),
         rx.button(
             "Remove",
@@ -332,6 +348,71 @@ def _detail_panel() -> rx.Component:
     )
 
 
+def _promote_remove_modal() -> rx.Component:
+    """Modal for removing the main campus — requires selecting a replacement.
+
+    Bug B: selecting a non-main campus for removal goes through the standard
+    confirmation_dialog. Selecting the main campus goes through this modal which
+    forces the user to choose a replacement before confirming.
+    """
+    return form_modal(
+        content=rx.vstack(
+            rx.heading(
+                AdminDepartmentsState.confirm_promote_remove_title,
+                size="4",
+                font_family="var(--font-sans)",
+            ),
+            rx.text(
+                AdminDepartmentsState.confirm_promote_remove_body,
+                font_size="0.875rem",
+                color="var(--color-muted)",
+                font_family="var(--font-sans)",
+            ),
+            rx.vstack(
+                rx.text(
+                    "Promote as new main campus:",
+                    font_size="0.85rem",
+                    color="var(--color-muted)",
+                    font_family="var(--font-sans)",
+                ),
+                rx.select.root(
+                    rx.select.trigger(placeholder="Select new main campus"),
+                    rx.select.content(
+                        rx.foreach(
+                            AdminDepartmentsState.promote_candidates,
+                            lambda c: rx.select.item(c["campus_code"], value=c["campus_id"]),
+                        ),
+                    ),
+                    value=AdminDepartmentsState.promote_new_campus_id,
+                    on_change=AdminDepartmentsState.set_promote_new_campus_id,
+                    width="100%",
+                ),
+                align="start",
+                gap="0.5rem",
+                width="100%",
+            ),
+            rx.hstack(
+                primary_btn(
+                    "Remove & Promote",
+                    on_click=AdminDepartmentsState.promote_and_remove_main_campus,
+                    type="button",
+                ),
+                secondary_btn(
+                    "Cancel",
+                    on_click=AdminDepartmentsState.cancel_promote_remove,
+                    type="button",
+                ),
+                gap="0.75rem",
+            ),
+            gap="1rem",
+            align="start",
+            width="100%",
+        ),
+        is_open=AdminDepartmentsState.confirm_promote_remove_open,
+        max_width="480px",
+    )
+
+
 def admin_config_departments() -> rx.Component:
     return admin_page(
         rx.vstack(
@@ -359,6 +440,7 @@ def admin_config_departments() -> rx.Component:
                 ),
                 _inline_form(),
                 _detail_panel(),
+                _promote_remove_modal(),
                 rx.cond(
                     AdminDepartmentsState.loading,
                     rx.center(rx.spinner(), padding="2rem"),
@@ -367,14 +449,11 @@ def admin_config_departments() -> rx.Component:
                         columns=[
                             TableColumn(key="code", label="Code"),
                             TableColumn(key="name", label="Name"),
+                            TableColumn(key="school_code", label="School"),
+                            # Bug C: show main campus code; stay ≤4 cols (Tier-1 rule).
                             TableColumn(
-                                key="school_code",
-                                label="School",
-                                hidden_on_card=False,
-                            ),
-                            TableColumn(
-                                key="campus_count",
-                                label="Campuses",
+                                key="main_campus_code",
+                                label="Main Campus",
                                 hidden_on_card=True,
                             ),
                         ],

@@ -18,6 +18,15 @@ class DepartmentError(OrgServiceError):
     pass
 
 
+class CannotRemoveMainCampusError(DepartmentError):
+    """Raised when attempting to remove the main campus without promoting a replacement.
+
+    The UI must call promote_and_remove_main_campus() instead, which atomically
+    updates main_campus_id and removes the old campus link in one transaction.
+    Invariant preserved: departments.main_campus_id always appears in department_campuses.
+    """
+
+
 class DepartmentService:
     def __init__(
         self,
@@ -130,7 +139,12 @@ class DepartmentService:
         self._depts.upsert_campus_link(dept_id, campus_id, has_ahod=has_ahod)
 
     def remove_campus(self, dept_id: UUID, campus_id: UUID, actor_id: UUID) -> None:
-        self.get(dept_id)  # verify dept exists and is active
+        dept = self.get(dept_id)
+        if dept.main_campus_id == campus_id:
+            raise CannotRemoveMainCampusError(
+                "Cannot remove the main campus directly. "
+                "Select a replacement main campus first."
+            )
         links = self._depts.list_campus_links(dept_id)
         if len(links) <= 1:
             raise DepartmentError(
@@ -138,6 +152,33 @@ class DepartmentService:
                 "A department must be associated with at least one campus."
             )
         self._depts.remove_campus_link(dept_id, campus_id)
+
+    def promote_and_remove_main_campus(
+        self, dept_id: UUID, new_main_id: UUID, old_main_id: UUID, actor_id: UUID
+    ) -> None:
+        """Atomically promote new_main_id as main campus and remove old_main_id from links.
+
+        Preserves the invariant: departments.main_campus_id is always present in
+        the department's DepartmentCampus rows.
+        """
+        dept = self.get(dept_id)
+        if dept.main_campus_id != old_main_id:
+            raise DepartmentError("The campus to remove is not the current main campus.")
+        links = self._depts.list_campus_links(dept_id)
+        link_ids = {link.campus_id for link in links}
+        if new_main_id not in link_ids:
+            raise DepartmentError("The selected campus is not linked to this department.")
+        dept.main_campus_id = new_main_id
+        dept.updated_by = actor_id
+        self._depts.save(dept)
+        self._depts.remove_campus_link(dept_id, old_main_id)
+        log.info(
+            "main_campus_promoted",
+            dept_id=str(dept_id),
+            new_main=str(new_main_id),
+            old_main=str(old_main_id),
+            actor=str(actor_id),
+        )
 
     # ── SubDepartment management ──────────────────────────────────────────────
 

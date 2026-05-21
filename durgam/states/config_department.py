@@ -13,7 +13,11 @@ from durgam.repositories.campus import CampusRepository
 from durgam.repositories.department import DepartmentRepository, SubDepartmentRepository
 from durgam.repositories.school import SchoolRepository
 from durgam.services.campus import CampusService
-from durgam.services.department import DepartmentError, DepartmentService
+from durgam.services.department import (
+    CannotRemoveMainCampusError,
+    DepartmentError,
+    DepartmentService,
+)
 from durgam.services.org_exceptions import HardDeleteBlockedError
 from durgam.services.school import SchoolService
 from durgam.states.base import BaseState
@@ -40,8 +44,8 @@ class AdminDepartmentsState(BaseState):
     form_main_campus_id: str = ""
 
     # Dropdowns loaded for form
-    schools_dropdown: list[dict] = []    # {"id": str, "code": str, "name": str}
-    campuses_dropdown: list[dict] = []   # {"id": str, "code": str, "name": str}
+    schools_dropdown: list[dict] = []    # {"id": str, "label": str}
+    campuses_dropdown: list[dict] = []   # {"id": str, "label": str}
 
     # Confirmation dialog (soft delete)
     confirm_open: bool = False
@@ -52,6 +56,7 @@ class AdminDepartmentsState(BaseState):
     # Detail view (campus links + sub-departments)
     detail_dept_id: str = ""
     detail_dept_name: str = ""
+    detail_main_campus_id: str = ""   # Bug A/C: loaded fresh in open_detail
     detail_campus_links: list[dict] = []   # {"campus_id": str, "campus_code": str}
     detail_sub_depts: list[dict] = []      # {"id": str, "code": str, "name": str}
     show_detail: bool = False
@@ -60,9 +65,16 @@ class AdminDepartmentsState(BaseState):
     add_campus_id: str = ""
     available_campuses: list[dict] = []   # campuses not yet linked
 
-    # Confirm remove campus link
+    # Standard confirm-remove campus dialog (for non-main campuses)
     confirm_remove_campus_open: bool = False
     confirm_remove_campus_id: str = ""
+
+    # Promote-and-remove dialog (Bug B: for when user tries to remove the main campus)
+    confirm_promote_remove_open: bool = False
+    confirm_promote_remove_title: str = ""
+    confirm_promote_remove_body: str = ""
+    promote_new_campus_id: str = ""     # new main to promote (selected or auto)
+    promote_candidates: list[dict] = []  # [{campus_id, campus_code}] — other campuses
 
     # ── Load ──────────────────────────────────────────────────────────────────
 
@@ -71,13 +83,17 @@ class AdminDepartmentsState(BaseState):
 
         Called from load_departments (after guard) and from campus-link handlers
         (Bug 2: list count must update live without closing the detail panel).
+        Bug C: includes main_campus_code for display in the list table.
         """
         with open_session() as session:
+            all_campuses = CampusService(CampusRepository(session)).list()
+            campus_by_id = {str(c.id): c.code for c in all_campuses}
             new_rows = []
             for d in _dept_svc(session).list():
                 campus_links = DepartmentRepository(session).list_campus_links(d.id)
                 school = SchoolRepository(session).get_by_id(d.school_id)
                 school_code = school.code if school else ""
+                main_campus_code = campus_by_id.get(str(d.main_campus_id), "")
                 new_rows.append({
                     "id": str(d.id),
                     "code": d.code,
@@ -85,6 +101,7 @@ class AdminDepartmentsState(BaseState):
                     "school_id": str(d.school_id),
                     "school_code": school_code,
                     "main_campus_id": str(d.main_campus_id),
+                    "main_campus_code": main_campus_code,
                     "campus_count": str(len(campus_links)),
                 })
             self.departments = new_rows
@@ -132,6 +149,9 @@ class AdminDepartmentsState(BaseState):
 
     def set_add_campus_id(self, value: str) -> None:
         self.add_campus_id = value
+
+    def set_promote_new_campus_id(self, value: str) -> None:
+        self.promote_new_campus_id = value
 
     # ── Form open/close ───────────────────────────────────────────────────────
 
@@ -242,6 +262,10 @@ class AdminDepartmentsState(BaseState):
         # load_departments calls _config_guard which clears flash.
         # Set flash AFTER load so the success message is visible (Bug 3).
         await self.load_departments()
+        # Bug A: if the detail panel is open for the same department, refresh
+        # it so detail_main_campus_id reflects the updated value.
+        if self.show_detail and self.detail_dept_id == editing_id and editing_id:
+            await self.open_detail(editing_id, name)
         self.flash = success_msg
         self.flash_type = "success"
         return rx.scroll_to("dept-page-top")
@@ -290,12 +314,17 @@ class AdminDepartmentsState(BaseState):
         self.detail_dept_name = dept_name
         self.detail_campus_links = []
         self.detail_sub_depts = []
+        self.detail_main_campus_id = ""
         self.show_detail = True
         self.add_campus_id = ""
         self.available_campuses = []
         with open_session() as session:
             svc = _dept_svc(session)
             dept_uuid = UUID(dept_id)
+            # Bug A/C: load main_campus_id so the detail panel can badge it.
+            dept = DepartmentRepository(session).get_by_id(dept_uuid)
+            if dept:
+                self.detail_main_campus_id = str(dept.main_campus_id)
             links = DepartmentRepository(session).list_campus_links(dept_uuid)
             linked_campus_ids = {str(link.campus_id) for link in links}
             all_campuses = CampusService(CampusRepository(session)).list()
@@ -325,6 +354,7 @@ class AdminDepartmentsState(BaseState):
         self.show_detail = False
         self.detail_dept_id = ""
         self.detail_dept_name = ""
+        self.detail_main_campus_id = ""
         self.detail_campus_links = []
         self.detail_sub_depts = []
 
@@ -335,7 +365,7 @@ class AdminDepartmentsState(BaseState):
     async def add_campus_link(self) -> None:
         if not self.add_campus_id:
             return
-        self.flash = ""  # clear stale flash before this action (Bug 3)
+        self.flash = ""
         try:
             with open_session() as session:
                 _dept_svc(session).add_campus(
@@ -343,25 +373,61 @@ class AdminDepartmentsState(BaseState):
                     UUID(self.add_campus_id),
                     UUID(self.current_user_id),
                 )
-                session.commit()  # open_session() does NOT auto-commit
+                session.commit()
         except DepartmentError as e:
             self.flash = e.message
             self.flash_type = "error"
             return
-        # Refresh list (campus_count) and detail (campus chips) in one round-trip.
         self._refresh_departments_list()
         await self.open_detail(self.detail_dept_id, self.detail_dept_name)
         self.flash = "Campus linked."
         self.flash_type = "success"
 
     def open_remove_campus_confirm(self, campus_id: str) -> None:
+        """Open the appropriate confirmation based on whether campus is the main campus.
+
+        Bug B enforcement: if the requested campus is the main campus, the standard
+        remove dialog is NOT opened. Instead, the promote-and-remove dialog opens so
+        the user can select a replacement main campus before removing.
+        """
         self.confirm_remove_campus_id = campus_id
-        self.confirm_remove_campus_open = True
+
+        if campus_id == self.detail_main_campus_id:
+            # Main campus removal — require promotion
+            candidates = [
+                link for link in self.detail_campus_links
+                if link["campus_id"] != campus_id
+            ]
+            if not candidates:
+                # No other campus to promote — blocked by last-campus rule
+                self.flash = (
+                    "Cannot remove the only campus. "
+                    "A department must have at least one campus."
+                )
+                self.flash_type = "error"
+                return
+            removing_code = next(
+                (link["campus_code"] for link in self.detail_campus_links
+                 if link["campus_id"] == campus_id),
+                campus_id[:8],
+            )
+            self.promote_candidates = candidates
+            # Auto-select the only candidate if there's just one
+            self.promote_new_campus_id = candidates[0]["campus_id"] if len(candidates) == 1 else ""
+            self.confirm_promote_remove_title = f"Remove main campus '{removing_code}'?"
+            self.confirm_promote_remove_body = (
+                f"'{removing_code}' is the main campus. "
+                "Select a replacement main campus to promote before removing it."
+            )
+            self.confirm_promote_remove_open = True
+        else:
+            # Non-main campus — standard confirm dialog
+            self.confirm_remove_campus_open = True
 
     @require_role(action="write", resource="department")
     @audit_action(action="write", resource="department")
     async def remove_campus_link(self) -> None:
-        self.flash = ""  # clear stale flash before this action (Bug 3)
+        self.flash = ""
         try:
             with open_session() as session:
                 _dept_svc(session).remove_campus(
@@ -369,8 +435,8 @@ class AdminDepartmentsState(BaseState):
                     UUID(self.confirm_remove_campus_id),
                     UUID(self.current_user_id),
                 )
-                session.commit()  # open_session() does NOT auto-commit
-        except DepartmentError as e:
+                session.commit()
+        except (DepartmentError, CannotRemoveMainCampusError) as e:
             self.flash = e.message
             self.flash_type = "error"
             self.confirm_remove_campus_open = False
@@ -384,6 +450,44 @@ class AdminDepartmentsState(BaseState):
     def cancel_remove_campus(self) -> None:
         self.confirm_remove_campus_open = False
         self.confirm_remove_campus_id = ""
+
+    @require_role(action="write", resource="department")
+    @audit_action(action="write", resource="department")
+    async def promote_and_remove_main_campus(self) -> None:
+        """Atomically promote a new main campus and remove the old main."""
+        if not self.promote_new_campus_id:
+            self.flash = "Please select a campus to promote as the new main."
+            self.flash_type = "error"
+            return
+        self.flash = ""
+        try:
+            with open_session() as session:
+                _dept_svc(session).promote_and_remove_main_campus(
+                    UUID(self.detail_dept_id),
+                    new_main_id=UUID(self.promote_new_campus_id),
+                    old_main_id=UUID(self.confirm_remove_campus_id),
+                    actor_id=UUID(self.current_user_id),
+                )
+                session.commit()
+        except DepartmentError as e:
+            self.flash = e.message
+            self.flash_type = "error"
+            self.confirm_promote_remove_open = False
+            return
+        self.confirm_promote_remove_open = False
+        self.promote_new_campus_id = ""
+        self.promote_candidates = []
+        self.confirm_remove_campus_id = ""
+        self._refresh_departments_list()
+        await self.open_detail(self.detail_dept_id, self.detail_dept_name)
+        self.flash = "Main campus updated and previous main removed."
+        self.flash_type = "success"
+
+    def cancel_promote_remove(self) -> None:
+        self.confirm_promote_remove_open = False
+        self.confirm_remove_campus_id = ""
+        self.promote_new_campus_id = ""
+        self.promote_candidates = []
 
 
 # Alias so durgam.py keeps its existing import unchanged.
