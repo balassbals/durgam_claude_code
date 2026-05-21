@@ -73,6 +73,56 @@ surface is discovered anywhere in DURGAM that could reach a user-controlled stri
 
 ---
 
+### TD-006 — test_unassigned_resource_always_denied fails when property suite runs in isolation
+
+**Location:** `tests/property/test_permission_resolution.py`
+
+**What it is:** When `tests/property/` is run alone (without `tests/unit/` and 
+`tests/integration/` running first), the test 
+`TestCanNeverGrantsBeyondAssignment::test_unassigned_resource_always_denied` fails. 
+When the full test suite runs (unit + integration + property), the same test passes.
+
+**Why this is not a production issue:** The bug is in the test's Hypothesis strategy, 
+not in `can()`. The test generates random resource names and asserts they're denied, 
+but the strategy can produce names that match real seeded permissions (e.g. matching 
+a real resource by accident). When other test suites run first, they consume the 
+random seed in a way that avoids this collision.
+
+**Trigger to re-open:** Property test suite is run in isolation as a regular 
+part of CI; or the seeded permission set grows further (M5+) and the collision 
+rate increases enough to fail in the full-suite run too.
+
+**Fix when reopened:** Add a `.filter()` to the Hypothesis strategy that excludes 
+resource names matching any value in the seeded Permission table at test-collection 
+time. Or generate test resources from a fixed namespace (e.g. `nonexistent_resource_*`) 
+that's known not to be seeded.
+
+### TD-007 — Mobile and tablet responsiveness deferred across modules
+
+**Location:** Every admin and config page (multiple files in `durgam/pages/`).
+
+**What it is:** The two-tier responsive table component code exists
+(`durgam/pages/shared/data_table.py`) and is wired into all list pages.
+However, actual rendering at 360px and 768px viewports has not been verified
+or tuned. At 360px, tables don't consistently convert to cards. At 768px,
+the navbar layout cramps. Forms reflow acceptably but not gracefully.
+
+**Why this is not a production issue at M3:** All M3 admin and config
+workflows are used by university administrators (Registrar, HoDs, sys_admin)
+who work primarily at desktop. Students who reach the read-only `/about`
+pages can read them on any device, though formatting is not ideal on mobile.
+
+**Compensating decision:** Three-width responsiveness checks have been removed
+from the M3+ gate verification ritual (see `docs/prompts/gate_verification.md`
+Step 5). The UI Polish milestone (scheduled before M20) will conduct dedicated
+mobile and tablet polish across all modules accumulated through M19.
+
+**Trigger to re-open:** (a) Mobile usage by faculty becomes an operational need
+(e.g., approving leave requests on phone); (b) university mandates an
+accessibility audit; (c) UI Polish milestone arrives per project plan.
+
+---
+
 ## Resolved
 
 ### TD-002 — SAWarning: transaction already deassociated from connection (resolved in m0-cleanup)
@@ -107,3 +157,5 @@ removal targeted for 3.14), OR a SQLModel release introduces an internal `utcnow
 
 **Filterwarnings:** `pyproject.toml` carries `"ignore:.*utcnow.*:DeprecationWarning:sqlmodel.*"`
 as a no-op safety net. It is currently inert against SQLModel 0.0.38.
+
+

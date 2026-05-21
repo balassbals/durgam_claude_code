@@ -4,7 +4,20 @@
 **Spec**: `docs/durgam_rfp_v3.pdf` — all section references (§8, §12, etc.) point to this file.
 **Python**: 3.13 (pinned via `.python-version`).
 **Theme**: Puttaparthi Saffron–Indigo–Ivory (§15.1). Single committed theme; no alternatives in v3.
-**Current milestone**: M2 — Admin Module.
+**Current milestone**: M4 — Configuration — AY & Calendar.
+
+## Authority files (binding, in priority order)
+
+Every milestone planning prompt and every implementation decision must read these in order:
+
+1. **`docs/durgam_rfp_v3.pdf`** — the frozen v3 specification. All section references (§8, §12, etc.) point to this file.
+2. **`docs/rfp_errata.md`** — gaps, ambiguities, and corrections discovered after v3 was frozen. Binding alongside the RFP. If the RFP and an erratum disagree, the erratum wins (it captures the more current understanding).
+3. **`docs/ux_charter.md`** — front-end standards. Read at every milestone gate and during planning.
+4. **`docs/milestones/M{N}.md`** — the in-flight milestone's notes, inherited items, and gate checklist.
+5. **CLAUDE.md** (this file) — project conventions, layering rules, established patterns.
+
+The RFP is NOT re-issued when gaps are found. Single frozen v3 + a growing errata document is cleaner than maintaining v3.1, v3.2, etc. Each erratum entry names the source authority (usually the original informal requirements), the gap, and which milestone absorbs the correction.
+
 
 ## Layering rules — strictly enforced
 - **States → Services**: states orchestrate, services own the rules. States must not import SQLModel, SQLAlchemy, or any model.
@@ -605,8 +618,486 @@ session fixture's teardown drops all SQLModel tables but leaves `alembic_version
 the current head — creating an inconsistent state. `_reset_test_db()` drops
 `alembic_version` and all SQLModel tables, then runs `upgrade head` from scratch.
 
+## Patterns established at M3
+
+These patterns were discovered at M3 and apply to every subsequent milestone.
+
+### open_session() does NOT auto-commit
+
+`open_session()` in `durgam/db.py` uses `with Session(engine) as session:`. In SQLAlchemy 2.0.49,
+this calls `session.close()` on exit — NOT `session.commit()`. Every state handler that writes
+to the DB must call `session.commit()` inside the `with open_session() as session:` block after
+all service/repo calls succeed:
+
+```python
+with open_session() as session:
+    svc = _svc(session)
+    svc.update(entity_id, fields, actor_id)
+    session.commit()  # REQUIRED — open_session does NOT auto-commit
+```
+
+Read-only handlers do not need a commit. This bug class appeared at Session 5 (campus/school/
+centre CRUD appeared to succeed but no data persisted). Verified by SQLAlchemy test:
+`with Session(engine) as session: session.flush()` → second session sees no data.
+
+### rx.form on_submit is the canonical form pattern
+
+For any form with multiple inputs in Reflex 0.9.x, use `rx.form` with `on_submit=State.handler`
+rather than individual `on_click=State.save` on a button:
+
+```python
+rx.form(
+    rx.input(name="form_name", value=State.form_name, on_change=State.set_form_name),
+    rx.input(type="hidden", name="editing_id", value=State.editing_id),
+    primary_btn("Save", type="submit"),
+    on_submit=State.save_handler,
+    reset_on_submit=False,
+)
+```
+
+The handler receives `form_data: dict` with all named input values:
+```python
+async def save_handler(self, form_data: dict) -> None:
+    name = form_data.get("form_name", "").strip()
+```
+
+This guarantees form data reaches the handler even if intermediate `on_change` round-trips
+were dropped. The handler must still call `session.commit()` for writes.
+
+### _config_guard checks write permission, not read
+
+`_config_guard(resource, action="write")` defaults to checking write (not read) permission.
+All users have read access to M3 resources (via BASIC_USER seed), so checking read would
+let every authenticated user reach admin config pages. Always pass `action="write"` or
+`action="configure"` explicitly for config pages:
+
+- `/admin/config` landing: `_config_guard("university_vision_mission", "write")`
+  (REGISTRAR has this; STUDENT does not)
+- `/admin/config/campuses`: `_config_guard("campus", "write")` (SYSTEM_ADMIN only)
+- `/admin/config/schools`: `_config_guard("school", "write")`
+- `/admin/config/centres`: `_config_guard("centre", "write")`
+- `/admin/config/departments`: `_config_guard("department", "write")`
+- `/admin/config/class-timings`: `_config_guard("class_timings_config", "configure")`
+- `/admin/config/working-days`: `_config_guard("working_days_config", "configure")`
+
+### Page-handler wiring verification (M3)
+
+The unit + integration test suite does NOT cover whether a Reflex form's submit actually
+triggers the right state handler, or whether a page's on_load guard prevents rendering.
+Manual verification of at least one create + edit + delete flow AND one route-guard
+incognito check is required at every session boundary before continuing.
+
+Bugs found at Session 5: CRUD didn't persist (missing session.commit); _config_guard
+admitted all authenticated users (checked read permission which BASIC_USER has). Both
+were invisible to pytest; only manual UI testing revealed them.
+
+### Nav entry visibility: permission_any for multi-role entries
+
+When a nav entry should be visible to multiple roles via different permission paths (e.g.
+Vision & Mission — Registrar via `university_vision_mission:write:*` AND HoD via
+`department_vision_mission:write:department`), use `permission_any`:
+
+```python
+register(NavEntry(
+    label="Vision & Mission",
+    href="/admin/config/vision-mission",
+    icon="target",
+    group="Config",
+    permission_any=(
+        ("write", "university_vision_mission", None),
+        ("write", "department_vision_mission",  "department"),
+    ),
+))
+```
+
+The entry shows if the user passes `can()` for ANY tuple. All nav checks use
+`any_scope=True` — a scoped role (e.g. HoD scoped to DMACS) is treated as "has
+this permission for any department" rather than "has it for DMACS specifically". The
+page does the specific-scope authorization; nav is a discovery signal only.
+
+Single-gate entries (only one role path) continue to use `permission_action /
+permission_resource / permission_scope_type`. Both forms cannot be set on the same entry.
+
+When adding ANY new nav entry, ask: "which distinct user types should see this, and do
+they reach it via different permission paths?" If multiple paths → `permission_any`. If
+one path → single-gate.
+
+`can(any_scope=True)` is also available for multi-gate page guards via
+`_config_guard_any(gates: list[tuple[action, resource, scope_type]])` on BaseState.
+Use this for pages that multiple roles can reach via different permissions (e.g. the
+vision/mission page is accessible to Registrar AND HoD).
+
+### Modal overlay pattern for config page forms and detail panels
+
+Config pages with a list + create/edit/detail sub-view must render create, edit, and
+detail content as **fixed-position modal overlays** — not inline at the top of the page.
+Inline content renders at a known DOM position; the viewport does not move to show it
+when the user triggered the action from a scrolled position.
+
+Use `form_modal(content, is_open, max_width="520px")` from `durgam/pages/components.py`:
+
+```python
+def _inline_form() -> rx.Component:
+    return form_modal(
+        content=rx.vstack(
+            rx.heading("New Campus"),
+            rx.form(... on_submit=State.save_campus ...),
+            gap="0", align="start", width="100%",
+        ),
+        is_open=CampusConfigState.show_form,
+    )
+```
+
+`form_modal` uses the same `position="fixed"` + semi-transparent backdrop pattern as
+`confirmation_dialog`. The modal appears centered in the viewport regardless of scroll
+position. Closing it (Cancel / Save) returns the user to their scroll position in the
+underlying list.
+
+**Note**: `rx.scroll_to()` was attempted first but is unreliable in Reflex 0.9.x for
+this use case (fires before new content renders). Modal overlay is the correct pattern.
+
+Applied at M3 Session 6 to: campuses, schools, centres, departments, courses.
+
+### Notification pattern for config pages
+
+Config pages use inline state changes (not full page redirects) for sub-navigation
+(list → detail → form). The on_load-based flash lifecycle rule does NOT apply: on_load
+only fires on full page navigation, not on state-change-based sub-navigation.
+
+Instead, config pages use `config_toast` — a fixed-position toast component:
+
+```python
+# In page:
+config_toast(State.flash, State.flash_type, State.dismiss_flash)
+```
+
+`config_toast` renders in the top-right corner, fixed position, z-index 1000 — always
+visible regardless of scroll position. Includes an ✕ close button that calls
+`BaseState.dismiss_flash`. Both bugs (sticky + scroll-to-bottom) are solved in one component.
+
+Auto-dismiss (timer) is deferred to the UI Polish milestone — `@rx.event(background=True)`
+cannot be yielded from handlers decorated with `@require_role` + `@audit_action` without
+refactoring the auth decorator chain.
+
+Additional rule: `open_create`, `open_edit`, and `open_detail` must clear flash at their
+start (`self.flash = ""; self.flash_type = "info"`) so stale notifications from prior
+actions don't appear when the user opens a new form or detail panel. Discovered at M3
+Session 6 (Bug 2: "Code required" error appearing on edit open).
+
+This pattern was established at M3 Session 6 after two failed rounds of the on_load
+lifecycle approach.
+
+### Permission triple completeness rule
+
+When a service method or UI handler exists for an action on a resource, the
+corresponding permission triple MUST exist in `scripts/seed.py` AND be assigned
+to at least one role that has the UI for that action.
+
+At each session boundary, audit all three together:
+- Every service method's action (create → write, update → write, soft_delete → delete)
+- Every UI handler's `@require_role(action=..., resource=...)` decorator
+- Every `(resource, action, scope)` triple in `scripts/seed.py`
+
+If a handler has `@require_role(action="delete", resource="X")` but `X:delete:*`
+is not in the seed, the call raises `PermissionDenied` for every user.
+
+Gap discovered at M3: `course:delete:*` was absent from the seed while
+`soft_delete_course` was decorated `@require_role(action="delete", resource="course")`.
+sys_admin got PermissionDenied on soft-delete despite having all other course
+permissions.
+
+When adding a new resource: seed read + write + delete triples. Only omit delete
+if no delete UI exists at that milestone (e.g., program and subdepartment at M3).
+
+### Auto-create implicit join rows on entity creation
+
+When an entity has a required FK to another entity AND a separate join table
+that represents the same relationship, the create handler must write BOTH the
+FK row AND the join row in the same transaction. The join table is the source
+of truth for queries that count relationships; a missing join row shows zero
+even though the FK is set.
+
+Example: `Department` has `main_campus_id` (FK to `campuses`) AND
+`department_campuses` join table. The `save_department` create path calls
+`svc.create(...)` AND `svc.add_campus(new_dept.id, main_campus_id, actor_id)`
+before `session.commit()`. The seed script does both; the UI handler must too.
+
+Same pattern applies wherever dual-representation exists (FK + join table
+for the same relationship). Discovered as Bug 1 at M3 Session 6.
+
+### Form Cancel button separation rule
+
+Cancel buttons inside `rx.form` must carry `type="button"` to prevent the
+browser from submitting the form. Without it, `<button>` defaults to
+`type="submit"` and triggers the form's `on_submit` handler (including
+validation), which is Bug 2's root cause at M3 Session 6.
+
+```python
+# In the page:
+primary_btn("Save", type="submit"),
+secondary_btn("Cancel", on_click=State.cancel_form, type="button"),
+
+# In the state:
+def cancel_form(self) -> None:
+    self.show_form = False
+    # ... reset form fields ...
+    self.flash = ""          # clear any validation errors shown before cancel
+    self.flash_type = "info"
+```
+
+### Flash lifecycle in handlers that call load_*
+
+`_config_guard()` (called inside every `load_*` handler) clears `self.flash`.
+If a handler sets flash and then calls `load_*`, the flash is erased before
+Reflex sends the final state to the client — the success message is never seen.
+
+Fix: set `self.flash` and `self.flash_type` AFTER the `await self.load_*()` call.
+On error paths that return early without calling `load_*`, set flash before return.
+
+```python
+# Wrong — flash set before load; _config_guard inside load clears it
+self.flash = "Saved."
+await self.load_items()    # clears flash!
+
+# Correct — flash set after load so the message survives
+await self.load_items()
+self.flash = "Saved."      # set after _config_guard has already run
+self.flash_type = "success"
+
+# Error paths return early and don't call load — set flash before return
+except SomeError as e:
+    self.flash = e.message
+    self.flash_type = "error"
+    return
+```
+
+This pattern applies to every `save_*`, `soft_delete_*`, and inline action
+handler in M3 and all subsequent milestones. Discovered as Bug 3 at M3 Session 6.
+
+### List page loading state rule
+
+Every list page must have a `loading: bool = True` state variable.
+The page renders a spinner while `loading` is `True`; the real list (or genuine
+empty state) when `False`. The `on_load` handler sets `loading = True` after the
+guard passes, populates the list, then sets `loading = False`. Starting at `True`
+means the spinner shows on first mount rather than the empty state.
+
+```python
+class SomeConfigState(BaseState):
+    items: list[dict] = []
+    loading: bool = True   # True so first render shows spinner, not empty state
+
+    async def load_items(self) -> None:
+        guard = self._config_guard("resource", "write")
+        if guard is not None:
+            return guard
+        self.loading = True
+        self.items = []       # reset before query (page-on-load data refresh rule)
+        with open_session() as session:
+            ...               # query and populate self.items
+        self.loading = False
+        self._load_nav_entries()
+```
+
+Page pattern — wrap the data_table in a loading cond:
+```python
+rx.cond(
+    State.loading,
+    rx.center(rx.spinner(), padding="2rem"),
+    data_table(rows=State.items, ..., empty_message="No items found."),
+)
+```
+
+Without this, list pages flash an empty state for ~100–200ms before the DB
+query returns. Discovered and fixed at Session 6.
+
+### Never name a service method `list`
+
+Naming a service method `list` shadows the Python builtin `list` type in class-body
+annotation evaluation, causing `TypeError: 'function' object is not subscriptable` for
+any return type annotation like `-> list[Campus]` in a later method. Use entity-specific
+names (`list_campuses`, `list_all`) or add `from __future__ import annotations` to the
+service file to defer annotation evaluation. Discovered at Session 4.
+
+### Fine-grained scope checks in handler body
+
+`@require_role` performs a COARSE permission check: "does this user hold a role
+that grants (action, resource, scope_type) for ANY scope?" It passes `scope_id=None`
+to `can()` unless the state class exposes a `scope_id` attribute.
+
+For scope-restricted resources (e.g. HoD can only edit THEIR department's V&M):
+
+**Problem**: `@require_role(scope="department")` calls `can(scope_id=None)`. In
+`can()`, a `UserRole` with `scope_id=<DMACS UUID>` is skipped when `scope_id=None`
+and `any_scope=False` → `PermissionDenied` even though the user has the permission.
+
+**Fix — two layers**:
+1. Decorator uses `any_scope=True` for the coarse check (passes the guard).
+2. Handler body calls `can()` directly with the **exact** resource UUID for the
+   fine-grained check, rejecting mismatches with a user-friendly error:
+
+```python
+@require_role(action="write", resource="department_vision_mission",
+              scope="department", any_scope=True)   # ← coarse: user has SOME dept write
+@audit_action(action="write", resource="department_vision_mission")
+async def save_dept_vision(self, form_data: dict) -> None:
+    dept_uuid = UUID(self.dept_id)
+    with open_session() as session:
+        if not can(UUID(self.current_user_id), "write",
+                   "department_vision_mission", "department", dept_uuid, session):
+            self.flash = "You can only edit your own department's data."
+            self.flash_type = "error"
+            return                                    # ← fine: exact dept check
+        ...
+```
+
+`any_scope=True` is ONLY appropriate for handler decorators where the handler body
+performs the fine-grained check. Never use it for nav or UI visibility — use the
+existing `any_scope=True` path inside `get_visible_entries()` for that purpose.
+
+Discovered at M3 Session 7 gate verification when `hod_dmacs` got
+`PermissionDenied` on `save_department_vision` despite having the correct
+scope binding (`HOD` role with `scope_id=<DMACS UUID>` in `user_roles`).
+
+### Singleton config edit page pattern
+
+Singleton config pages (one row in the table) use a get_or_create-on-load approach:
+the state's load handler calls `service.get_class_timings()` (or equivalent), which
+calls `repo.get_or_create_*()` to ensure a row exists. The form pre-populates from
+that row. The save handler passes new values to `service.save_*()`, which validates
+and updates the same singleton row. No create/delete UI exists. Pattern established
+at Session 7 for `ClassTimingsConfig` and `WorkingDaysConfig`.
+
+### Update-only entity UI pattern
+
+For entities where the business rule forbids deletion (E-001 — vision/mission):
+- No delete button appears anywhere in the UI.
+- The service `delete_*` stubs always raise `NotDeletableError`.
+- The repository exposes no delete methods (test `test_repo_exposes_no_delete_methods`
+  enforces this).
+- Individual sub-entities (e.g. mission statements) MAY be soft-deleted/removed; only
+  the parent entity (UniversityVisionMission, DepartmentVisionMission) is delete-blocked.
+- Repository remove methods for sub-entities must be named `remove_*` (not `soft_delete_*`)
+  to avoid triggering the no-delete-method test.
+
+### E2E CRUD test isolation pattern
+
+Every E2E test that creates a system entity (campus, school, centre, department,
+course) MUST:
+
+1. **Pre-clean at the start**: call `_hard_delete_by_code(table, code)` before
+   the test body. This ensures a leftover entity from a previous failed run
+   does not cause a unique-constraint error on create.
+
+2. **Wrap body in `try/finally`**: call `_hard_delete_by_code` in the `finally`
+   block to clean up even if the test fails before the soft-delete step.
+
+3. **Use a stable, non-seeded code**: pick a code that doesn't appear in the
+   seed script (e.g. TST, TSC, TCE, TDE, TST101). Never reuse a seeded code.
+
+Background: soft-deleted entities keep their `code` value with a DB-level unique
+constraint that applies to ALL rows including soft-deleted. If the test fails
+before soft-deleting, the next run tries to create the same code and gets a
+unique constraint error (rather than the intended test failure). The pre-clean
+and finally-cleanup together prevent this.
+
+This pattern was discovered at M3 gate verification when CRUD tests failed
+consistently after the first run.
+
+### Compound state invariants — application enforcement on ALL paths
+
+When an entity has a "primary" FK relationship that should always match one of its
+many-to-many join rows (e.g., `departments.main_campus_id` must equal one of the
+dept's `department_campuses.campus_id` rows), the application must enforce this
+invariant on EVERY code path that can change either the FK or the join rows. The FK
+constraint alone allows the inconsistency because the foreign key points at the parent
+campus table, not at the join row.
+
+For Department/DepartmentCampus:
+- **create_department**: auto-creates the `DepartmentCampus` row for `main_campus_id`
+  (Session 6, Bug 1 — "auto-create implicit join rows on entity creation").
+- **remove_campus_link**: blocked when removing main; user must promote a replacement
+  first (Session 7, Bug B).
+- **update_department**: auto-creates the `DepartmentCampus` row for the new
+  `main_campus_id` if it doesn't already exist (Session 7, Bug E).
+- **promote_and_remove_main_campus**: atomic promotion + removal (Session 7, Bug B).
+
+Pattern for update paths:
+```python
+def update(self, dept_id, fields, actor_id):
+    dept = self.get(dept_id)
+    new_main_id = fields.get("main_campus_id")
+    if new_main_id is not None and new_main_id != dept.main_campus_id:
+        links = self._depts.list_campus_links(dept_id)
+        if new_main_id not in {link.campus_id for link in links}:
+            self._depts.upsert_campus_link(dept_id, new_main_id)  # auto-add
+    # ... apply remaining fields, save ...
+```
+
+Audit every entity with this dual-representation pattern (FK + join) and enforce the
+invariant on every mutation path. This was discovered across THREE separate scenarios
+at M3 Session 7 verification — each caught only by manual integration testing, not
+by unit tests (which test methods in isolation and miss cross-path consistency).
+
+### E2E test cleanup with dependent rows
+
+When an E2E test creates an entity that has dependent join rows (e.g., Department
+has DepartmentCampus rows with a FK constraint on departments.id), cleanup MUST
+delete the dependent rows FIRST, then the parent. Direct SQL DELETE on the parent
+raises `ForeignKeyViolation`.
+
+Add a dedicated helper per table with known dependents rather than extending the
+generic `_hard_delete_by_code`. Example:
+
+```python
+def _hard_delete_dept_by_code(code: str) -> None:
+    with engine.connect() as conn:
+        conn.execute(text(
+            "DELETE FROM department_campuses WHERE department_id = "
+            "(SELECT id FROM departments WHERE code = :code)"
+        ), {"code": code})
+        conn.execute(text("DELETE FROM departments WHERE code = :code"), {"code": code})
+        conn.commit()
+```
+
+Discovered at M3 gate: `_hard_delete_by_code("departments", "TDE")` raised
+ForeignKeyViolation because the test's create flow auto-created a `department_campuses`
+row that the generic helper didn't clean up first.
+
+### E2E test text isolation
+
+E2E tests that insert content visible in the rendered UI (mission text, search input,
+etc.) MUST use a unique-per-run identifier so accumulated data from prior runs doesn't
+cause Playwright strict-mode violations:
+
+```python
+test_id = uuid.uuid4().hex[:8]
+mission_text = f"E2E test mission {test_id} — safe to remove."
+```
+
+Pair with:
+- **Pre-test cleanup**: delete any rows matching a broad `LIKE 'E2E test mission%'`
+  pattern at the start of the test body.
+- **`try/finally` cleanup**: target the same pattern in the `finally` block so rows
+  are removed even if the UI removal step in the test fails.
+
+Discovered at M3 gate: mission text accumulated 8 copies across 8 prior test runs,
+causing `page.get_by_text(text, exact=True)` to resolve to 8 elements → strict-mode
+violation on the next run.
+
+### About-page read-only display pattern
+
+Public read-only pages visible to all authenticated users use:
+1. `rx.cond(AuthState.current_user_id != "", content, rx.fragment())` — not `admin_page()`.
+2. In the on_load handler: `self._resolve_session()` + check `self.current_user_id`; redirect to `/login` if absent. No `_admin_guard` or `_config_guard` needed.
+3. Nav entries registered with `permission_action=None` so all authenticated users see them.
+4. No write handlers — no `@require_role` or `@audit_action` decorations needed.
+
+Pattern established at Session 7 for `/about/university`, `/about/departments`,
+`/about/departments/[dept_code]`.
+
 ## Current milestone
-**M2 — Admin Module.**
+**M4 — Configuration — AY & Calendar.**
 
 This line is the source of truth for "where are we." Before opening a milestone-completing PR, Claude Code MUST:
 1. Grep this file for "Current milestone" and update both occurrences (the top status line and this section).

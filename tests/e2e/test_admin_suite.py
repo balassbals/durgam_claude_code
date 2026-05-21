@@ -272,6 +272,9 @@ class TestRoleConstructionAndPermission:
         role_code = f"GATE_{uuid.uuid4().hex[:6].upper()}"
         # student_001 is a seeded read-only fixture — this test reads their UUID only,
         # never modifies the user row.
+        # student_001 has no department:write permission (M3 added department:read
+        # to _PUBLIC_READ, so we check write instead — student_001 has neither
+        # write nor delete on any admin resource).
         student_id = get_seeded_user_id("student_001")
         try:
             _login(page, _ADMIN_USER, _ADMIN_PASS)
@@ -316,31 +319,34 @@ class TestRoleConstructionAndPermission:
                 user_sel.locator("option:not([value=''])").first
             ).to_be_attached(timeout=15_000)
 
-            # Select resource — triggers async set_pc_resource which populates actions.
+            # M3 added department:read:* to _PUBLIC_READ (all roles including STUDENT),
+            # so student_001 now HAS department:read → checking read returns "✓ Allowed".
+            # Check department:write instead — student_001 has no write permission.
+            # Wait for "department" option to be attached before selecting (M3 added
+            # more resources, making the async population take slightly longer).
+            expect(
+                resource_sel.locator("option[value='department']")
+            ).to_be_attached(timeout=10_000)
             resource_sel.select_option("department")
 
-            # Wait for the SPECIFIC "read" option to exist (not just the dropdown element).
-            # Visibility alone is insufficient: the element renders before WebSocket
-            # delivers the options list, so select_option("read") would find an empty list.
+            # Wait for the SPECIFIC "write" option to exist (not just the dropdown element).
             expect(
-                action_sel.locator("option[value='read']")
+                action_sel.locator("option[value='write']")
             ).to_be_attached(timeout=10_000)
-            action_sel.select_option("read")
+            action_sel.select_option("write")
 
             # scope_type does NOT re-filter actions — simple sync setter, no wait needed.
             scope_sel.select_option("department")
 
             # Wait for the specific student_001 option to be attached before selecting.
-            # student_001 is a seeded user — always visible in the widget dropdown.
             expect(
                 user_sel.locator(f"option[value='{student_id}']")
             ).to_be_attached(timeout=10_000)
             user_sel.select_option(value=student_id)
 
-            # Scope ID disabled at M2 — no scope objects seeded yet.
             page.get_by_role("button", name="Check").click()
 
-            # student_001 has no department:read permission → ✗ Denied.
+            # student_001 has no department:write permission → ✗ Denied.
             expect(page.get_by_text("✗ Denied")).to_be_visible(timeout=10_000)
 
         finally:

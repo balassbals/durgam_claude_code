@@ -68,3 +68,33 @@ colour palette. Inconsistency across modules during M2–M15 is acceptable.
 The hamburger drawer (required from M2) uses Reflex's built-in `rx.drawer`
 which has a slide animation. The animation duration and easing are default
 Reflex values. Custom animation tuning deferred to UI Polish milestone.
+
+---
+
+## Notification persistence (RESOLVED at M3)
+
+Resolved at M3 Session 7. Toast notification pattern implemented:
+bottom-right position, 4-second auto-dismiss, X close button.
+Applied to all config pages and home page. See CLAUDE.md →
+"Notification pattern for config pages (M3)" for canonical implementation.
+
+---
+
+## Permission-denied redirect notification rendering
+
+When a non-permitted user attempts to reach an admin route (e.g.,
+`student_001` typing `/admin/config`), the route guard redirects to `/`
+and shows an amber notification "you do not have permission to access
+this page". The redirect is correct security behaviour. The notification
+UX is acceptable but not polished: the notification briefly overlaps
+the landing page's content before the user re-orients to the home page.
+
+**Observed at M3 Sessions 5–7.** User feedback during manual
+verification: "looks ugly."
+
+**Proposed fix for UI Polish milestone:** standardise the redirect
+notification on the same toast pattern used for in-page success/error
+notifications (bottom-right, 4-second auto-dismiss, X close). Currently
+the redirect notification fires via `typed_flash()` on the home page's
+render, which is a different lifecycle from the in-page toast. Unify
+the rendering.

@@ -24,21 +24,22 @@ class TestSeed:
         db_session.commit()
 
         # Assert TOTAL row counts after seed (stable regardless of pre-existing data).
-        assert _count(db_session, Role) == 4, "Expected BASIC_USER, SYSTEM_ADMIN, DEAN, STUDENT"
-        # M2 expanded: 20 triples (removed system:manage, added system:read/write/configure,
-        # department:read:*/campus/school/write, leave_request:read).
-        assert _count(db_session, Permission) == 20, "Expected 20 seeded permission triples"
-        assert _count(db_session, User) >= 5, "Expected at least the 5 seeded users"
-        # SYSTEM_ADMIN=20, DEAN=4, STUDENT=1, BASIC_USER=0 → 25 total.
-        assert _count(db_session, RolePermission) >= 25, "Expected at least 25 role→permission rows"
+        # M3: 14 roles — SYSTEM_ADMIN, REGISTRAR family (3), DEAN + DEAN_* (5),
+        # HOD family (3), STUDENT, BASIC_USER.
+        assert _count(db_session, Role) == 14, "Expected 14 seeded roles at M3"
+        # M3: 46 triples — 20 M2 triples + 26 new M3 triples (course:delete:* added).
+        assert _count(db_session, Permission) == 46, "Expected 46 seeded permission triples at M3"
+        assert _count(db_session, User) >= 7, "Expected at least the 7 seeded users"
+        assert _count(db_session, RolePermission) >= 46, "Expected at least 46 role→permission rows"
         ay = db_session.exec(select(AcademicYear).where(AcademicYear.code == "2025-26")).first()
         assert ay is not None, "AcademicYear 2025-26 must exist after seeding"
 
     def test_second_run_inserts_zero_rows(self, db_engine):
         """Run seed twice on the same DB; second run should insert nothing for most tables.
 
-        Users use ON CONFLICT DO UPDATE (to refresh bcrypt hashes), so they always
-        return a row count. All other tables use ON CONFLICT DO NOTHING.
+        Users and roles use ON CONFLICT DO UPDATE so they always return a row count
+        (password re-hash for users; level updates for roles). All other tables
+        use ON CONFLICT DO NOTHING.
         """
         from scripts.seed import seed
 
@@ -50,8 +51,16 @@ class TestSeed:
             counts2 = seed(session)
             session.commit()
 
-        non_user = {k: v for k, v in counts2.items() if k not in ("role_emails", "users")}
-        assert all(v == 0 for v in non_user.values()), f"Non-zero on 2nd run: {counts2}"
+        # Exclude roles (on_conflict_do_update counts all processed rows) and
+        # users (password re-hash on every run) and role_emails (select-guard).
+        non_upsert = {
+            k: v
+            for k, v in counts2.items()
+            if k not in ("role_emails", "users", "roles")
+        }
+        assert all(v == 0 for v in non_upsert.values()), (
+            f"Non-zero on 2nd run: {counts2}"
+        )
         assert counts2["role_emails"] == 0
 
     def test_seed_creates_expected_active_and_inactive_users(self, seeded_session):

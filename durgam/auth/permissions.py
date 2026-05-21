@@ -27,6 +27,8 @@ def can(
     scope_type: str | None,
     scope_id: UUID | None,
     session: Session,
+    *,
+    any_scope: bool = False,
 ) -> bool:
     """Return True iff the user holds a role that grants (action, resource, scope_type).
 
@@ -34,6 +36,13 @@ def can(
     1. User must exist and be active (not soft-deleted, not is_active=False).
     2. Walk user_roles → roles → role_permissions → permissions.
     3. A permission matches if resource, action match AND scope is '*' or matches scope_type.
+
+    any_scope (keyword-only, default False):
+        When True, a UserRole scoped to a specific scope_id is NOT skipped even when
+        scope_id=None in this check. Use only for nav visibility queries where the
+        question is "does this user have this permission for ANY scope?" rather than
+        "does this user have this permission for THIS specific resource?". Never use
+        any_scope=True for authorization decisions — only for nav display logic.
     """
     user = session.exec(
         select(User).where(User.id == user_id, User.is_deleted == False, User.is_active == True)  # noqa: E712
@@ -51,8 +60,9 @@ def can(
                 continue
             # A role with a specific scope_id only grants access when the check
             # provides the exact matching scope_id. scope_id=None in the check
-            # means "unspecified scope" and must NOT match a role scoped to X.
-            if user_role.scope_id is not None:
+            # means "unspecified scope" and must NOT match a role scoped to X —
+            # UNLESS any_scope=True (nav visibility: accept any scope_id).
+            if user_role.scope_id is not None and not any_scope:
                 if scope_id is None or user_role.scope_id != scope_id:
                     continue
 
@@ -73,6 +83,7 @@ def can(
                         resource=resource,
                         scope_type=scope_type,
                         role=str(user_role.role_id),
+                        any_scope=any_scope,
                     )
                     return True
 

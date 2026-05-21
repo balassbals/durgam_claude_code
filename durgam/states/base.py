@@ -54,6 +54,11 @@ class BaseState(rx.State):
     def clear_flash(self) -> None:
         self.flash = ""
 
+    def dismiss_flash(self) -> None:
+        """Close-button handler: immediately clear the active notification."""
+        self.flash = ""
+        self.flash_type = "info"
+
     def _resolve_session(self) -> None:
         """Resolve session cookie and populate current_user_id / current_username.
 
@@ -115,6 +120,66 @@ class BaseState(rx.State):
         with open_session() as session:
             if not can(user_id, "read", "user", None, None, session):
                 self.flash = "You do not have admin access."
+                self.flash_type = "warning"
+                return rx.redirect("/")
+        self.admin_authorized = True
+        return None
+
+    def _config_guard(self, resource: str, action: str = "write"):
+        """Resolve session and verify config-level access.
+
+        Parallel to _admin_guard() but checks can(action, resource) rather than
+        can("read","user"). Defaults to action="write" so only users who can
+        mutate the resource (not just read it) can reach config pages.
+        Redirects to "/" (not "/admin") on permission failure.
+        Sets admin_authorized=True on success so admin_page() shows content.
+        """
+        self.admin_authorized = False
+        self.flash = ""
+        self.flash_type = "info"
+        self._resolve_session()
+        if not self.current_user_id:
+            return rx.redirect("/login")
+        try:
+            user_id = UUID(self.current_user_id)
+        except ValueError:
+            self.current_user_id = ""
+            return rx.redirect("/login")
+        with open_session() as session:
+            if not can(user_id, action, resource, None, None, session):
+                self.flash = "You do not have permission to access this page."
+                self.flash_type = "warning"
+                return rx.redirect("/")
+        self.admin_authorized = True
+        return None
+
+    def _config_guard_any(
+        self, gates: list[tuple[str, str, str | None]]
+    ):
+        """Guard that passes if user can perform ANY of the given (action, resource, scope_type).
+
+        Uses any_scope=True so an HoD scoped to one department still passes when the
+        gate includes department_vision_mission:write:department. Appropriate for pages
+        that serve multiple roles with different permission paths.
+        """
+        self.admin_authorized = False
+        self.flash = ""
+        self.flash_type = "info"
+        self._resolve_session()
+        if not self.current_user_id:
+            return rx.redirect("/login")
+        try:
+            user_id = UUID(self.current_user_id)
+        except ValueError:
+            self.current_user_id = ""
+            return rx.redirect("/login")
+        with open_session() as session:
+            has_access = any(
+                can(user_id, action, resource, scope_type, None, session, any_scope=True)
+                for (action, resource, scope_type) in gates
+            )
+            if not has_access:
+                self.flash = "You do not have permission to access this page."
                 self.flash_type = "warning"
                 return rx.redirect("/")
         self.admin_authorized = True

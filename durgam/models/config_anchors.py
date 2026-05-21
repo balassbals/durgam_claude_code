@@ -72,3 +72,27 @@ class StudentCategoryCount(TimestampedSoftDelete, table=True):
     ews_count: int = Field(default=0, nullable=False)
     general_count: int = Field(default=0, nullable=False)
     notes: str | None = Field(default=None)
+
+
+class ClassTimingsConfig(TimestampedSoftDelete, table=True):
+    """Singleton — one row defines institute-wide class period timings.
+
+    Enforced at application level (OQ-M3-9). Break fields are optional
+    because some timetable configurations may not define a fixed break period.
+    """
+
+    __tablename__ = "class_timings_configs"
+
+    periods_per_day: int = Field(nullable=False)
+    period_duration_minutes: int = Field(nullable=False)
+    first_period_start: str = Field(max_length=5, nullable=False)  # HH:MM
+    break_after_period: int | None = Field(default=None, nullable=True)
+    break_duration_minutes: int | None = Field(default=None, nullable=True)
+
+
+class WorkingDaysConfig(TimestampedSoftDelete, table=True):
+    """Singleton — 5-day or 6-day work week; enforced at application level."""
+
+    __tablename__ = "working_days_configs"
+
+    days_per_week: int = Field(nullable=False)  # 5 or 6

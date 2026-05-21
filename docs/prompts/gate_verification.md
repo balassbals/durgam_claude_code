@@ -88,7 +88,8 @@ docker compose exec db psql -U durgam -d durgam -c \
   "SELECT username, must_change_password, failed_login_count,
    locked_until, is_deleted FROM users
    WHERE username IN ('sys_admin', 'dean_sci', 'firstlogin_user',
-                       'inactive_user', 'student_001')
+                       'inactive_user', 'student_001',
+                       'registrar_user', 'hod_dmacs')
    ORDER BY username;"
 ```
 
@@ -133,6 +134,14 @@ are gaps.
 
 ## Step 5: Three-width responsiveness check (5 minutes)
 
+> **NOTE (M3+):** Three-width responsiveness verification is deferred
+> to the UI Polish milestone per `docs/ui_polish_backlog.md` and
+> `tech_debt.md` TD-007. For M3 onward, this step is reduced to:
+> confirm the desktop layout (1280px) works correctly for all
+> milestone-introduced pages. Mobile (360px) and tablet (768px)
+> verification will be performed at the UI Polish milestone across
+> all accumulated modules.
+
 Open browser DevTools (F12). Click the device-toolbar icon.
 
 For each viewport in turn — 360px, 768px, 1280px:
@@ -168,6 +177,14 @@ milestone, confirm satisfaction:
 
 Refer to UX Charter §12 for what is explicitly NOT required at
 this milestone.
+
+## Step 7a: Errata coverage (1 minute)
+
+Open `docs/rfp_errata.md`. For each erratum that names this
+milestone as the "Disposition" milestone, confirm the disposition
+has been implemented and verified. The errata sit alongside the
+RFP as binding requirements; a milestone closing without addressing
+its named errata is incomplete, even if the RFP gate clause passes.
 
 ## Step 8: Decision
 

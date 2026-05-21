@@ -7,6 +7,11 @@ import reflex as rx
 from durgam.states.auth import AuthState
 from durgam.states.base import BaseState
 
+# Seconds before a config-page toast notification auto-dismisses.
+# Auto-dismiss is not yet implemented (requires decorated-handler changes);
+# this constant is reserved for a future UI Polish milestone.
+NOTIFICATION_DISPLAY_SECONDS = 4
+
 
 def _nav_link(entry: dict) -> rx.Component:
     return rx.link(
@@ -327,6 +332,138 @@ def typed_flash(flash: rx.Var, flash_type: rx.Var) -> rx.Component:
                     flash_info(flash),
                 ),
             ),
+        ),
+        rx.fragment(),
+    )
+
+
+def config_toast(flash: rx.Var, flash_type: rx.Var, dismiss_handler) -> rx.Component:
+    """Fixed-position toast notification for config pages.
+
+    Bottom-right corner, white background, 4px colored left border, strong drop
+    shadow — reads as a floating overlay, not inline page content.
+
+    Usage:
+        config_toast(State.flash, State.flash_type, State.dismiss_flash)
+    """
+    left_border_color = rx.cond(
+        flash_type == "success",
+        "var(--color-success-border)",
+        rx.cond(
+            flash_type == "error",
+            "var(--color-error-border)",
+            rx.cond(
+                flash_type == "warning",
+                "var(--color-warning-border)",
+                "var(--color-info-border)",
+            ),
+        ),
+    )
+    icon = rx.cond(
+        flash_type == "success",
+        rx.text("✓", color="var(--color-success-border)", font_weight="700", flex_shrink="0"),
+        rx.cond(
+            flash_type == "error",
+            rx.text("✗", color="var(--color-error-border)", font_weight="700", flex_shrink="0"),
+            rx.cond(
+                flash_type == "warning",
+                rx.text("⚠", color="var(--color-warning-border)", font_weight="700", flex_shrink="0"),
+                rx.text("ℹ", color="var(--color-info-border)", font_weight="700", flex_shrink="0"),
+            ),
+        ),
+    )
+    return rx.cond(
+        flash != "",
+        rx.box(
+            rx.hstack(
+                icon,
+                rx.text(flash, flex="1", font_size="0.875rem", color="var(--color-body)"),
+                rx.button(
+                    "✕",
+                    on_click=dismiss_handler,
+                    background="transparent",
+                    border="none",
+                    cursor="pointer",
+                    font_size="1rem",
+                    color="var(--color-muted)",
+                    padding="0 0 0 0.5rem",
+                    flex_shrink="0",
+                    line_height="1",
+                ),
+                align="center",
+                gap="0.6rem",
+                width="100%",
+            ),
+            background="white",
+            padding="0.875rem 1rem",
+            font_family="var(--font-sans)",
+            position="fixed",
+            bottom="1.5rem",
+            right="1.5rem",
+            z_index="9999",
+            min_width="16rem",
+            max_width="22rem",
+            border_radius="0.5rem",
+            box_shadow="0 8px 24px rgba(0,0,0,0.18), 0 2px 6px rgba(0,0,0,0.08)",
+            border_top="1px solid var(--color-rule)",
+            border_right="1px solid var(--color-rule)",
+            border_bottom="1px solid var(--color-rule)",
+            border_left_width="4px",
+            border_left_style="solid",
+            border_left_color=left_border_color,
+        ),
+        rx.fragment(),
+    )
+
+
+def form_modal(
+    content: rx.Component,
+    is_open: rx.Var,
+    max_width: str = "520px",
+) -> rx.Component:
+    """Full-viewport modal overlay for create/edit/detail forms on config pages.
+
+    Uses the same fixed-position backdrop pattern as confirmation_dialog so the
+    modal is always centered in the viewport regardless of scroll position.
+    z_index 1050 — above toast (1100) … actually below toast so toast remains
+    visible during a save.  Set to 1000 to match confirmation_dialog.
+
+    Usage:
+        form_modal(content=rx.vstack(...), is_open=State.show_form)
+    """
+    return rx.cond(
+        is_open,
+        rx.box(
+            # Backdrop dims the page
+            rx.box(
+                # Centered card
+                rx.box(
+                    content,
+                    background="white",
+                    border_radius="8px",
+                    padding="1.5rem",
+                    width=f"min({max_width}, 92vw)",
+                    max_height="88vh",
+                    overflow_y="auto",
+                    box_shadow="0 8px 32px rgba(0,0,0,0.20)",
+                ),
+                display="flex",
+                align_items="center",
+                justify_content="center",
+                position="fixed",
+                top="0",
+                left="0",
+                width="100vw",
+                height="100vh",
+                z_index="1000",
+            ),
+            position="fixed",
+            top="0",
+            left="0",
+            width="100vw",
+            height="100vh",
+            background="rgba(0,0,0,0.45)",
+            z_index="999",
         ),
         rx.fragment(),
     )
