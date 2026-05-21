@@ -4,7 +4,7 @@
 **Spec**: `docs/durgam_rfp_v3.pdf` — all section references (§8, §12, etc.) point to this file.
 **Python**: 3.13 (pinned via `.python-version`).
 **Theme**: Puttaparthi Saffron–Indigo–Ivory (§15.1). Single committed theme; no alternatives in v3.
-**Current milestone**: M3 — Configuration — Organisational Core.
+**Current milestone**: M4 — Configuration — AY & Calendar.
 
 ## Authority files (binding, in priority order)
 
@@ -1097,7 +1097,7 @@ Pattern established at Session 7 for `/about/university`, `/about/departments`,
 `/about/departments/[dept_code]`.
 
 ## Current milestone
-**M3 — Configuration — Organisational Core.**
+**M4 — Configuration — AY & Calendar.**
 
 This line is the source of truth for "where are we." Before opening a milestone-completing PR, Claude Code MUST:
 1. Grep this file for "Current milestone" and update both occurrences (the top status line and this section).
