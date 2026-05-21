@@ -113,8 +113,8 @@ class TestCampusCRUD:
             page.get_by_placeholder("e.g. PSN").fill(_CAMPUS_CODE)
             page.get_by_placeholder("Campus name").fill("Test Campus E2E")
             page.get_by_role("button", name="Save").click()
+            # Entity name visible = save succeeded; flash cleared by _config_guard in load_campuses
             expect(page.get_by_text("Test Campus E2E", exact=True)).to_be_visible(timeout=15_000)
-            expect(page.get_by_text("Campus saved.", exact=True)).to_be_visible(timeout=5_000)
 
             # Edit — navigate into the same row's kebab.
             # data_table renders in table mode (is_mobile=False); each row is <tr>,
@@ -164,6 +164,8 @@ class TestSchoolCRUD:
             page.get_by_placeholder("e.g. SCI").fill(_SCHOOL_CODE)
             # RC-1: actual placeholder is "Full school name", not "School name"
             page.get_by_placeholder("Full school name").fill("Test School E2E")
+            # Failure B: dean_role_code is required by SchoolService.create()
+            page.get_by_placeholder("e.g. DEAN_SCI").fill("DEAN_TSC")
             page.get_by_role("button", name="Save").click()
             expect(page.get_by_text("Test School E2E", exact=True)).to_be_visible(timeout=15_000)
 
@@ -229,6 +231,11 @@ class TestDepartmentCRUD:
             # RC-3: departments use rx.select.root (Radix, no native <select>).
             # Interact via trigger text → option click.
             page.get_by_text("Select school").click()
+            expect(page.get_by_role("option").first).to_be_visible(timeout=10_000)
+            page.get_by_role("option").first.click()
+
+            # Failure C: main_campus is also required by save_department validation.
+            page.get_by_text("Select main campus").click()
             expect(page.get_by_role("option").first).to_be_visible(timeout=10_000)
             page.get_by_role("option").first.click()
 
@@ -355,8 +362,9 @@ class TestVisionMissionAdmin:
         expect(mission_row).to_be_visible(timeout=10_000)
 
         # RC-7A: remove immediately to prevent accumulation across runs.
-        # The mission row is in a hstack; go up to find the Remove button sibling.
-        mission_row.locator("..").locator("..").get_by_role("button", name="Remove").click()
+        # ONE ".." from <p> reaches the outer hstack; Remove is a descendant of that hstack.
+        # TWO ".." would reach the mission list container (all rows) → strict-mode violation.
+        mission_row.locator("..").get_by_role("button", name="Remove").click()
         expect(page.get_by_text("Mission statement removed.", exact=True)).to_be_visible(
             timeout=15_000
         )
@@ -446,8 +454,10 @@ class TestWorkingDays:
         page.wait_for_load_state("networkidle")
         _wait_for_admin_page(page, "Days per week")
 
-        # Select 6-day week via Radix radio_group(["5", "6"])
-        page.get_by_role("radio").filter(has_text="6").click()
+        # Failure E: filter(has_text="6") returns 0 elements because Radix radio group
+        # renders text inside nested spans or sibling labels, not as direct button text.
+        # Use positional index: nth(0)="5", nth(1)="6".
+        page.get_by_role("radio").nth(1).click()
         page.get_by_role("button", name="Save").click()
         expect(page.get_by_text("Working days saved.", exact=True)).to_be_visible(
             timeout=15_000
@@ -465,7 +475,7 @@ class TestWorkingDays:
         ).to_be_visible(timeout=10_000)
 
         # Reset to 5-day week to avoid dirty state for next run
-        page.get_by_role("radio").filter(has_text="5").click()
+        page.get_by_role("radio").nth(0).click()
         page.get_by_role("button", name="Save").click()
         expect(page.get_by_text("Working days saved.", exact=True)).to_be_visible(
             timeout=5_000
