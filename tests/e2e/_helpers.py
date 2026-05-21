@@ -85,6 +85,58 @@ def _wait_for_admin_page(page: Page, stable_text: str, timeout: int = 15_000) ->
     expect(page.get_by_text(stable_text)).to_be_visible(timeout=timeout)
 
 
+def _hard_delete_dept_by_code(code: str) -> None:
+    """Hard-delete a department and its dependent join rows.
+
+    Departments have DepartmentCampus join rows with a FK constraint on
+    departments.id. Direct DELETE on departments would raise ForeignKeyViolation.
+    Must delete department_campuses first.
+    """
+    from sqlalchemy import create_engine, text
+
+    from durgam.config import settings
+
+    engine = create_engine(settings.database_url_sync)
+    try:
+        with engine.connect() as conn:
+            conn.execute(
+                text(
+                    "DELETE FROM department_campuses WHERE department_id = "
+                    "(SELECT id FROM departments WHERE code = :code)"  # noqa: S608
+                ),
+                {"code": code},
+            )
+            conn.execute(
+                text("DELETE FROM departments WHERE code = :code"),  # noqa: S608
+                {"code": code},
+            )
+            conn.commit()
+    finally:
+        engine.dispose()
+
+
+def _delete_university_missions_matching(pattern: str) -> None:
+    """Hard-delete university_missions rows whose text matches a SQL LIKE pattern.
+
+    Used to pre-clean accumulated test data before a test run, and as a
+    fallback in finally blocks when the UI removal step is part of the test.
+    """
+    from sqlalchemy import create_engine, text
+
+    from durgam.config import settings
+
+    engine = create_engine(settings.database_url_sync)
+    try:
+        with engine.connect() as conn:
+            conn.execute(
+                text("DELETE FROM university_missions WHERE statement LIKE :p"),  # noqa: S608
+                {"p": pattern},
+            )
+            conn.commit()
+    finally:
+        engine.dispose()
+
+
 def _hard_delete_by_code(table: str, code: str) -> None:
     """Hard-delete a config entity by its code column.
 

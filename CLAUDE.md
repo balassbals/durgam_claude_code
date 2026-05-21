@@ -1004,6 +1004,52 @@ and finally-cleanup together prevent this.
 This pattern was discovered at M3 gate verification when CRUD tests failed
 consistently after the first run.
 
+### E2E test cleanup with dependent rows
+
+When an E2E test creates an entity that has dependent join rows (e.g., Department
+has DepartmentCampus rows with a FK constraint on departments.id), cleanup MUST
+delete the dependent rows FIRST, then the parent. Direct SQL DELETE on the parent
+raises `ForeignKeyViolation`.
+
+Add a dedicated helper per table with known dependents rather than extending the
+generic `_hard_delete_by_code`. Example:
+
+```python
+def _hard_delete_dept_by_code(code: str) -> None:
+    with engine.connect() as conn:
+        conn.execute(text(
+            "DELETE FROM department_campuses WHERE department_id = "
+            "(SELECT id FROM departments WHERE code = :code)"
+        ), {"code": code})
+        conn.execute(text("DELETE FROM departments WHERE code = :code"), {"code": code})
+        conn.commit()
+```
+
+Discovered at M3 gate: `_hard_delete_by_code("departments", "TDE")` raised
+ForeignKeyViolation because the test's create flow auto-created a `department_campuses`
+row that the generic helper didn't clean up first.
+
+### E2E test text isolation
+
+E2E tests that insert content visible in the rendered UI (mission text, search input,
+etc.) MUST use a unique-per-run identifier so accumulated data from prior runs doesn't
+cause Playwright strict-mode violations:
+
+```python
+test_id = uuid.uuid4().hex[:8]
+mission_text = f"E2E test mission {test_id} — safe to remove."
+```
+
+Pair with:
+- **Pre-test cleanup**: delete any rows matching a broad `LIKE 'E2E test mission%'`
+  pattern at the start of the test body.
+- **`try/finally` cleanup**: target the same pattern in the `finally` block so rows
+  are removed even if the UI removal step in the test fails.
+
+Discovered at M3 gate: mission text accumulated 8 copies across 8 prior test runs,
+causing `page.get_by_text(text, exact=True)` to resolve to 8 elements → strict-mode
+violation on the next run.
+
 ### About-page read-only display pattern
 
 Public read-only pages visible to all authenticated users use:

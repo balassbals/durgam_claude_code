@@ -31,13 +31,16 @@ V&M/singletons:
 from __future__ import annotations
 
 import os
+import uuid
 
 import pytest
 from playwright.sync_api import Page, expect
 
 from tests.e2e._helpers import (
     BASE_URL,
+    _delete_university_missions_matching,
     _hard_delete_by_code,
+    _hard_delete_dept_by_code,
     _login,
     _logout,
     _wait_for_admin_page,
@@ -215,7 +218,10 @@ class TestCentreCRUD:
 
 class TestDepartmentCRUD:
     def test_create_edit_softdelete_department(self, page: Page) -> None:
-        _hard_delete_by_code("departments", _DEPT_CODE)
+        # Use the department-aware helper: deletes department_campuses FK rows first,
+        # then departments. Plain _hard_delete_by_code("departments", ...) would raise
+        # ForeignKeyViolation because DepartmentCampus rows reference the dept.
+        _hard_delete_dept_by_code(_DEPT_CODE)
         try:
             _login(page, _ADMIN_USER, _ADMIN_PASS)
             page.goto(f"{BASE_URL}/admin/config/departments")
@@ -251,7 +257,7 @@ class TestDepartmentCRUD:
                 page.get_by_text("Test Dept E2E", exact=True)
             ).not_to_be_visible(timeout=15_000)
         finally:
-            _hard_delete_by_code("departments", _DEPT_CODE)
+            _hard_delete_dept_by_code(_DEPT_CODE)
 
 
 # ── Course CRUD ───────────────────────────────────────────────────────────────
@@ -342,37 +348,43 @@ class TestVisionMissionAdmin:
         ).to_be_visible(timeout=10_000)
 
     def test_registrar_can_add_and_remove_university_mission(self, page: Page) -> None:
-        """Registrar can add a mission, assert it saved, then remove it (cleanup)."""
-        _login(page, _REGISTRAR_USER, _REGISTRAR_PASS)
-        page.goto(f"{BASE_URL}/admin/config/vision-mission")
-        page.wait_for_load_state("networkidle")
-        _wait_for_admin_page(page, "Mission Statements")
+        """Registrar can add a mission, assert it saved, then remove it.
 
-        page.get_by_text("+ Add Mission").click()
-        mission_textarea = page.get_by_placeholder("Enter mission statement…")
-        expect(mission_textarea).to_be_visible(timeout=10_000)
-        mission_textarea.fill("E2E test mission statement — can be safely removed.")
-        page.get_by_role("button", name="Save").click()
-        expect(page.get_by_text("Mission statement saved.", exact=True)).to_be_visible(
-            timeout=15_000
-        )
-        mission_row = page.get_by_text(
-            "E2E test mission statement — can be safely removed.", exact=True
-        )
-        expect(mission_row).to_be_visible(timeout=10_000)
+        Uses a unique-per-run identifier to prevent strict-mode violations from
+        accumulated rows across runs. Pre-cleans any leftover "E2E test mission"
+        rows before the test body, and cleans up in a finally block.
+        """
+        test_id = uuid.uuid4().hex[:8]
+        mission_text = f"E2E test mission {test_id} — safe to remove."
+        # Pre-clean ALL accumulated test mission rows from previous failed runs.
+        _delete_university_missions_matching("E2E test mission%")
+        try:
+            _login(page, _REGISTRAR_USER, _REGISTRAR_PASS)
+            page.goto(f"{BASE_URL}/admin/config/vision-mission")
+            page.wait_for_load_state("networkidle")
+            _wait_for_admin_page(page, "Mission Statements")
 
-        # RC-7A: remove immediately to prevent accumulation across runs.
-        # ONE ".." from <p> reaches the outer hstack; Remove is a descendant of that hstack.
-        # TWO ".." would reach the mission list container (all rows) → strict-mode violation.
-        mission_row.locator("..").get_by_role("button", name="Remove").click()
-        expect(page.get_by_text("Mission statement removed.", exact=True)).to_be_visible(
-            timeout=15_000
-        )
-        expect(
-            page.get_by_text(
-                "E2E test mission statement — can be safely removed.", exact=True
+            page.get_by_text("+ Add Mission").click()
+            mission_textarea = page.get_by_placeholder("Enter mission statement…")
+            expect(mission_textarea).to_be_visible(timeout=10_000)
+            mission_textarea.fill(mission_text)
+            page.get_by_role("button", name="Save").click()
+            expect(page.get_by_text("Mission statement saved.", exact=True)).to_be_visible(
+                timeout=15_000
             )
-        ).not_to_be_visible(timeout=5_000)
+            mission_row = page.get_by_text(mission_text, exact=True)
+            expect(mission_row).to_be_visible(timeout=10_000)
+
+            # ONE ".." from <p> reaches the outer hstack; Remove is a descendant.
+            # TWO ".." would reach the mission list → strict-mode violation (multiple rows).
+            mission_row.locator("..").get_by_role("button", name="Remove").click()
+            expect(page.get_by_text("Mission statement removed.", exact=True)).to_be_visible(
+                timeout=15_000
+            )
+            expect(page.get_by_text(mission_text, exact=True)).not_to_be_visible(timeout=5_000)
+        finally:
+            # Ensure cleanup even if the UI Remove step failed mid-way.
+            _delete_university_missions_matching("E2E test mission%")
 
     def test_sysadmin_sees_department_picker(self, page: Page) -> None:
         """SYSTEM_ADMIN sees the department V&M picker on the vision-mission page.
