@@ -86,6 +86,19 @@ class DepartmentService:
 
     def update(self, dept_id: UUID, fields: dict, actor_id: UUID) -> Department:
         dept = self.get(dept_id)
+
+        # Compound invariant: if main_campus_id is changing, ensure the new main
+        # campus exists in DepartmentCampus rows. Auto-create if not present —
+        # same pattern as create-time auto-link. This preserves the invariant that
+        # departments.main_campus_id always appears in department_campuses for
+        # that department. Discovered at M3 Session 7 (Bug E — Edit path).
+        new_main_id = fields.get("main_campus_id")
+        if new_main_id is not None and new_main_id != dept.main_campus_id:
+            links = self._depts.list_campus_links(dept_id)
+            linked_ids = {link.campus_id for link in links}
+            if new_main_id not in linked_ids:
+                self._depts.upsert_campus_link(dept_id, new_main_id)
+
         for key, value in fields.items():
             setattr(dept, key, value)
         dept.updated_by = actor_id

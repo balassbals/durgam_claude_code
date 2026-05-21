@@ -1004,6 +1004,41 @@ and finally-cleanup together prevent this.
 This pattern was discovered at M3 gate verification when CRUD tests failed
 consistently after the first run.
 
+### Compound state invariants — application enforcement on ALL paths
+
+When an entity has a "primary" FK relationship that should always match one of its
+many-to-many join rows (e.g., `departments.main_campus_id` must equal one of the
+dept's `department_campuses.campus_id` rows), the application must enforce this
+invariant on EVERY code path that can change either the FK or the join rows. The FK
+constraint alone allows the inconsistency because the foreign key points at the parent
+campus table, not at the join row.
+
+For Department/DepartmentCampus:
+- **create_department**: auto-creates the `DepartmentCampus` row for `main_campus_id`
+  (Session 6, Bug 1 — "auto-create implicit join rows on entity creation").
+- **remove_campus_link**: blocked when removing main; user must promote a replacement
+  first (Session 7, Bug B).
+- **update_department**: auto-creates the `DepartmentCampus` row for the new
+  `main_campus_id` if it doesn't already exist (Session 7, Bug E).
+- **promote_and_remove_main_campus**: atomic promotion + removal (Session 7, Bug B).
+
+Pattern for update paths:
+```python
+def update(self, dept_id, fields, actor_id):
+    dept = self.get(dept_id)
+    new_main_id = fields.get("main_campus_id")
+    if new_main_id is not None and new_main_id != dept.main_campus_id:
+        links = self._depts.list_campus_links(dept_id)
+        if new_main_id not in {link.campus_id for link in links}:
+            self._depts.upsert_campus_link(dept_id, new_main_id)  # auto-add
+    # ... apply remaining fields, save ...
+```
+
+Audit every entity with this dual-representation pattern (FK + join) and enforce the
+invariant on every mutation path. This was discovered across THREE separate scenarios
+at M3 Session 7 verification — each caught only by manual integration testing, not
+by unit tests (which test methods in isolation and miss cross-path consistency).
+
 ### E2E test cleanup with dependent rows
 
 When an E2E test creates an entity that has dependent join rows (e.g., Department

@@ -94,6 +94,16 @@ class TestHardDelete:
 
 
 class TestUpdate:
+    def _dept_with_main(self, main_campus_id):
+        dept = MagicMock()
+        dept.main_campus_id = main_campus_id
+        return dept
+
+    def _link(self, campus_id):
+        link = MagicMock()
+        link.campus_id = campus_id
+        return link
+
     def test_update_nonexistent_raises(self):
         repo = MagicMock()
         repo.get_by_id.return_value = None
@@ -103,7 +113,8 @@ class TestUpdate:
 
     def test_update_changes_fields(self):
         repo = MagicMock()
-        fake = MagicMock()
+        old_main = uuid4()
+        fake = self._dept_with_main(old_main)
         repo.get_by_id.return_value = fake
         repo.save.return_value = fake
         actor_id = uuid4()
@@ -113,6 +124,37 @@ class TestUpdate:
         assert fake.name == "Updated Name"
         assert fake.updated_by == actor_id
         repo.save.assert_called_once_with(fake)
+
+    def test_update_new_main_campus_not_in_links_auto_creates_join_row(self):
+        """Bug E: changing main_campus_id to a campus not in DepartmentCampus
+        must auto-create the join row so the invariant is preserved."""
+        old_main_id = uuid4()
+        new_main_id = uuid4()
+        dept = self._dept_with_main(old_main_id)
+        repo = MagicMock()
+        repo.get_by_id.return_value = dept
+        repo.save.return_value = dept
+        repo.list_campus_links.return_value = [self._link(old_main_id)]  # new_main NOT present
+        svc = _make_svc(dept_repo=repo)
+        dept_id = uuid4()
+        svc.update(dept_id, {"main_campus_id": new_main_id}, uuid4())
+        repo.upsert_campus_link.assert_called_once_with(dept_id, new_main_id)
+
+    def test_update_new_main_campus_already_linked_no_auto_create(self):
+        """If the new main_campus_id is already in DepartmentCampus, no auto-add."""
+        old_main_id = uuid4()
+        new_main_id = uuid4()
+        dept = self._dept_with_main(old_main_id)
+        repo = MagicMock()
+        repo.get_by_id.return_value = dept
+        repo.save.return_value = dept
+        repo.list_campus_links.return_value = [
+            self._link(old_main_id),
+            self._link(new_main_id),  # already present
+        ]
+        svc = _make_svc(dept_repo=repo)
+        svc.update(uuid4(), {"main_campus_id": new_main_id}, uuid4())
+        repo.upsert_campus_link.assert_not_called()
 
 
 class TestAddCampus:
