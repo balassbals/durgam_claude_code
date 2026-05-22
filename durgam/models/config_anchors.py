@@ -1,12 +1,15 @@
 """Academic-year anchors and configuration tables (§8.5)."""
 
-from datetime import date
+from datetime import date, datetime
+from typing import Any, cast
 from uuid import UUID
 
 import sqlalchemy as sa
 from sqlmodel import Field, SQLModel
 
 from .base import TimestampedSoftDelete
+
+_TIMESTAMPTZ: type[Any] = cast(type[Any], sa.DateTime(timezone=True))
 
 
 class AcademicYear(TimestampedSoftDelete, table=True):
@@ -17,6 +20,7 @@ class AcademicYear(TimestampedSoftDelete, table=True):
     starts_on: date = Field(nullable=False)
     ends_on: date = Field(nullable=False)
     is_locked: bool = Field(default=False, nullable=False)
+    master_calendar_locked: bool = Field(default=False, nullable=False)
 
 
 class Holiday(TimestampedSoftDelete, table=True):
@@ -96,3 +100,24 @@ class WorkingDaysConfig(TimestampedSoftDelete, table=True):
     __tablename__ = "working_days_configs"
 
     days_per_week: int = Field(nullable=False)  # 5 or 6
+
+
+class CalendarEntry(TimestampedSoftDelete, table=True):
+    """AY-scoped calendar entry with role-based ownership (§8.5, §9.3)."""
+
+    __tablename__ = "calendar_entries"
+    __table_args__ = (
+        sa.Index("ix_calendar_entries_academic_year_id", "academic_year_id"),
+        sa.Index("ix_calendar_entries_entry_type", "entry_type"),
+    )
+
+    academic_year_id: UUID = Field(foreign_key="academic_years.id", nullable=False)
+    title: str = Field(max_length=256, nullable=False)
+    entry_type: str = Field(max_length=32, nullable=False)
+    starts_at: datetime = Field(sa_type=_TIMESTAMPTZ, nullable=False)
+    ends_at: datetime = Field(sa_type=_TIMESTAMPTZ, nullable=False)
+    owner_user_id: UUID = Field(foreign_key="users.id", nullable=False)
+    owner_role_code: str = Field(max_length=64, nullable=False)
+    scope_type: str | None = Field(default=None, max_length=32)
+    scope_id: UUID | None = Field(default=None)
+    notes: str | None = Field(default=None)

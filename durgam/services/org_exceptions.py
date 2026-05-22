@@ -1,4 +1,4 @@
-"""Shared exception types for M3 org-core services."""
+"""Shared exception types for org-core and config services."""
 
 
 class OrgServiceError(Exception):
@@ -13,3 +13,10 @@ class HardDeleteBlockedError(OrgServiceError):
 
 class NotDeletableError(OrgServiceError):
     """Entity type does not support deletion (e.g. vision/mission — E-001)."""
+
+
+class AcademicYearLockedError(OrgServiceError):
+    """Write attempted on a locked academic year."""
+
+    def __init__(self, message: str = "This academic year is locked. Edits are not permitted.") -> None:
+        super().__init__(message)

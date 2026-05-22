@@ -4,6 +4,7 @@ from .campus import Campus
 from .centre import CentreOfExcellence
 from .config_anchors import (
     AcademicYear,
+    CalendarEntry,
     ClassTimingsConfig,
     Holiday,
     LetterheadAsset,
@@ -65,6 +66,8 @@ __all__ = [
     # Config anchors (M3)
     "ClassTimingsConfig",
     "WorkingDaysConfig",
+    # Config anchors (M4)
+    "CalendarEntry",
     # Auth sessions
     "UserSession",
     "PasswordResetToken",
