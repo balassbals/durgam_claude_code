@@ -86,3 +86,38 @@ class TestMigrations:
         # Upgrade back so subsequent tests have a schema
         result = _alembic("upgrade", "head")
         assert result.returncode == 0
+
+    def test_m4_calendar_entry_and_ay_master_lock(self):
+        """Verify M4 migration adds calendar_entries table and master_calendar_locked column."""
+        _reset_test_db()
+
+        engine = sqlalchemy.create_engine(settings.test_database_url)
+        try:
+            inspector = sqlalchemy.inspect(engine)
+
+            assert "calendar_entries" in inspector.get_table_names()
+            ay_cols = {c["name"] for c in inspector.get_columns("academic_years")}
+            assert "master_calendar_locked" in ay_cols
+
+            ce_cols = {c["name"] for c in inspector.get_columns("calendar_entries")}
+            for expected in (
+                "academic_year_id", "title", "entry_type",
+                "starts_at", "ends_at", "owner_user_id", "owner_role_code",
+                "scope_type", "scope_id", "notes",
+            ):
+                assert expected in ce_cols, f"Missing column: {expected}"
+
+            # Downgrade -1 should remove M4 additions
+            result = _alembic("downgrade", "-1")
+            assert result.returncode == 0, f"downgrade -1 failed:\n{result.stderr}"
+
+            inspector = sqlalchemy.inspect(engine)
+            assert "calendar_entries" not in inspector.get_table_names()
+            ay_cols_after = {c["name"] for c in inspector.get_columns("academic_years")}
+            assert "master_calendar_locked" not in ay_cols_after
+
+            # Upgrade back
+            result = _alembic("upgrade", "head")
+            assert result.returncode == 0
+        finally:
+            engine.dispose()
