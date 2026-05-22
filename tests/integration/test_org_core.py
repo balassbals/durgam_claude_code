@@ -116,6 +116,13 @@ def _course(session, program: Program, department: Department, *, idx: str | Non
     return c
 
 
+def _clean_university_vm(session) -> None:
+    """Remove university VM rows committed by seeded_db_engine (TD-008)."""
+    session.execute(sa.text("DELETE FROM university_missions"))
+    session.execute(sa.text("DELETE FROM university_vision_missions"))
+    session.flush()
+
+
 # ── Campus ────────────────────────────────────────────────────────────────────
 
 class TestCampusRepository:
@@ -500,6 +507,7 @@ class TestDepartmentMainCampusInvariant:
 
 class TestVisionMissionRepository:
     def test_university_singleton_create_and_retrieve(self, db_session):
+        _clean_university_vm(db_session)
         repo = VisionMissionRepository(db_session)
         assert repo.get_university_vm() is None
         uvm = repo.create_university_vm("Test vision text")
@@ -517,6 +525,7 @@ class TestVisionMissionRepository:
         assert missions[1].display_order == 2
 
     def test_university_vm_save_updates_vision(self, db_session):
+        _clean_university_vm(db_session)
         repo = VisionMissionRepository(db_session)
         uvm = repo.create_university_vm("Original")
         uvm.vision = "Updated"

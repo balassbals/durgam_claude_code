@@ -97,6 +97,41 @@ resource names matching any value in the seeded Permission table at test-collect
 time. Or generate test resources from a fixed namespace (e.g. `nonexistent_resource_*`) 
 that's known not to be seeded.
 
+### TD-008 — Shared test database allows cross-engine fixture contamination
+
+**Location:** `tests/conftest.py` (`db_engine`, `seeded_db_engine` fixtures);
+`tests/integration/test_org_core.py` (the two VM tests with the
+`_clean_university_vm` workaround).
+
+**What it is:** `db_engine` and `seeded_db_engine` both target
+`settings.test_database_url` — the same physical database. When a test
+using `seeded_session` runs (triggering `seed()` with a commit), the
+committed seed data becomes visible to subsequent tests using
+`db_session`, because `db_session`'s `transaction.rollback()` only undoes its
+own writes, not data committed by the other engine. Test execution order
+determines whether the contamination manifests. At M3 close-out the
+order was benign; M4 Session 1's changes shifted the order and exposed
+two vision/mission tests that assume empty `university_vision_missions`
+and `university_missions` tables.
+
+**Current workaround:** `_clean_university_vm()` deletes the leaked rows at
+the start of the two affected tests, inside their rolled-back
+transaction. Safe but symptom-level.
+
+**Why this is not a production issue:** It is purely a test-infrastructure
+isolation problem. Production code is unaffected — the vision/mission
+behavior is correct (verified: edit persists in manual UI testing).
+
+**Trigger to re-open / proper fix:** When a third test hits this class of
+bug, or proactively at the next test-infrastructure pass. Proper fix
+options: (a) `seeded_db_engine` uses an isolated schema or separate
+database from `db_engine`; (b) the seeded fixture cleans up its committed
+data in teardown; (c) all integration tests that assume empty tables
+explicitly clean those tables at setup (generalize the
+`_clean_university_vm` pattern into a reusable fixture).
+
+---
+
 ### TD-007 — Mobile and tablet responsiveness deferred across modules
 
 **Location:** Every admin and config page (multiple files in `durgam/pages/`).
