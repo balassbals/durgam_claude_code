@@ -239,6 +239,7 @@ def seed(session: Session) -> dict[str, int]:
         # Holiday
         {"resource": "holiday",                    "action": "read",      "scope": "*"},
         {"resource": "holiday",                    "action": "write",     "scope": "*"},
+        {"resource": "holiday",                    "action": "delete",    "scope": "*"},
         # Student category count
         {"resource": "student_category_count",     "action": "read",      "scope": "*"},
         {"resource": "student_category_count",     "action": "write",     "scope": "*"},
@@ -303,6 +304,7 @@ def seed(session: Session) -> dict[str, int]:
         ("calendar_entry",             "read",      "*"),
         ("calendar_entry",             "write",     "*"),
         ("holiday",                    "write",     "*"),
+        ("holiday",                    "delete",    "*"),
         ("student_category_count",     "read",      "*"),
         ("student_category_count",     "write",     "*"),
     ]

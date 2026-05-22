@@ -28,10 +28,10 @@ class TestSeed:
         # IQAC_COORDINATOR, DEAN + DEAN_* (5) + DEAN_STUDENT_WELFARE,
         # HOD family (3), STUDENT, BASIC_USER.
         assert _count(db_session, Role) == 19, "Expected 19 seeded roles at M4"
-        # M4: 53 triples — 46 M3 triples + 7 new M4 triples.
-        assert _count(db_session, Permission) == 53, "Expected 53 seeded permission triples at M4"
+        # M4: 54 triples — 46 M3 triples + 8 new M4 triples (incl. holiday:delete).
+        assert _count(db_session, Permission) == 54, "Expected 54 seeded permission triples at M4"
         assert _count(db_session, User) >= 10, "Expected at least the 10 seeded users"
-        assert _count(db_session, RolePermission) >= 53, "Expected at least 53 role→permission rows"
+        assert _count(db_session, RolePermission) >= 54, "Expected at least 54 role→permission rows"
         ay = db_session.exec(select(AcademicYear).where(AcademicYear.code == "2025-26")).first()
         assert ay is not None, "AcademicYear 2025-26 must exist after seeding"
         ay_prev = db_session.exec(select(AcademicYear).where(AcademicYear.code == "2024-25")).first()
