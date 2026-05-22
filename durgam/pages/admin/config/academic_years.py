@@ -168,6 +168,15 @@ def admin_config_academic_years() -> rx.Component:
                     ),
                     align="center",
                     width="100%",
+                    margin_bottom="0.5rem",
+                ),
+                rx.text(
+                    "Year Locked: set automatically when the year ends; "
+                    "no edits allowed. "
+                    "Master Calendar: set by Registrar to finalize the "
+                    "calendar framework; other roles can then add entries.",
+                    font_size="0.8rem",
+                    color="var(--color-muted)",
                     margin_bottom="1.5rem",
                 ),
                 config_toast(
@@ -185,8 +194,8 @@ def admin_config_academic_years() -> rx.Component:
                             TableColumn(key="code", label="Code"),
                             TableColumn(key="starts_on", label="Start"),
                             TableColumn(key="ends_on", label="End"),
-                            TableColumn(key="is_locked", label="AY Locked"),
-                            TableColumn(key="master_locked", label="Master Locked"),
+                            TableColumn(key="is_locked", label="Year Locked"),
+                            TableColumn(key="master_locked", label="Master Calendar"),
                         ],
                         card_primary_key="code",
                         is_mobile=False,

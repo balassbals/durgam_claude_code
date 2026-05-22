@@ -129,14 +129,17 @@ class AcademicYearConfigState(BaseState):
                         actor_id,
                     )
                 session.commit()
-            self.flash = "Academic year saved."
-            self.flash_type = "success"
         except (AcademicYearError, AcademicYearLockedError) as e:
             self.flash = e.message if hasattr(e, "message") else str(e)
             self.flash_type = "error"
+            self.show_form = False
+            self.editing_id = ""
+            return
         self.show_form = False
         self.editing_id = ""
         await self.load_academic_years()
+        self.flash = "Academic year saved."
+        self.flash_type = "success"
 
     def open_lock_master_confirm(self, ay_id: str, code: str) -> None:
         self.confirm_ay_id = ay_id
@@ -162,31 +165,36 @@ class AcademicYearConfigState(BaseState):
     @require_role(action="configure", resource="academic_year")
     @audit_action(action="configure", resource="academic_year")
     async def confirm_action_handler(self) -> None:
+        action = self.confirm_action
         try:
             with open_session() as session:
                 svc = _svc(session)
                 actor_id = UUID(self.current_user_id)
-                if self.confirm_action == "lock_master":
+                if action == "lock_master":
                     svc.lock_master_calendar(UUID(self.confirm_ay_id), actor_id)
-                    session.commit()
-                    self.flash = "Master calendar locked."
-                    self.flash_type = "success"
-                elif self.confirm_action == "soft_delete":
+                elif action == "soft_delete":
                     svc.update(
                         UUID(self.confirm_ay_id),
                         {"is_deleted": True},
                         actor_id,
                     )
-                    session.commit()
-                    self.flash = "Academic year deactivated."
-                    self.flash_type = "success"
+                session.commit()
         except (AcademicYearError, AcademicYearLockedError) as e:
             self.flash = e.message if hasattr(e, "message") else str(e)
             self.flash_type = "error"
+            self.confirm_open = False
+            self.confirm_ay_id = ""
+            self.confirm_action = ""
+            return
         self.confirm_open = False
         self.confirm_ay_id = ""
         self.confirm_action = ""
         await self.load_academic_years()
+        if action == "lock_master":
+            self.flash = "Master calendar locked."
+        else:
+            self.flash = "Academic year deactivated."
+        self.flash_type = "success"
 
     def cancel_confirm(self) -> None:
         self.confirm_open = False

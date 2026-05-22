@@ -162,14 +162,17 @@ class HolidayConfigState(BaseState):
                         actor_id,
                     )
                 session.commit()
-            self.flash = "Holiday saved."
-            self.flash_type = "success"
         except (HolidayError, AcademicYearLockedError) as e:
             self.flash = e.message if hasattr(e, "message") else str(e)
             self.flash_type = "error"
+            self.show_form = False
+            self.editing_id = ""
+            return
         self.show_form = False
         self.editing_id = ""
         await self.load_holidays()
+        self.flash = "Holiday saved."
+        self.flash_type = "success"
 
     def open_soft_delete_confirm(self, holiday_id: str, name: str) -> None:
         self.confirm_holiday_id = holiday_id
@@ -186,14 +189,17 @@ class HolidayConfigState(BaseState):
                     UUID(self.confirm_holiday_id), UUID(self.current_user_id)
                 )
                 session.commit()
-            self.flash = "Holiday deleted."
-            self.flash_type = "success"
         except (HolidayError, AcademicYearLockedError) as e:
             self.flash = e.message if hasattr(e, "message") else str(e)
             self.flash_type = "error"
+            self.confirm_open = False
+            self.confirm_holiday_id = ""
+            return
         self.confirm_open = False
         self.confirm_holiday_id = ""
         await self.load_holidays()
+        self.flash = "Holiday deleted."
+        self.flash_type = "success"
 
     def cancel_confirm(self) -> None:
         self.confirm_open = False

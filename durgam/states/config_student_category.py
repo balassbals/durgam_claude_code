@@ -138,10 +138,11 @@ class StudentCategoryConfigState(BaseState):
                 svc = _svc(session)
                 svc.update(UUID(self.scc_id), fields, UUID(self.current_user_id))
                 session.commit()
-            self.flash = "Student category counts saved."
-            self.flash_type = "success"
         except (StudentCategoryCountError, AcademicYearLockedError) as e:
             self.flash = e.message if hasattr(e, "message") else str(e)
             self.flash_type = "error"
+            return
 
         await self.load_student_categories()
+        self.flash = "Student category counts saved."
+        self.flash_type = "success"
