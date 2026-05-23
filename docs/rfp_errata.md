@@ -79,3 +79,24 @@ No delete permission triple is created. Hard-delete and soft-delete are not expo
 - Manual gate verification path: log in as Registrar, edit university vision, save, log out, log in as student, navigate to a "About the University" page (or wherever vision is displayed), see updated vision.
 
 This errata is referenced by `docs/milestones/M3.md` as binding alongside §9.3 of the RFP.
+
+---
+
+## E-002 — Three-phase sequential calendar collaboration chain
+
+**Status**: Resolved-at-M4.
+
+**Source**: Original informal requirements (`docs/durgam_informal_requirements.docx`), Calendar paragraph:
+
+> "Registrar/Registrar office/Deputy Registrar prepares master calendar → confirms → IQAC adds activities → confirms → Directors, Deans, HoDs, and other roles add their entries."
+
+**Gap in v3 RFP**: §9.3 describes calendar collaboration as "Registrar → IQAC → others" with arrows, which was initially read at M4 planning as a two-phase concurrent model (Registrar and IQAC contribute simultaneously, then others join). The informal requirements are more specific: a **three-phase sequential chain** with explicit confirm gates between phases.
+
+The three phases are:
+1. **Phase 1 — Registrar framework**: 13 entry types (sem_begin, sem_end, holiday, class_suspension, cie, end_sem_exam, admission_exam, phd_admission, winter_vacation, summer_vacation, academic_council_meeting, finance_committee_meeting, executive_committee_meeting). Creatable when AY is unlocked. Registrar confirms → locks master calendar.
+2. **Phase 2 — IQAC**: 1 type (activity). Creatable when master_calendar_locked=True AND iqac_confirmed=False. IQAC confirms → opens Phase 3.
+3. **Phase 3 — All others**: sports/cultural (DIRECTOR, DEAN_STUDENT_WELFARE only); academic_activity/other_activity (any non-STUDENT/BASIC_USER role). Creatable when iqac_confirmed=True.
+
+Each confirm action is irreversible and triggers a phase-transition email notification to the next phase's roles.
+
+**Disposition**: M4 (shipped). Entry types are a fixed code-defined set (`ENTRY_TYPE_ROLE_MAP`); adding or changing types requires a code change. See `docs/milestones/M4.md` Session 5 for implementation detail and `docs/modules/configuration.md` → "Three-Phase Calendar Collaboration Chain" for the canonical reference.

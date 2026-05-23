@@ -80,6 +80,17 @@ Applied to all config pages and home page. See CLAUDE.md →
 
 ---
 
+## Calendar — visual calendar and clash detection
+
+- **Visual calendar** (month/week grid, drag-and-drop, colour-coded types): the M4
+  calendar page uses a filtered list/table view. A richer visual calendar is a
+  separate frontend task; the data model and service are reusable. See
+  `docs/coverage_matrix.md` → "UI Polish Backlog — Visual Calendar (from M4)".
+- **Clash detection**: deliberately NOT implemented at M4. See `docs/milestones/M4.md`
+  Session 5 design decision for rationale.
+
+---
+
 ## Permission-denied redirect notification rendering
 
 When a non-permitted user attempts to reach an admin route (e.g.,
