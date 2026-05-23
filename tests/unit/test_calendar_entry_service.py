@@ -220,7 +220,7 @@ class TestPhaseGating:
         ay = _ay_mock(master_locked=True, iqac_confirmed=False)
         _, ay_repo = _repos(ay)
         svc = _make_svc(ay_repo=ay_repo)
-        with pytest.raises(CalendarEntryError, match="IQAC must confirm"):
+        with pytest.raises(CalendarEntryError, match="IQAC confirms the calendar"):
             svc.create(
                 uuid4(), "Sports Day", "sports", _dt(), _dt(hour=10),
                 uuid4(), "DIRECTOR", uuid4(),
@@ -230,7 +230,7 @@ class TestPhaseGating:
         ay = _ay_mock(master_locked=False, iqac_confirmed=False)
         _, ay_repo = _repos(ay)
         svc = _make_svc(ay_repo=ay_repo)
-        with pytest.raises(CalendarEntryError, match="IQAC must confirm"):
+        with pytest.raises(CalendarEntryError, match="IQAC confirms the calendar"):
             svc.create(
                 uuid4(), "Cultural Fest", "cultural", _dt(), _dt(hour=10),
                 uuid4(), "DIRECTOR", uuid4(),

@@ -151,7 +151,8 @@ class CalendarEntryService:
         elif entry_type in PHASE3_RESTRICTED_TYPES or entry_type in PHASE3_GENERIC_TYPES:
             if not ay.iqac_confirmed:
                 raise CalendarEntryError(
-                    "IQAC must confirm before other entries can be added."
+                    "The calendar is not yet open for entries. "
+                    "You'll be able to add your entries once IQAC confirms the calendar."
                 )
 
         now = datetime.now(UTC)

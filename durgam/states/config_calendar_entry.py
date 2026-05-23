@@ -355,14 +355,18 @@ class CalendarEntryConfigState(BaseState):
             self.flash_type = "error"
             return
         if not self._phase_eligible_types():
-            if not self.master_calendar_locked:
+            user_types = {o["value"] for o in self.allowed_type_options}
+            has_phase2 = bool(user_types & PHASE2_TYPES)
+            if has_phase2 and not self.master_calendar_locked:
                 self.flash = (
                     "The Registrar must confirm the master calendar "
-                    "before you can add entries."
+                    "before you can add activities."
                 )
-            elif not self.iqac_confirmed:
+            else:
                 self.flash = (
-                    "IQAC must confirm the calendar before you can add entries."
+                    "The calendar is not yet open for entries. "
+                    "You'll be able to add your entries once IQAC "
+                    "confirms the calendar."
                 )
             self.flash_type = "error"
             return
