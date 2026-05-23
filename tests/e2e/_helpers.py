@@ -42,6 +42,11 @@ def _login(page: Page, username: str, password: str) -> None:
     page.get_by_role("button", name=re.compile(r"Sign in", re.IGNORECASE)).click()
     # Wait for URL to leave /login — redirect is WebSocket-based, not HTTP
     page.wait_for_url(lambda url: "/login" not in url, timeout=10_000)
+    # Wait for the post-login landing page to fully load before any subsequent
+    # goto(). Without this, a fast goto() can interrupt Reflex's auth-state
+    # settlement — the new page's on_load guard fires before the session cookie
+    # is established, sees no auth, and redirects back to /login.
+    page.wait_for_load_state("networkidle")
 
 
 def _logout(page: Page) -> None:
