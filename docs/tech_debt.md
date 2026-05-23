@@ -181,6 +181,52 @@ before any external handoff.
 
 ---
 
+### TD-010 — Celery docker services install full dev dependency set on cold start
+
+**Location:** `docker-compose.yml` (celery_worker, celery_beat services)
+
+**What it is:** The Celery worker and beat containers use the same `app` build
+target as the main Reflex app, which includes dev dependencies (playwright,
+mypy, ruff, faker, hypothesis). On cold start, `uv sync` inside the container
+installs all of these, making startup slow (~30s) and containers ~200MB heavier
+than needed. A `uv hardlink` warning also appears (cosmetic).
+
+**Why this is not a correctness issue:** The worker functions correctly after
+startup. The extra deps are unused but harmless. Dev containers are not
+production artifacts.
+
+**Fix:** Add a `worker` build target in the Dockerfile that runs
+`uv sync --frozen --no-dev --no-install-project` (runtime deps only). Point
+the celery services at that target. Set `UV_LINK_MODE=copy` to silence the
+hardlink warning.
+
+**Trigger to re-open:** Production deployment prep, or M20 review.
+
+---
+
+### TD-011 — Coverage threshold noise (--cov-fail-under)
+
+**Location:** `pyproject.toml` (`addopts`)
+
+**What it is:** `--cov-fail-under=70` in pytest addopts causes a misleading
+`FAIL Required test coverage of 70% not reached` when running individual test
+files or small subsets (e.g., `tests/unit/test_calendar_emails.py` alone
+reports 17% total coverage). The project's actual gate criterion is
+suite-passes, not a global coverage percentage — per-module thresholds are
+checked at gate time (services >= 85%, repos >= 80%).
+
+**Why this is not a correctness issue:** The full test suite consistently
+exceeds 85% total coverage. The threshold only misfires on partial runs.
+
+**Fix:** Remove `--cov-fail-under` from `addopts` (gate verification checks
+per-module coverage explicitly). Or lower to a value that partial runs can
+meet (e.g., 40%).
+
+**Trigger to re-open:** If CI is added and uses the global threshold for
+gating, set it appropriately there rather than in pyproject.toml.
+
+---
+
 ## Resolved
 
 ### TD-002 — SAWarning: transaction already deassociated from connection (resolved in m0-cleanup)

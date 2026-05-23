@@ -1,8 +1,9 @@
-"""Playwright E2E config suite — M3 gate: Configuration — Organisational Core.
+"""Playwright E2E config suite — M3+M4 gate: Configuration.
 
 Covers all admin config flows: campus, school, centre, department, course,
 program read-only detail, vision/mission (university + department), class
-timings, working days, and route-protection checks.
+timings, working days, and route-protection checks (M3). Also covers M4:
+academic year, holiday, student category, and calendar entry config.
 
 Requires a running stack:
   docker compose up db redis mailpit -d
@@ -517,7 +518,7 @@ class TestAcademicYearConfig:
         _login(page, _REGISTRAR_USER, _REGISTRAR_PASS)
         page.goto(f"{BASE_URL}/admin/config/academic-years")
         page.wait_for_load_state("networkidle")
-        _wait_for_admin_page(page, "Academic Years", timeout=15_000)
+        _wait_for_admin_page(page, "+ New Academic Year", timeout=15_000)
         expect(page.get_by_text("2025-26", exact=True)).to_be_visible(timeout=10_000)
         _logout(page)
 
@@ -527,7 +528,7 @@ class TestAcademicYearConfig:
             _login(page, _REGISTRAR_USER, _REGISTRAR_PASS)
             page.goto(f"{BASE_URL}/admin/config/academic-years")
             page.wait_for_load_state("networkidle")
-            _wait_for_admin_page(page, "Academic Years", timeout=15_000)
+            _wait_for_admin_page(page, "+ New Academic Year", timeout=15_000)
 
             # Create
             page.get_by_role("button", name="+ New Academic Year").click()
@@ -535,8 +536,8 @@ class TestAcademicYearConfig:
                 timeout=5_000
             )
             page.get_by_placeholder("e.g. 2025-26").fill(_AY_TEST_CODE)
-            page.locator("input[name='form_starts_on']").fill("9999-07-01")
-            page.locator("input[name='form_ends_on']").fill("10000-05-31")
+            page.locator("input[name='form_starts_on']").fill("2099-07-01")
+            page.locator("input[name='form_ends_on']").fill("2100-05-31")
             page.get_by_role("button", name="Save").click()
             expect(page.get_by_text("Academic year saved.", exact=True)).to_be_visible(
                 timeout=10_000
@@ -565,7 +566,7 @@ class TestHolidayConfig:
         _login(page, _REGISTRAR_USER, _REGISTRAR_PASS)
         page.goto(f"{BASE_URL}/admin/config/holidays")
         page.wait_for_load_state("networkidle")
-        _wait_for_admin_page(page, "Holidays", timeout=15_000)
+        _wait_for_admin_page(page, "+ New Holiday", timeout=15_000)
         # Seeded AY 2025-26 should be pre-selected with seeded holidays
         expect(page.get_by_text("Gandhi Jayanti", exact=True)).to_be_visible(
             timeout=10_000
@@ -580,7 +581,9 @@ class TestStudentCategoryConfig:
         _login(page, _REGISTRAR_USER, _REGISTRAR_PASS)
         page.goto(f"{BASE_URL}/admin/config/student-categories")
         page.wait_for_load_state("networkidle")
-        _wait_for_admin_page(page, "Student Categories", timeout=15_000)
+        expect(
+            page.get_by_role("heading", name="Student Category Counts")
+        ).to_be_visible(timeout=15_000)
         # Verify form loads with AY selector
         expect(page.get_by_text("Academic Year:", exact=True)).to_be_visible(
             timeout=10_000
@@ -661,4 +664,43 @@ class TestCalendarEntryConfig:
         download = download_info.value
         assert "calendar_" in download.suggested_filename
         assert download.suggested_filename.endswith(".csv")
+        _logout(page)
+
+
+# ── Locked AY Enforcement (M4) ──────────────────────────────────────────────
+
+class TestLockedAYEnforcement:
+    def test_locked_ay_shows_locked_badge(self, page: Page) -> None:
+        _login(page, _REGISTRAR_USER, _REGISTRAR_PASS)
+        page.goto(f"{BASE_URL}/admin/config/academic-years")
+        page.wait_for_load_state("networkidle")
+        _wait_for_admin_page(page, "+ New Academic Year", timeout=15_000)
+        # 2024-25 is seeded as locked
+        row = page.locator("tr", has_text="2024-25")
+        expect(row.get_by_text("Yes", exact=True)).to_be_visible(timeout=5_000)
+        _logout(page)
+
+    def test_locked_ay_kebab_shows_no_actions(self, page: Page) -> None:
+        _login(page, _REGISTRAR_USER, _REGISTRAR_PASS)
+        page.goto(f"{BASE_URL}/admin/config/academic-years")
+        page.wait_for_load_state("networkidle")
+        _wait_for_admin_page(page, "+ New Academic Year", timeout=15_000)
+        row = page.locator("tr", has_text="2024-25")
+        row.get_by_role("button", name="⋮").click()
+        expect(page.get_by_text("Locked — no actions")).to_be_visible(timeout=5_000)
+        page.keyboard.press("Escape")
+        _logout(page)
+
+    def test_holidays_show_locked_badge_on_locked_ay(self, page: Page) -> None:
+        _login(page, _REGISTRAR_USER, _REGISTRAR_PASS)
+        page.goto(f"{BASE_URL}/admin/config/holidays")
+        page.wait_for_load_state("networkidle")
+        _wait_for_admin_page(page, "+ New Holiday", timeout=15_000)
+        # AY selector is Radix rx.select.root — click trigger then option
+        ay_trigger = page.locator(".rt-SelectTrigger")
+        expect(ay_trigger).to_be_visible(timeout=10_000)
+        ay_trigger.click()
+        page.get_by_role("option", name="2024-25").click()
+        # Should show the AY Locked badge
+        expect(page.get_by_text("AY Locked")).to_be_visible(timeout=10_000)
         _logout(page)
