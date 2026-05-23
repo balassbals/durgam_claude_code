@@ -332,9 +332,40 @@ class CalendarEntryConfigState(BaseState):
     def set_form_notes(self, v: str) -> None:
         self.form_notes = v
 
+    def _phase_eligible_types(self) -> list[str]:
+        """Return the subset of allowed_type_options that the current phase permits."""
+        eligible = []
+        for opt in self.allowed_type_options:
+            t = opt["value"]
+            if t in PHASE1_TYPES:
+                eligible.append(t)
+            elif t in PHASE2_TYPES:
+                if self.master_calendar_locked and not self.iqac_confirmed:
+                    eligible.append(t)
+            elif t in PHASE3_RESTRICTED_TYPES or t in PHASE3_GENERIC_TYPES:
+                if self.iqac_confirmed:
+                    eligible.append(t)
+        return eligible
+
     def open_create(self):
         self.flash = ""
         self.flash_type = "info"
+        if self.ay_is_locked:
+            self.flash = "This academic year is locked. No entries can be added."
+            self.flash_type = "error"
+            return
+        if not self._phase_eligible_types():
+            if not self.master_calendar_locked:
+                self.flash = (
+                    "The Registrar must confirm the master calendar "
+                    "before you can add entries."
+                )
+            elif not self.iqac_confirmed:
+                self.flash = (
+                    "IQAC must confirm the calendar before you can add entries."
+                )
+            self.flash_type = "error"
+            return
         self.editing_id = ""
         self.form_title = ""
         self.form_entry_type = ""
