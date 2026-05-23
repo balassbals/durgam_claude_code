@@ -4,7 +4,7 @@
 **Spec**: `docs/durgam_rfp_v3.pdf` — all section references (§8, §12, etc.) point to this file.
 **Python**: 3.13 (pinned via `.python-version`).
 **Theme**: Puttaparthi Saffron–Indigo–Ivory (§15.1). Single committed theme; no alternatives in v3.
-**Current milestone**: M4 — Configuration — AY & Calendar.
+**Current milestone**: M5 — Configuration — Identity Attachments.
 
 ## Authority files (binding, in priority order)
 
@@ -1096,8 +1096,71 @@ Public read-only pages visible to all authenticated users use:
 Pattern established at Session 7 for `/about/university`, `/about/departments`,
 `/about/departments/[dept_code]`.
 
+## Patterns established at M4
+
+### Seed data is development/demo only — no institution-specific data
+
+`scripts/seed.py` populates a development database for feature testing and
+gate verification. It is NOT a deployment artifact.
+
+Rules:
+- Use placeholder/example domains for emails (e.g., `example.com`,
+  `dev.local`, or Mailpit-compatible addresses). Never use the real
+  institution's domain (`sssihl.edu.in` or similar) in seed.
+- Use clearly-fictional but realistic names for entities. Close to
+  real is fine for demonstrating the feature; the exact real names
+  are not needed.
+- Demo user passwords follow the `_Dev1!XZ` convention — obviously
+  development-only.
+- Any data that implies "this IS the live institutional configuration"
+  does not belong in seed. That data gets configured through the
+  admin UI during real deployment.
+- When a seed row represents a bootstrap placeholder for
+  runtime-managed data (e.g., RoleEmail addresses), add a code
+  comment saying so — e.g.:
+  `# Bootstrap placeholder — real addresses configured via admin UI
+  by Registrar/SysAdmin.`
+
+### Three-phase calendar collaboration with sequential confirm gates
+
+The calendar collaboration chain uses three sequential phases, each gated by an
+irreversible confirm action on the AcademicYear model:
+
+1. **Phase 1 (Registrar framework)**: creatable when AY is unlocked. Registrar
+   confirms → sets `master_calendar_locked=True`.
+2. **Phase 2 (IQAC)**: creatable when `master_calendar_locked=True` AND
+   `iqac_confirmed=False`. IQAC confirms → sets `iqac_confirmed=True`.
+3. **Phase 3 (All others)**: creatable when `iqac_confirmed=True`.
+
+Entry types are a fixed set defined in `ENTRY_TYPE_ROLE_MAP` (18 types across
+4 phase sets). Adding or changing types requires a code change. Confirm actions
+trigger phase-transition email notifications via fire-and-forget
+`asyncio.create_task()`.
+
+### AY-locked repository enforcement (AcademicYearLockedError)
+
+All repositories on AY-scoped models call `_check_ay_locked()` before any write.
+If `academic_year.is_locked=True`, the repo raises `AcademicYearLockedError`.
+Services do not re-check; the repository is the gate. A nightly Celery task
+locks expired AYs automatically.
+
+### Celery task pattern — scheduled job tested by direct call
+
+Celery tasks in `durgam/tasks/` are tested by calling the task function directly
+(no broker needed). The beat schedule is the production dispatch mechanism; tests
+verify the function logic only. Docker compose services for celery_worker and
+celery_beat are behind the `celery` profile (opt-in). All container services use
+`- /app/.venv` anonymous volumes to prevent overwriting the host venv.
+
+### Fixed-type-set decision
+
+Entry types, role codes, and permission triples are code-defined constants, not
+runtime-configurable. This applies to `ENTRY_TYPE_ROLE_MAP`, `EXCLUDED_ROLES`,
+and the phase sets. If a future requirement asks for configurable types, it must
+address role-mapping and phase-gating implications.
+
 ## Current milestone
-**M4 — Configuration — AY & Calendar.**
+**M5 — Configuration — Identity Attachments.**
 
 This line is the source of truth for "where are we." Before opening a milestone-completing PR, Claude Code MUST:
 1. Grep this file for "Current milestone" and update both occurrences (the top status line and this section).

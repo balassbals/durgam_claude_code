@@ -89,7 +89,8 @@ docker compose exec db psql -U durgam -d durgam -c \
    locked_until, is_deleted FROM users
    WHERE username IN ('sys_admin', 'dean_sci', 'firstlogin_user',
                        'inactive_user', 'student_001',
-                       'registrar_user', 'hod_dmacs')
+                       'registrar_user', 'hod_dmacs',
+                       'iqac_user', 'director_psn', 'dean_sw')
    ORDER BY username;"
 ```
 

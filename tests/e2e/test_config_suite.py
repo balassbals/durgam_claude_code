@@ -1,8 +1,9 @@
-"""Playwright E2E config suite — M3 gate: Configuration — Organisational Core.
+"""Playwright E2E config suite — M3+M4 gate: Configuration.
 
 Covers all admin config flows: campus, school, centre, department, course,
 program read-only detail, vision/mission (university + department), class
-timings, working days, and route-protection checks.
+timings, working days, and route-protection checks (M3). Also covers M4:
+academic year, holiday, student category, and calendar entry config.
 
 Requires a running stack:
   docker compose up db redis mailpit -d
@@ -39,7 +40,9 @@ from playwright.sync_api import Page, expect
 from tests.e2e._helpers import (
     BASE_URL,
     _delete_university_missions_matching,
+    _hard_delete_academic_year_by_code,
     _hard_delete_by_code,
+    _hard_delete_calendar_entries_by_title,
     _hard_delete_dept_by_code,
     _login,
     _logout,
@@ -84,6 +87,10 @@ class TestConfigRouteProtection:
         "/admin/config/vision-mission",
         "/admin/config/class-timings",
         "/admin/config/working-days",
+        "/admin/config/academic-years",
+        "/admin/config/holidays",
+        "/admin/config/student-categories",
+        "/admin/config/calendar",
     ]
 
     @pytest.mark.parametrize("route", _PROTECTED_ROUTES)
@@ -499,3 +506,201 @@ class TestWorkingDays:
         page.goto(f"{BASE_URL}/admin/config/working-days")
         page.wait_for_load_state("networkidle")
         page.wait_for_url(lambda url: "/admin/config/working-days" not in url, timeout=10_000)
+
+
+# ── Academic Year Config (M4) ─────────────────────────────────────────────────
+
+_AY_TEST_CODE = "9999-00"
+
+
+class TestAcademicYearConfig:
+    def test_registrar_sees_seeded_academic_years(self, page: Page) -> None:
+        _login(page, _REGISTRAR_USER, _REGISTRAR_PASS)
+        page.goto(f"{BASE_URL}/admin/config/academic-years")
+        page.wait_for_load_state("networkidle")
+        _wait_for_admin_page(page, "+ New Academic Year", timeout=15_000)
+        expect(page.get_by_text("2025-26", exact=True)).to_be_visible(timeout=10_000)
+        _logout(page)
+
+    def test_create_edit_softdelete_academic_year(self, page: Page) -> None:
+        _hard_delete_academic_year_by_code(_AY_TEST_CODE)
+        try:
+            _login(page, _REGISTRAR_USER, _REGISTRAR_PASS)
+            page.goto(f"{BASE_URL}/admin/config/academic-years")
+            page.wait_for_load_state("networkidle")
+            _wait_for_admin_page(page, "+ New Academic Year", timeout=15_000)
+
+            # Create
+            page.get_by_role("button", name="+ New Academic Year").click()
+            expect(page.get_by_role("heading", name="New Academic Year")).to_be_visible(
+                timeout=5_000
+            )
+            page.get_by_placeholder("e.g. 2025-26").fill(_AY_TEST_CODE)
+            page.locator("input[name='form_starts_on']").fill("2099-07-01")
+            page.locator("input[name='form_ends_on']").fill("2100-05-31")
+            page.get_by_role("button", name="Save").click()
+            expect(page.get_by_text("Academic year saved.", exact=True)).to_be_visible(
+                timeout=10_000
+            )
+            expect(page.get_by_text(_AY_TEST_CODE, exact=True)).to_be_visible(
+                timeout=5_000
+            )
+
+            # Soft delete via kebab
+            row = page.locator("tr", has_text=_AY_TEST_CODE)
+            row.get_by_role("button", name="⋮").click()
+            page.get_by_role("menuitem", name="Deactivate").click()
+            page.get_by_role("button", name="Deactivate").click()
+            expect(page.get_by_text("Academic year deactivated.", exact=True)).to_be_visible(
+                timeout=10_000
+            )
+            _logout(page)
+        finally:
+            _hard_delete_academic_year_by_code(_AY_TEST_CODE)
+
+
+# ── Holiday Config (M4) ──────────────────────────────────────────────────────
+
+class TestHolidayConfig:
+    def test_registrar_sees_seeded_holidays(self, page: Page) -> None:
+        _login(page, _REGISTRAR_USER, _REGISTRAR_PASS)
+        page.goto(f"{BASE_URL}/admin/config/holidays")
+        page.wait_for_load_state("networkidle")
+        _wait_for_admin_page(page, "+ New Holiday", timeout=15_000)
+        # Seeded AY 2025-26 should be pre-selected with seeded holidays
+        expect(page.get_by_text("Gandhi Jayanti", exact=True)).to_be_visible(
+            timeout=10_000
+        )
+        _logout(page)
+
+
+# ── Student Category Config (M4) ─────────────────────────────────────────────
+
+class TestStudentCategoryConfig:
+    def test_registrar_sees_student_category_form(self, page: Page) -> None:
+        _login(page, _REGISTRAR_USER, _REGISTRAR_PASS)
+        page.goto(f"{BASE_URL}/admin/config/student-categories")
+        page.wait_for_load_state("networkidle")
+        expect(
+            page.get_by_role("heading", name="Student Category Counts")
+        ).to_be_visible(timeout=15_000)
+        # Verify form loads with AY selector
+        expect(page.get_by_text("Academic Year:", exact=True)).to_be_visible(
+            timeout=10_000
+        )
+        _logout(page)
+
+
+# ── Calendar Entry Config (M4) ───────────────────────────────────────────────
+
+_CAL_TEST_TITLE = "E2E test entry"
+
+
+class TestCalendarEntryConfig:
+    def test_registrar_sees_seeded_calendar_entries(self, page: Page) -> None:
+        _login(page, _REGISTRAR_USER, _REGISTRAR_PASS)
+        page.goto(f"{BASE_URL}/admin/config/calendar")
+        page.wait_for_load_state("networkidle")
+        _wait_for_admin_page(page, "Academic Calendar", timeout=15_000)
+        # Seeded entries for 2025-26
+        expect(page.get_by_text("Semester 1 Begins", exact=True)).to_be_visible(
+            timeout=10_000
+        )
+        expect(page.get_by_text("CIE-1", exact=True)).to_be_visible(timeout=5_000)
+        _logout(page)
+
+    def test_create_and_delete_calendar_entry(self, page: Page) -> None:
+        test_id = uuid.uuid4().hex[:8]
+        title = f"{_CAL_TEST_TITLE} {test_id}"
+        _hard_delete_calendar_entries_by_title(f"{_CAL_TEST_TITLE}%")
+        try:
+            _login(page, _REGISTRAR_USER, _REGISTRAR_PASS)
+            page.goto(f"{BASE_URL}/admin/config/calendar")
+            page.wait_for_load_state("networkidle")
+            _wait_for_admin_page(page, "Academic Calendar", timeout=15_000)
+
+            # Create a Phase 1 entry (Registrar framework type)
+            page.get_by_role("button", name="+ New Entry").click()
+            expect(page.get_by_role("heading", name="New Calendar Entry")).to_be_visible(
+                timeout=5_000
+            )
+            page.get_by_placeholder("Entry title").fill(title)
+            # Select entry type
+            type_trigger = page.locator(
+                "form .rt-SelectTrigger",
+                has_text="Select entry type"
+            )
+            type_trigger.click()
+            page.get_by_role("option", name="Semester Begin").click()
+            # Fill dates
+            page.locator("input[name='form_starts_at']").fill("2025-08-01T09:00")
+            page.locator("input[name='form_ends_at']").fill("2025-08-01T17:00")
+            page.get_by_role("button", name="Save").click()
+            expect(page.get_by_text("Calendar entry saved.", exact=True)).to_be_visible(
+                timeout=10_000
+            )
+            expect(page.get_by_text(title, exact=True)).to_be_visible(timeout=5_000)
+
+            # Delete via kebab
+            row = page.locator("tr", has_text=title)
+            row.get_by_role("button", name="⋮").click()
+            page.get_by_role("menuitem", name="Delete").click()
+            page.get_by_role("button", name="Delete").click()
+            expect(page.get_by_text("Calendar entry deleted.", exact=True)).to_be_visible(
+                timeout=10_000
+            )
+            _logout(page)
+        finally:
+            _hard_delete_calendar_entries_by_title(f"{_CAL_TEST_TITLE}%")
+
+    def test_export_csv_triggers_download(self, page: Page) -> None:
+        _login(page, _REGISTRAR_USER, _REGISTRAR_PASS)
+        page.goto(f"{BASE_URL}/admin/config/calendar")
+        page.wait_for_load_state("networkidle")
+        _wait_for_admin_page(page, "Academic Calendar", timeout=15_000)
+        # Click CSV export — should trigger download
+        with page.expect_download(timeout=15_000) as download_info:
+            page.get_by_role("button", name="CSV").click()
+        download = download_info.value
+        assert "calendar_" in download.suggested_filename
+        assert download.suggested_filename.endswith(".csv")
+        _logout(page)
+
+
+# ── Locked AY Enforcement (M4) ──────────────────────────────────────────────
+
+class TestLockedAYEnforcement:
+    def test_locked_ay_shows_locked_badge(self, page: Page) -> None:
+        _login(page, _REGISTRAR_USER, _REGISTRAR_PASS)
+        page.goto(f"{BASE_URL}/admin/config/academic-years")
+        page.wait_for_load_state("networkidle")
+        _wait_for_admin_page(page, "+ New Academic Year", timeout=15_000)
+        # 2024-25 is seeded as locked
+        row = page.locator("tr", has_text="2024-25")
+        expect(row.get_by_text("Yes", exact=True)).to_be_visible(timeout=5_000)
+        _logout(page)
+
+    def test_locked_ay_kebab_shows_no_actions(self, page: Page) -> None:
+        _login(page, _REGISTRAR_USER, _REGISTRAR_PASS)
+        page.goto(f"{BASE_URL}/admin/config/academic-years")
+        page.wait_for_load_state("networkidle")
+        _wait_for_admin_page(page, "+ New Academic Year", timeout=15_000)
+        row = page.locator("tr", has_text="2024-25")
+        row.get_by_role("button", name="⋮").click()
+        expect(page.get_by_text("Locked — no actions")).to_be_visible(timeout=5_000)
+        page.keyboard.press("Escape")
+        _logout(page)
+
+    def test_holidays_show_locked_badge_on_locked_ay(self, page: Page) -> None:
+        _login(page, _REGISTRAR_USER, _REGISTRAR_PASS)
+        page.goto(f"{BASE_URL}/admin/config/holidays")
+        page.wait_for_load_state("networkidle")
+        _wait_for_admin_page(page, "+ New Holiday", timeout=15_000)
+        # AY selector is Radix rx.select.root — click trigger then option
+        ay_trigger = page.locator(".rt-SelectTrigger")
+        expect(ay_trigger).to_be_visible(timeout=10_000)
+        ay_trigger.click()
+        page.get_by_role("option", name="2024-25").click()
+        # Should show the AY Locked badge
+        expect(page.get_by_text("AY Locked")).to_be_visible(timeout=10_000)
+        _logout(page)

@@ -80,7 +80,57 @@ services:
         condition: service_healthy
     volumes:
       - .:/app
+      - /app/.venv
     command: ["uv", "run", "reflex", "run"]
+
+  celery_worker:
+    build:
+      context: .
+      target: app
+    environment:
+      DATABASE_URL: postgresql+psycopg://durgam:durgam@db:5432/durgam
+      DATABASE_URL_SYNC: postgresql+psycopg://durgam:durgam@db:5432/durgam
+      REDIS_URL: redis://redis:6379/0
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_FROM: noreply@example.dev
+      SECRET_KEY: dev-secret-key
+      DEBUG: "true"
+      ENVIRONMENT: development
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app
+      - /app/.venv
+    command: ["uv", "run", "celery", "-A", "durgam.tasks.celery_app", "worker", "--loglevel=info"]
+    profiles:
+      - celery
+
+  celery_beat:
+    build:
+      context: .
+      target: app
+    environment:
+      DATABASE_URL: postgresql+psycopg://durgam:durgam@db:5432/durgam
+      DATABASE_URL_SYNC: postgresql+psycopg://durgam:durgam@db:5432/durgam
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: dev-secret-key
+      DEBUG: "true"
+      ENVIRONMENT: development
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app
+      - /app/.venv
+    command: ["uv", "run", "celery", "-A", "durgam.tasks.celery_app", "beat", "--loglevel=info"]
+    profiles:
+      - celery
 
 volumes:
   pgdata:

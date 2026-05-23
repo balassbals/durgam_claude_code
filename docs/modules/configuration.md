@@ -42,6 +42,12 @@ The Configuration module manages the organisational core of SSSIHL: campuses, sc
 | ClassTimingsConfig | `class_timings_configs` | Singleton; `configure` action only |
 | WorkingDaysConfig | `working_days_configs` | Singleton; `configure` action only |
 
+| AcademicYear | `academic_years` | Unique `code`; `is_locked`, `master_calendar_locked`, `iqac_confirmed` flags |
+| Holiday | `holidays` | AY-scoped; unique `(holiday_date, academic_year_id)` |
+| StudentCategoryCount | `student_category_counts` | AY-scoped singleton; unique `academic_year_id` |
+| CalendarEntry | `calendar_entries` | AY-scoped; `entry_type` from 18 fixed types; `owner_user_id`, `owner_role_code` |
+| RoleEmail | `role_emails` | Unique `(role_code, scope_type, scope_id)`; bootstrap placeholders at M4 |
+
 All entities inherit `TimestampedSoftDelete` (id UUID v4, created_at, updated_at, is_deleted, etc.).
 
 ---
@@ -58,6 +64,11 @@ All entities inherit `TimestampedSoftDelete` (id UUID v4, created_at, updated_at
 | `CourseService` | `create`, `update`, `soft_delete` | Credits auto-derived: `L + T + (P // PRACTICAL_CREDIT_RATIO)` where ratio = 2 |
 | `VisionMissionService` | `get_or_create_*_vm`, `update_*_vision`, `add_*_mission`, `update_*_mission`, `move_*_mission`, `remove_*_mission`, `delete_*_vm` (raises NotDeletableError) | Delete stubs always raise `NotDeletableError` (E-001). Individual mission statements can be removed (soft-deleted) |
 | `ConfigSingletonService` | `get_class_timings`, `save_class_timings`, `get_working_days`, `save_working_days` | Both configs are singletons; `get_or_create` handles first-run |
+| `AcademicYearService` | `create`, `update`, `soft_delete`, `list_all`, `lock_master_calendar`, `confirm_iqac`, `lock_for_rollover` | `lock_master_calendar` and `confirm_iqac` are irreversible; `lock_for_rollover` sets `is_locked=True` |
+| `CalendarEntryService` | `create`, `update`, `soft_delete`, `list_by_ay` | Three-phase gate in `create()`; ownership enforcement in `update`/`soft_delete`; 18 fixed entry types via `ENTRY_TYPE_ROLE_MAP` |
+| `HolidayService` | `create`, `update`, `soft_delete`, `list_by_ay` | AY-scoped; date validation; blocked when AY locked |
+| `StudentCategoryCountService` | `get_or_create`, `update` | AY-scoped singleton; blocked when AY locked |
+| `CalendarExportService` | `export_csv`, `export_excel`, `export_pdf`, `export_docx` | Takes list of entries; returns bytes |
 
 ---
 
@@ -78,6 +89,10 @@ All entities inherit `TimestampedSoftDelete` (id UUID v4, created_at, updated_at
 | `/admin/config/vision-mission/departments/[code]` | Scope-specific `dept_vm:write:department` for exact dept | `DeptVMConfigState` | HoD/AHoD/HoDOffice scoped to that dept |
 | `/admin/config/class-timings` | `class_timings_config:configure:*` | `ClassTimingsConfigState` | SYSTEM_ADMIN, Registrar family |
 | `/admin/config/working-days` | `working_days_config:configure:*` | `WorkingDaysConfigState` | SYSTEM_ADMIN, Registrar family |
+| `/admin/config/academic-years` | `academic_year:write:*` | `AcademicYearConfigState` | SYSTEM_ADMIN, Registrar family |
+| `/admin/config/holidays` | `holiday:write:*` | `HolidayConfigState` | SYSTEM_ADMIN, Registrar family |
+| `/admin/config/student-categories` | `student_category_count:write:*` | `StudentCategoryConfigState` | SYSTEM_ADMIN, Registrar family |
+| `/admin/config/calendar` | `calendar_entry:write:*` | `CalendarEntryConfigState` | All calendar-owning roles (phase-gated) |
 
 ### About pages (read-only, all authenticated users)
 
@@ -139,10 +154,40 @@ These patterns are canonical (see CLAUDE.md for full examples):
 
 ---
 
+## Three-Phase Calendar Collaboration Chain (M4)
+
+The calendar uses a sequential three-phase model:
+
+1. **Phase 1 — Registrar framework**: 13 types (sem_begin, sem_end, holiday,
+   class_suspension, cie, end_sem_exam, admission_exam, phd_admission,
+   winter_vacation, summer_vacation, academic_council_meeting,
+   finance_committee_meeting, executive_committee_meeting). Creatable when AY
+   is unlocked. Roles: REGISTRAR, DEPUTY_REGISTRAR, REGISTRAR_OFFICE, SYSTEM_ADMIN.
+
+2. **Phase 2 — IQAC**: 1 type (activity). Creatable when
+   `master_calendar_locked=True` AND `iqac_confirmed=False`. Role: IQAC_COORDINATOR.
+
+3. **Phase 3 — All others**: sports/cultural (DIRECTOR, DEAN_STUDENT_WELFARE only);
+   academic_activity/other_activity (any non-STUDENT/BASIC_USER role). Creatable
+   when `iqac_confirmed=True`.
+
+Sequential confirm actions trigger phase-transition email notifications:
+Registrar confirms → emails IQAC; IQAC confirms → emails all Phase 3 roles.
+
+---
+
+## AY Rollover (M4)
+
+A Celery beat task (`lock_expired_academic_years`) runs nightly at 01:00 UTC.
+It queries `ends_on < today AND is_locked=False AND is_deleted=False` and sets
+`is_locked=True`. Repositories on AY-scoped models reject all writes against
+locked AYs via `AcademicYearLockedError`.
+
+---
+
 ## Future Work
 
 | Milestone | What it adds to this module |
 |---|---|
-| **M4** (Configuration — AY & Calendar) | AcademicYear locking, calendar collaboration chain, holiday management, StudentCategoryCount |
 | **M5** (Configuration — Identity Attachments) | LetterheadAsset, MentalHealthCounsellor roster, FacultyMentorAssignment, ClassTeacherAssignment, ClassCoordinatorAssignment, UGTimetable, TemplateAsset, RoleEmail UI |
 | **M13** (Program & Course Management) | Rich edit UI for Program sub-entities (PEO/PO/PSO forms, regulation editor, scheme builder, specialisation editor, exit-level editor); Course extended fields (course_type, delivery_mode, IKS flags); credit-hour ratio per ProgramRegulation |

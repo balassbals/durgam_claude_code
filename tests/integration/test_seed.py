@@ -24,15 +24,19 @@ class TestSeed:
         db_session.commit()
 
         # Assert TOTAL row counts after seed (stable regardless of pre-existing data).
-        # M3: 14 roles — SYSTEM_ADMIN, REGISTRAR family (3), DEAN + DEAN_* (5),
+        # M4: 19 roles — SYSTEM_ADMIN, REGISTRAR family (3), DIRECTOR family (3),
+        # IQAC_COORDINATOR, DEAN + DEAN_* (5) + DEAN_STUDENT_WELFARE,
         # HOD family (3), STUDENT, BASIC_USER.
-        assert _count(db_session, Role) == 14, "Expected 14 seeded roles at M3"
-        # M3: 46 triples — 20 M2 triples + 26 new M3 triples (course:delete:* added).
-        assert _count(db_session, Permission) == 46, "Expected 46 seeded permission triples at M3"
-        assert _count(db_session, User) >= 7, "Expected at least the 7 seeded users"
-        assert _count(db_session, RolePermission) >= 46, "Expected at least 46 role→permission rows"
+        assert _count(db_session, Role) == 19, "Expected 19 seeded roles at M4"
+        # M4: 54 triples — 46 M3 triples + 8 new M4 triples (incl. holiday:delete).
+        assert _count(db_session, Permission) == 54, "Expected 54 seeded permission triples at M4"
+        assert _count(db_session, User) >= 10, "Expected at least the 10 seeded users"
+        assert _count(db_session, RolePermission) >= 54, "Expected at least 54 role→permission rows"
         ay = db_session.exec(select(AcademicYear).where(AcademicYear.code == "2025-26")).first()
         assert ay is not None, "AcademicYear 2025-26 must exist after seeding"
+        ay_prev = db_session.exec(select(AcademicYear).where(AcademicYear.code == "2024-25")).first()
+        assert ay_prev is not None, "AcademicYear 2024-25 must exist after seeding"
+        assert ay_prev.is_locked is True, "AcademicYear 2024-25 must be locked"
 
     def test_second_run_inserts_zero_rows(self, db_engine):
         """Run seed twice on the same DB; second run should insert nothing for most tables.
@@ -67,11 +71,11 @@ class TestSeed:
         all_users = seeded_session.exec(
             select(User).where(User.is_deleted == False)  # noqa: E712
         ).all()
-        assert len(all_users) >= 5
+        assert len(all_users) >= 10
         active = [u for u in all_users if u.is_active]
         inactive = [u for u in all_users if not u.is_active]
         must_change = [u for u in all_users if u.must_change_password]
-        assert len(active) >= 4  # sys_admin, dean_sci, student_001, firstlogin_user
+        assert len(active) >= 9  # all except inactive_user
         assert len(inactive) >= 1  # inactive_user
         assert len(must_change) >= 1  # firstlogin_user
 

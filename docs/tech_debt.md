@@ -97,6 +97,41 @@ resource names matching any value in the seeded Permission table at test-collect
 time. Or generate test resources from a fixed namespace (e.g. `nonexistent_resource_*`) 
 that's known not to be seeded.
 
+### TD-008 — Shared test database allows cross-engine fixture contamination
+
+**Location:** `tests/conftest.py` (`db_engine`, `seeded_db_engine` fixtures);
+`tests/integration/test_org_core.py` (the two VM tests with the
+`_clean_university_vm` workaround).
+
+**What it is:** `db_engine` and `seeded_db_engine` both target
+`settings.test_database_url` — the same physical database. When a test
+using `seeded_session` runs (triggering `seed()` with a commit), the
+committed seed data becomes visible to subsequent tests using
+`db_session`, because `db_session`'s `transaction.rollback()` only undoes its
+own writes, not data committed by the other engine. Test execution order
+determines whether the contamination manifests. At M3 close-out the
+order was benign; M4 Session 1's changes shifted the order and exposed
+two vision/mission tests that assume empty `university_vision_missions`
+and `university_missions` tables.
+
+**Current workaround:** `_clean_university_vm()` deletes the leaked rows at
+the start of the two affected tests, inside their rolled-back
+transaction. Safe but symptom-level.
+
+**Why this is not a production issue:** It is purely a test-infrastructure
+isolation problem. Production code is unaffected — the vision/mission
+behavior is correct (verified: edit persists in manual UI testing).
+
+**Trigger to re-open / proper fix:** When a third test hits this class of
+bug, or proactively at the next test-infrastructure pass. Proper fix
+options: (a) `seeded_db_engine` uses an isolated schema or separate
+database from `db_engine`; (b) the seeded fixture cleans up its committed
+data in teardown; (c) all integration tests that assume empty tables
+explicitly clean those tables at setup (generalize the
+`_clean_university_vm` pattern into a reusable fixture).
+
+---
+
 ### TD-007 — Mobile and tablet responsiveness deferred across modules
 
 **Location:** Every admin and config page (multiple files in `durgam/pages/`).
@@ -120,6 +155,75 @@ mobile and tablet polish across all modules accumulated through M19.
 **Trigger to re-open:** (a) Mobile usage by faculty becomes an operational need
 (e.g., approving leave requests on phone); (b) university mandates an
 accessibility audit; (c) UI Polish milestone arrives per project plan.
+
+---
+
+### TD-009 — Seed data uses institution-specific names and codes
+
+**Location:** `scripts/seed.py`
+
+**What it is:** `scripts/seed.py` uses names close to SSSIHL's real
+structure (campus codes PSN/BRN/NDG/ATP, school/department names,
+role names). This is intentional for making gate demonstrations
+realistic and for testing multi-campus logic. However it implies a
+specific institution.
+
+**Why this is not a development issue:** Seed is a development/demo
+artifact only — it is never run in production. At deployment, the
+institution configures real data through admin UIs. The seed is
+discarded or kept only for CI/test environments.
+
+**Trigger to re-open:** (a) The codebase is open-sourced or shared
+outside the development team — at that point, seed should be
+anonymised or replaced with fully fictional data. (b) M20 (final
+milestone) review — confirm seed is clearly labelled as demo-only
+before any external handoff.
+
+---
+
+### TD-010 — Celery docker services install full dev dependency set on cold start
+
+**Location:** `docker-compose.yml` (celery_worker, celery_beat services)
+
+**What it is:** The Celery worker and beat containers use the same `app` build
+target as the main Reflex app, which includes dev dependencies (playwright,
+mypy, ruff, faker, hypothesis). On cold start, `uv sync` inside the container
+installs all of these, making startup slow (~30s) and containers ~200MB heavier
+than needed. A `uv hardlink` warning also appears (cosmetic).
+
+**Why this is not a correctness issue:** The worker functions correctly after
+startup. The extra deps are unused but harmless. Dev containers are not
+production artifacts.
+
+**Fix:** Add a `worker` build target in the Dockerfile that runs
+`uv sync --frozen --no-dev --no-install-project` (runtime deps only). Point
+the celery services at that target. Set `UV_LINK_MODE=copy` to silence the
+hardlink warning.
+
+**Trigger to re-open:** Production deployment prep, or M20 review.
+
+---
+
+### TD-011 — Coverage threshold noise (--cov-fail-under)
+
+**Location:** `pyproject.toml` (`addopts`)
+
+**What it is:** `--cov-fail-under=70` in pytest addopts causes a misleading
+`FAIL Required test coverage of 70% not reached` when running individual test
+files or small subsets (e.g., `tests/unit/test_calendar_emails.py` alone
+reports 17% total coverage). The project's actual gate criterion is
+suite-passes, not a global coverage percentage — per-module thresholds are
+checked at gate time (services >= 85%, repos >= 80%).
+
+**Why this is not a correctness issue:** The full test suite consistently
+exceeds 85% total coverage. The threshold only misfires on partial runs.
+
+**Fix:** Remove `--cov-fail-under` from `addopts` (gate verification checks
+per-module coverage explicitly). Or lower to a value that partial runs can
+meet (e.g., 40%).
+
+**Trigger to re-open:** If CI is added and uses the global threshold for
+gating, set it appropriately there rather than in pyproject.toml.
 
 ---
 

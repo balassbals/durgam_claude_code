@@ -20,6 +20,9 @@ _LANDING_GATES: list[tuple[str, str, str | None]] = [
     ("write",     "department_vision_mission", "department"),
     ("configure", "class_timings_config",      None),
     ("configure", "working_days_config",        None),
+    ("configure", "academic_year",              None),
+    ("write",     "holiday",                    None),
+    ("write",     "student_category_count",     None),
 ]
 
 # Tile definitions: (label, href, description, permission_gates).
@@ -72,6 +75,21 @@ _ALL_TILES: list[tuple[str, str, str, list[tuple[str, str, str | None]]]] = [
         "Working Days", "/admin/config/working-days",
         "5-day or 6-day work week",
         [("configure", "working_days_config", None)],
+    ),
+    (
+        "Academic Years", "/admin/config/academic-years",
+        "Academic year lifecycle and master calendar lock",
+        [("configure", "academic_year", None)],
+    ),
+    (
+        "Holidays", "/admin/config/holidays",
+        "AY-scoped holidays",
+        [("write", "holiday", None)],
+    ),
+    (
+        "Student Categories", "/admin/config/student-categories",
+        "SC/ST/OBC/EWS/General counts per academic year",
+        [("write", "student_category_count", None)],
     ),
 ]
 

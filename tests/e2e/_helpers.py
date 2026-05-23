@@ -42,6 +42,11 @@ def _login(page: Page, username: str, password: str) -> None:
     page.get_by_role("button", name=re.compile(r"Sign in", re.IGNORECASE)).click()
     # Wait for URL to leave /login — redirect is WebSocket-based, not HTTP
     page.wait_for_url(lambda url: "/login" not in url, timeout=10_000)
+    # Wait for the post-login landing page to fully load before any subsequent
+    # goto(). Without this, a fast goto() can interrupt Reflex's auth-state
+    # settlement — the new page's on_load guard fires before the session cookie
+    # is established, sees no auth, and redirects back to /login.
+    page.wait_for_load_state("networkidle")
 
 
 def _logout(page: Page) -> None:
@@ -158,6 +163,60 @@ def _hard_delete_by_code(table: str, code: str) -> None:
                 text(f"DELETE FROM {table} WHERE code = :code"),  # noqa: S608
                 {"code": code},
             )
+            conn.commit()
+    finally:
+        engine.dispose()
+
+
+def _hard_delete_calendar_entries_by_title(pattern: str) -> None:
+    """Hard-delete calendar_entries rows whose title matches a SQL LIKE pattern."""
+    from sqlalchemy import create_engine, text
+
+    from durgam.config import settings
+
+    engine = create_engine(settings.database_url_sync)
+    try:
+        with engine.connect() as conn:
+            conn.execute(
+                text("DELETE FROM calendar_entries WHERE title LIKE :p"),  # noqa: S608
+                {"p": pattern},
+            )
+            conn.commit()
+    finally:
+        engine.dispose()
+
+
+def _hard_delete_academic_year_by_code(code: str) -> None:
+    """Hard-delete an academic year and its dependent rows (holidays, calendar entries, student category counts)."""
+    from sqlalchemy import create_engine, text
+
+    from durgam.config import settings
+
+    engine = create_engine(settings.database_url_sync)
+    try:
+        with engine.connect() as conn:
+            ay_id = conn.execute(
+                text("SELECT id FROM academic_years WHERE code = :code"),  # noqa: S608
+                {"code": code},
+            ).fetchone()
+            if ay_id:
+                ay_uuid = ay_id[0]
+                conn.execute(
+                    text("DELETE FROM calendar_entries WHERE academic_year_id = :id"),
+                    {"id": ay_uuid},
+                )
+                conn.execute(
+                    text("DELETE FROM holidays WHERE academic_year_id = :id"),
+                    {"id": ay_uuid},
+                )
+                conn.execute(
+                    text("DELETE FROM student_category_counts WHERE academic_year_id = :id"),
+                    {"id": ay_uuid},
+                )
+                conn.execute(
+                    text("DELETE FROM academic_years WHERE id = :id"),
+                    {"id": ay_uuid},
+                )
             conn.commit()
     finally:
         engine.dispose()

@@ -1,4 +1,4 @@
-"""Idempotent seed script for M3 development and CI.
+"""Idempotent seed script for M4 development and CI.
 
 Upserts data keyed on natural identifiers (codes, emails) — never on UUIDs.
 All personal data is synthetic. Real names / emails / IDs are NEVER hardcoded
@@ -11,7 +11,7 @@ Safe to run multiple times. Second run shows 0 rows inserted for stable
 entities and 1 (upserted) for users (password re-hash on every run).
 """
 
-from datetime import date
+from datetime import UTC, date, datetime
 
 import structlog
 from faker import Faker
@@ -26,6 +26,7 @@ from durgam.models.campus import Campus
 from durgam.models.centre import CentreOfExcellence
 from durgam.models.config_anchors import (
     AcademicYear,
+    CalendarEntry,
     ClassTimingsConfig,
     Holiday,
     RoleEmail,
@@ -93,31 +94,52 @@ def seed(session: Session) -> dict[str, int]:
     counts["academic_years"] = _exec_insert(session, ay_stmt)
     ay = session.exec(select(AcademicYear).where(AcademicYear.code == "2025-26")).one()
 
+    # Second AY: 2024-25 (locked — represents a completed year; satisfies M4 gate)
+    ay_prev_stmt = (
+        pg_insert(AcademicYear)
+        .values(
+            code="2024-25",
+            starts_on=date(2024, 7, 1),
+            ends_on=date(2025, 4, 30),
+            is_locked=True,
+        )
+        .on_conflict_do_nothing(constraint="uq_academic_years_code")
+    )
+    counts["academic_years"] += _exec_insert(session, ay_prev_stmt)
+    ay_prev = session.exec(select(AcademicYear).where(AcademicYear.code == "2024-25")).one()
+
     # ── Roles ─────────────────────────────────────────────────────────────────
-    # Role levels reflect organisational hierarchy (Refinement 1-b):
-    # SYSTEM_ADMIN=100 · REGISTRAR family=80-73 · DEAN_*=70 · HOD family=50-42
-    # · STUDENT=10 · BASIC_USER=1
+    # Role levels reflect organisational hierarchy (OQ-M4-4):
+    # SYSTEM_ADMIN=100 · REGISTRAR family=80-73 · DIRECTOR family=75-69
+    # · IQAC_COORDINATOR=71 · DEAN_*=70 · HOD family=50-42 · STUDENT=10 · BASIC_USER=1
     # on_conflict_do_update so re-seeding repairs any level drift (e.g. DEAN 50→70).
     roles_data = [
         # Technical admin (cross-cutting; not in org hierarchy)
-        {"code": "SYSTEM_ADMIN",       "name": "System Administrator",    "level": 100},
+        {"code": "SYSTEM_ADMIN",         "name": "System Administrator",    "level": 100},
         # Registrar family
-        {"code": "REGISTRAR",          "name": "Registrar",               "level": 80},
-        {"code": "DEPUTY_REGISTRAR",   "name": "Deputy Registrar",        "level": 77},
-        {"code": "REGISTRAR_OFFICE",   "name": "Registrar Office",        "level": 73},
+        {"code": "REGISTRAR",            "name": "Registrar",               "level": 80},
+        {"code": "DEPUTY_REGISTRAR",     "name": "Deputy Registrar",        "level": 77},
+        {"code": "REGISTRAR_OFFICE",     "name": "Registrar Office",        "level": 73},
+        # Director family (campus-level; M4)
+        {"code": "DIRECTOR",             "name": "Director",                "level": 75},
+        {"code": "DEPUTY_DIRECTOR",      "name": "Deputy Director",         "level": 72},
+        {"code": "DIRECTOR_OFFICE",      "name": "Director Office",         "level": 69},
+        # IQAC (M4)
+        {"code": "IQAC_COORDINATOR",     "name": "IQAC Coordinator",        "level": 71},
         # School deans (one per school; school.dean_role_code references these)
-        {"code": "DEAN",               "name": "Dean",                    "level": 70},
-        {"code": "DEAN_SCI",           "name": "Dean — School of Sciences",                        "level": 70},
-        {"code": "DEAN_HSS",           "name": "Dean — School of Humanities & Social Sciences",    "level": 70},
-        {"code": "DEAN_LL",            "name": "Dean — School of Languages & Literature",          "level": 70},
-        {"code": "DEAN_MC",            "name": "Dean — School of Management & Commerce",           "level": 70},
+        {"code": "DEAN",                 "name": "Dean",                    "level": 70},
+        {"code": "DEAN_SCI",             "name": "Dean — School of Sciences",                        "level": 70},
+        {"code": "DEAN_HSS",             "name": "Dean — School of Humanities & Social Sciences",    "level": 70},
+        {"code": "DEAN_LL",              "name": "Dean — School of Languages & Literature",          "level": 70},
+        {"code": "DEAN_MC",              "name": "Dean — School of Management & Commerce",           "level": 70},
+        {"code": "DEAN_STUDENT_WELFARE", "name": "Dean of Student Welfare",                          "level": 70},
         # HoD family
-        {"code": "HOD",                "name": "Head of Department",                 "level": 50},
-        {"code": "AHOD",               "name": "Associate Head of Department",       "level": 45},
-        {"code": "HOD_OFFICE",         "name": "Head of Department Office",          "level": 42},
+        {"code": "HOD",                  "name": "Head of Department",                 "level": 50},
+        {"code": "AHOD",                 "name": "Associate Head of Department",       "level": 45},
+        {"code": "HOD_OFFICE",           "name": "Head of Department Office",          "level": 42},
         # Students and base
-        {"code": "STUDENT",            "name": "Student",                            "level": 10},
-        {"code": "BASIC_USER",         "name": "Basic User",                         "level": 1},
+        {"code": "STUDENT",              "name": "Student",                            "level": 10},
+        {"code": "BASIC_USER",           "name": "Basic User",                         "level": 1},
     ]
     role_counts = 0
     for r in roles_data:
@@ -208,6 +230,19 @@ def seed(session: Session) -> dict[str, int]:
         # Working days config
         {"resource": "working_days_config",        "action": "read",      "scope": "*"},
         {"resource": "working_days_config",        "action": "configure", "scope": "*"},
+        # ── M4 new triples ────────────────────────────────────────────────────
+        # Academic year — configure (lock master, manage AY lifecycle)
+        {"resource": "academic_year",              "action": "configure", "scope": "*"},
+        # Calendar entry
+        {"resource": "calendar_entry",             "action": "read",      "scope": "*"},
+        {"resource": "calendar_entry",             "action": "write",     "scope": "*"},
+        # Holiday
+        {"resource": "holiday",                    "action": "read",      "scope": "*"},
+        {"resource": "holiday",                    "action": "write",     "scope": "*"},
+        {"resource": "holiday",                    "action": "delete",    "scope": "*"},
+        # Student category count
+        {"resource": "student_category_count",     "action": "read",      "scope": "*"},
+        {"resource": "student_category_count",     "action": "write",     "scope": "*"},
     ]
     perm_inserted = 0
     for p in perms_data:
@@ -254,6 +289,7 @@ def seed(session: Session) -> dict[str, int]:
         ("class_timings_config",      "read", "*"),
         ("working_days_config",       "read", "*"),
         ("academic_year",             "read", "*"),
+        ("holiday",                   "read", "*"),
     ]
 
     _REGISTRAR_SPECIFIC = [
@@ -262,34 +298,81 @@ def seed(session: Session) -> dict[str, int]:
         ("working_days_config",        "configure", "*"),
         # department:write:* intentionally NOT included — §9.3: only SYSTEM_ADMIN
         # manages department structure. Registrar has read access via _PUBLIC_READ.
+        # M4 — Registrar owns AY, holiday, student category, and calendar master entries
+        ("academic_year",              "write",     "*"),
+        ("academic_year",              "configure", "*"),
+        ("calendar_entry",             "read",      "*"),
+        ("calendar_entry",             "write",     "*"),
+        ("holiday",                    "write",     "*"),
+        ("holiday",                    "delete",    "*"),
+        ("student_category_count",     "read",      "*"),
+        ("student_category_count",     "write",     "*"),
     ]
 
     _HOD_SPECIFIC = [
         ("department_vision_mission",  "write",     "department"),
         ("leave_request",              "read",      "department"),
         ("leave_request",              "approve",   "department"),
+        # M4 — HOD can read calendar and create department entries
+        ("calendar_entry",             "read",      "*"),
+        ("calendar_entry",             "write",     "*"),
+        ("student_category_count",     "read",      "*"),
     ]
 
     _DEAN_SPECIFIC = [
         ("department",                 "read",      "school"),
         ("leave_request",              "read",      "department"),
         ("leave_request",              "approve",   "department"),
+        # M4 — Deans can read/write calendar (Phase 3 generic types) + read student category
+        ("calendar_entry",             "read",      "*"),
+        ("calendar_entry",             "write",     "*"),
+        ("student_category_count",     "read",      "*"),
+    ]
+
+    # M4 — Director family can read/write calendar, read student category
+    _DIRECTOR_SPECIFIC = [
+        ("calendar_entry",             "read",      "*"),
+        ("calendar_entry",             "write",     "*"),
+        ("student_category_count",     "read",      "*"),
+    ]
+
+    # M4 — IQAC can read/write calendar, read student category
+    _IQAC_SPECIFIC = [
+        ("calendar_entry",             "read",      "*"),
+        ("calendar_entry",             "write",     "*"),
+        ("student_category_count",     "read",      "*"),
+    ]
+
+    # M4 — Dean of Student Welfare can read/write calendar, read student category
+    _DEAN_SW_SPECIFIC = [
+        ("calendar_entry",             "read",      "*"),
+        ("calendar_entry",             "write",     "*"),
+        ("student_category_count",     "read",      "*"),
     ]
 
     role_perm_map: dict[str, list[tuple[str, str, str]]] = {
-        "REGISTRAR":        _PUBLIC_READ + _REGISTRAR_SPECIFIC,
-        "DEPUTY_REGISTRAR": _PUBLIC_READ + _REGISTRAR_SPECIFIC,
-        "REGISTRAR_OFFICE": _PUBLIC_READ + _REGISTRAR_SPECIFIC,
-        "DEAN":             _PUBLIC_READ + _DEAN_SPECIFIC,
-        "DEAN_SCI":         _PUBLIC_READ + _DEAN_SPECIFIC,
-        "DEAN_HSS":         _PUBLIC_READ + _DEAN_SPECIFIC,
-        "DEAN_LL":          _PUBLIC_READ + _DEAN_SPECIFIC,
-        "DEAN_MC":          _PUBLIC_READ + _DEAN_SPECIFIC,
-        "HOD":              _PUBLIC_READ + _HOD_SPECIFIC,
-        "AHOD":             _PUBLIC_READ + _HOD_SPECIFIC,
-        "HOD_OFFICE":       _PUBLIC_READ,
-        "STUDENT":          _PUBLIC_READ,
-        "BASIC_USER":       _PUBLIC_READ,
+        "REGISTRAR":            _PUBLIC_READ + _REGISTRAR_SPECIFIC,
+        "DEPUTY_REGISTRAR":     _PUBLIC_READ + _REGISTRAR_SPECIFIC,
+        "REGISTRAR_OFFICE":     _PUBLIC_READ + _REGISTRAR_SPECIFIC,
+        "DIRECTOR":             _PUBLIC_READ + _DIRECTOR_SPECIFIC,
+        "DEPUTY_DIRECTOR":      _PUBLIC_READ + _DIRECTOR_SPECIFIC,
+        "DIRECTOR_OFFICE":      _PUBLIC_READ + _DIRECTOR_SPECIFIC,
+        "IQAC_COORDINATOR":     _PUBLIC_READ + _IQAC_SPECIFIC,
+        "DEAN":                 _PUBLIC_READ + _DEAN_SPECIFIC,
+        "DEAN_SCI":             _PUBLIC_READ + _DEAN_SPECIFIC,
+        "DEAN_HSS":             _PUBLIC_READ + _DEAN_SPECIFIC,
+        "DEAN_LL":              _PUBLIC_READ + _DEAN_SPECIFIC,
+        "DEAN_MC":              _PUBLIC_READ + _DEAN_SPECIFIC,
+        "DEAN_STUDENT_WELFARE": _PUBLIC_READ + _DEAN_SW_SPECIFIC,
+        "HOD":                  _PUBLIC_READ + _HOD_SPECIFIC,
+        "AHOD":                 _PUBLIC_READ + _HOD_SPECIFIC,
+        "HOD_OFFICE":           _PUBLIC_READ + [
+            ("calendar_entry",             "read",      "*"),
+            ("calendar_entry",             "write",     "*"),
+            ("student_category_count",     "read",      "*"),
+        ],
+        "STUDENT":              _PUBLIC_READ,
+        "BASIC_USER":           _PUBLIC_READ,
     }
 
     for role_code, perm_keys in role_perm_map.items():
@@ -334,6 +417,9 @@ def seed(session: Session) -> dict[str, int]:
     #   student_001 / Student_Dev1!XZ     — STUDENT
     #   registrar_user / Registrar_Dev1!XZ — REGISTRAR  (new at M3)
     #   hod_dmacs / HodDmacs_Dev1!XZ     — HOD scoped to DMACS (new at M3; scoped role added after depts)
+    #   director_psn / DirectorPsn_Dev1!XZ — DIRECTOR scoped to PSN (new at M4; scoped role added after campuses)
+    #   iqac_user / IqacCoord_Dev1!XZ    — IQAC_COORDINATOR unscoped (new at M4)
+    #   dean_sw / DeanSW_Dev1!XZ         — DEAN_STUDENT_WELFARE unscoped (new at M4)
     users_data = [
         {
             "email": "sys.admin@sssihl.edu.in",
@@ -388,6 +474,29 @@ def seed(session: Session) -> dict[str, int]:
             # Only BASIC_USER is assigned here; see the scoped-roles block below.
             "role_code": "BASIC_USER",
             "plain_password": "HodDmacs_Dev1!XZ",
+        },
+        # M4 demo users
+        {
+            "email": "director.psn@sssihl.edu.in",
+            "username": "director_psn",
+            "full_name": "Director Prasanthi Nilayam",
+            # DIRECTOR role is campus-scoped — assigned after campuses are seeded.
+            "role_code": "BASIC_USER",
+            "plain_password": "DirectorPsn_Dev1!XZ",
+        },
+        {
+            "email": "iqac.coordinator@sssihl.edu.in",
+            "username": "iqac_user",
+            "full_name": "IQAC Coordinator",
+            "role_code": "IQAC_COORDINATOR",
+            "plain_password": "IqacCoord_Dev1!XZ",
+        },
+        {
+            "email": "dean.sw@sssihl.edu.in",
+            "username": "dean_sw",
+            "full_name": "Dean of Student Welfare",
+            "role_code": "DEAN_STUDENT_WELFARE",
+            "plain_password": "DeanSW_Dev1!XZ",
         },
     ]
     user_inserted = 0
@@ -450,27 +559,59 @@ def seed(session: Session) -> dict[str, int]:
             .values(academic_year_id=ay.id, **h)
             .on_conflict_do_nothing(constraint="uq_holidays_date_ay"),
         )
+    # Holidays for 2024-25 (locked AY — demonstrates immutable AY data)
+    holidays_prev_data = [
+        {"holiday_date": date(2024, 10, 2),  "name": "Gandhi Jayanti"},
+        {"holiday_date": date(2024, 11, 23), "name": "Sai Baba Birthday"},
+    ]
+    for h in holidays_prev_data:
+        hol_inserted += _exec_insert(
+            session,
+            pg_insert(Holiday)
+            .values(academic_year_id=ay_prev.id, **h)
+            .on_conflict_do_nothing(constraint="uq_holidays_date_ay"),
+        )
     counts["holidays"] = hol_inserted
 
     # ── RoleEmail ─────────────────────────────────────────────────────────────
-    existing_re = session.exec(
-        select(RoleEmail).where(
-            RoleEmail.role_code == "SYSTEM_ADMIN",
-            RoleEmail.scope_type.is_(None),  # type: ignore[union-attr]
-        )
-    ).first()
-    if not existing_re:
-        session.execute(
-            pg_insert(RoleEmail).values(
-                role_code="SYSTEM_ADMIN",
-                scope_type=None,
-                scope_id=None,
-                email="admin@sssihl.edu.in",
+    # BOOTSTRAP PLACEHOLDERS — sufficient to demonstrate M4 calendar
+    # phase-transition emails at the gate.  Real role-email addresses are
+    # runtime-managed data configured by Registrar/Reg-office/SysAdmin via
+    # the role-email management UI (scheduled ~M5).  Seed is NOT the
+    # authoritative address book; these rows exist only so the notification
+    # mechanism can be exercised on a fresh DB.
+    _role_emails = [
+        {"role_code": "SYSTEM_ADMIN",         "email": "admin@example.dev"},
+        {"role_code": "IQAC_COORDINATOR",     "email": "iqac@example.dev"},
+        {"role_code": "REGISTRAR",            "email": "registrar@example.dev"},
+        {"role_code": "DIRECTOR",             "email": "director@example.dev"},
+        {"role_code": "DEAN_STUDENT_WELFARE", "email": "dean.sw@example.dev"},
+        {"role_code": "HOD",                  "email": "hod.office@example.dev"},
+    ]
+    re_inserted = 0
+    for re_data in _role_emails:
+        existing_re = session.exec(
+            select(RoleEmail).where(
+                RoleEmail.role_code == re_data["role_code"],
+                RoleEmail.scope_type.is_(None),  # type: ignore[union-attr]
             )
-        )
-        counts["role_emails"] = 1
-    else:
-        counts["role_emails"] = 0
+        ).first()
+        if existing_re:
+            if existing_re.email != re_data["email"]:
+                existing_re.email = re_data["email"]
+                session.add(existing_re)
+                re_inserted += 1
+        else:
+            session.execute(
+                pg_insert(RoleEmail).values(
+                    role_code=re_data["role_code"],
+                    scope_type=None,
+                    scope_id=None,
+                    email=re_data["email"],
+                )
+            )
+            re_inserted += 1
+    counts["role_emails"] = re_inserted
 
     # ── StudentCategoryCount ──────────────────────────────────────────────────
     counts["student_category_counts"] = _exec_insert(
@@ -484,6 +625,21 @@ def seed(session: Session) -> dict[str, int]:
             ews_count=60,
             general_count=895,
             notes="M0 synthetic seed data",
+        )
+        .on_conflict_do_nothing(constraint="uq_student_category_counts_ay"),
+    )
+    # StudentCategoryCount for 2024-25 (locked AY)
+    counts["student_category_counts"] += _exec_insert(
+        session,
+        pg_insert(StudentCategoryCount)
+        .values(
+            academic_year_id=ay_prev.id,
+            sc_count=115,
+            st_count=40,
+            obc_count=220,
+            ews_count=55,
+            general_count=870,
+            notes="2024-25 historical seed data",
         )
         .on_conflict_do_nothing(constraint="uq_student_category_counts_ay"),
     )
@@ -1057,6 +1213,73 @@ def seed(session: Session) -> dict[str, int]:
                 },
             )
         )
+
+    # director_psn → DIRECTOR role scoped to PSN campus (M4)
+    director_psn_user = session.exec(
+        select(User).where(User.username == "director_psn")
+    ).first()
+    if director_psn_user and "PSN" in campuses:
+        session.execute(
+            pg_insert(UserRole)
+            .values(
+                user_id=director_psn_user.id,
+                role_id=roles["DIRECTOR"].id,
+                scope_type="campus",
+                scope_id=campuses["PSN"].id,
+            )
+            .on_conflict_do_update(
+                index_elements=["user_id", "role_id"],
+                set_={
+                    "scope_type": "campus",
+                    "scope_id": campuses["PSN"].id,
+                },
+            )
+        )
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # M4 Sample Calendar Entries (for 2025-26, unlocked AY)
+    # ─────────────────────────────────────────────────────────────────────────
+    registrar_user = session.exec(
+        select(User).where(User.username == "registrar_user")
+    ).first()
+    existing_cal_count = session.exec(
+        select(sa.func.count(CalendarEntry.id)).where(
+            CalendarEntry.academic_year_id == ay.id,
+            CalendarEntry.is_deleted == False,  # noqa: E712
+        )
+    ).one()
+    if registrar_user and existing_cal_count == 0:
+        cal_entries_raw = [
+            {
+                "title": "Semester 1 Begins",
+                "entry_type": "sem_begin",
+                "starts_at": datetime(2025, 7, 14, 9, 0, tzinfo=UTC),
+                "ends_at": datetime(2025, 7, 14, 17, 0, tzinfo=UTC),
+                "owner_user_id": registrar_user.id,
+                "owner_role_code": "REGISTRAR",
+            },
+            {
+                "title": "Semester 1 Ends",
+                "entry_type": "sem_end",
+                "starts_at": datetime(2025, 11, 28, 9, 0, tzinfo=UTC),
+                "ends_at": datetime(2025, 11, 28, 17, 0, tzinfo=UTC),
+                "owner_user_id": registrar_user.id,
+                "owner_role_code": "REGISTRAR",
+            },
+            {
+                "title": "CIE-1",
+                "entry_type": "cie",
+                "starts_at": datetime(2025, 9, 8, 9, 0, tzinfo=UTC),
+                "ends_at": datetime(2025, 9, 12, 17, 0, tzinfo=UTC),
+                "owner_user_id": registrar_user.id,
+                "owner_role_code": "REGISTRAR",
+            },
+        ]
+        for entry in cal_entries_raw:
+            session.execute(pg_insert(CalendarEntry).values(academic_year_id=ay.id, **entry))
+        counts["calendar_entries"] = 3
+    else:
+        counts["calendar_entries"] = 0
 
     session.commit()
     return counts

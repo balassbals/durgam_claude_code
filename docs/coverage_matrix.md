@@ -10,6 +10,8 @@ status is "In flight at M{N}" reflect the current implementation state.
 
 **M3 gate passed: 2026-05-21.** All M3 rows verified via fresh-clone ritual.
 
+**M4 gate passed: 2026-05-23.** All M4 rows verified via fresh-clone ritual.
+
 Errata bindings: E-001 (vision/mission) extends the M3 row.
 
 ---
@@ -46,15 +48,15 @@ Errata bindings: E-001 (vision/mission) extends the M3 row.
 | Course (extended — course_type, delivery_mode, mooc_agency, IKS flags) | §8.3 | M13 | Planned for M13 | Refinement 3: defers to Program & Course module. M13 must also implement course_type-based department dropdown filtering: DSC/DSE/MDC restricts to departments running the program (auto-lock if single dept); AEC/SEC/VAC/Internship/Research/Minor allows all departments. Source: informal requirements doc, Course Module section. |
 | University vision/mission | E-001, §9.3 | M3 | Shipped at M3 | Model + seed + edit page (Session 7); update-only enforced via NotDeletableError; /about/university displays read-only |
 | Department vision/mission | E-001, §9.3 | M3 | Shipped at M3 | Model + seed + edit page (Session 7); scope-restricted to HoD's own dept; update-only; /about/departments/{code} displays read-only |
-| AcademicYear (code, dates, is_locked) | §8.5, §9.3 | M0/M3 | Shipped at M0 | Locked state management → M4 |
+| AcademicYear (code, dates, is_locked, master_calendar_locked, iqac_confirmed) | §8.5, §9.3 | M4 | Shipped at M4 | CRUD + lock master calendar + IQAC confirm + AY lock enforcement; Celery task locks expired AYs nightly |
 | ClassTimingsConfig (singleton) | §9.3 | M3 | Shipped at M3 | Singleton edit page (Session 7); HH:MM validation; configure action only |
 | WorkingDaysConfig (singleton) | §9.3 | M3 | Shipped at M3 | Singleton edit page (Session 7); 5/6-day radio; configure action only |
 | Faculty (basic info in config module) | §9.3 | M10 | Planned for M10 | Faculty profile module |
 | Student (basic info in config module) | §9.3 | M12 | Planned for M12 | Student profile module |
-| RoleEmail (email bound to role/scope) | §9.3 | M2/M5 | Shipped at M2 (model); M5 for UI | M2 seeded; UI for admin in M5 |
+| RoleEmail (email bound to role/scope) | §9.3 | M2/M5 | Shipped at M2 (model); M5 for UI | M2 seeded; M4 reads for calendar phase-transition emails (bootstrap placeholders on `@example.dev`); real address management by Registrar/Reg-office/SysAdmin via role-email UI in ~M5 (per informal req: "configure and manage all role-based email IDs"); group-list vs per-scope address design belongs to that module |
 | LetterheadAsset (file per role/scope) | §9.3 | M5 | Planned for M5 | Configuration — Identity Attachments |
 | ApprovalProcess (workflow config) | §9.3 | M7 | Planned for M7 | Approval Engine |
-| StudentCategoryCount (SC/ST/OBC/EWS/General per AY) | §9.3 | M4 | Planned for M4 | AY-scoped, Registrar-managed |
+| StudentCategoryCount (SC/ST/OBC/EWS/General per AY) | §9.3 | M4 | Shipped at M4 | AY-scoped singleton edit; Registrar-managed; blocked when AY locked |
 | MentalHealthCounsellor (AY-scoped roster, Director's letterhead) | §9.3 | M5 | Planned for M5 | Configuration — Identity Attachments |
 | FacultyMentorAssignment | §9.3 | M5 | Planned for M5 | Requires Faculty (M10) model — see M5 inheritance note |
 | ClassTeacherAssignment | §9.3 | M5 | Planned for M5 | Requires Faculty (M10) + Student (M12) — see M5 note |
@@ -71,15 +73,16 @@ Errata bindings: E-001 (vision/mission) extends the M3 row.
 |---|---|---|---|---|
 | Schools seeded once; departments declare school | §9.3 | M3 | Shipped at M3 | Seed script; school_id FK enforced |
 | Bulk-add by CSV/Excel (users, faculty, students, courses, programs) | §9.3, §16 | M5 | Planned for M5 | Explicitly out of scope at M3 (Refinement 7) |
-| AY-scoped configs immutable on rollover (is_locked=true) | §9.3 | M4 | Planned for M4 | Nightly lock job; AcademicYearLockedError in repos |
-| Calendar collaboration chain (Registrar → IQAC → others) | §9.3 | M4 | Planned for M4 | Precedence chain; each role edits own entries |
-| Holiday management | §9.3 | M4 | Planned for M4 | Calendar entries with holiday type |
-| Calendar exports (CSV/Excel/PDF/DOCX) | §9.3 | M4 | Planned for M4 | Export service |
+| AY-scoped configs immutable on rollover (is_locked=true) | §9.3 | M4 | Shipped at M4 | AcademicYearLockedError in repos; lock_for_rollover service method; Celery nightly task |
+| Calendar collaboration chain (Registrar → IQAC → others) | §9.3 | M4 | Shipped at M4 | Three-phase sequential chain; 18 fixed entry types; ENTRY_TYPE_ROLE_MAP + phase gates; sports/cultural: DIRECTOR (campus) + DEAN_SW (institution) ownership split |
+| Holiday management | §9.3 | M4 | Shipped at M4 | AY-scoped CRUD; separate Holiday model (not CalendarEntry type) |
+| Calendar exports (CSV/Excel/PDF/DOCX) | §9.3 | M4 | Shipped at M4 | CalendarExportService + rx.download via bytes data |
+| Phase-transition email notifications | §9.3 | M4 | Shipped at M4 | Registrar confirm → IQAC notified; IQAC confirm → Phase 3 roles notified; reads RoleEmail bootstrap placeholders; fire-and-forget via asyncio.create_task |
 | Letterheads / templates used for docgen (not directly visible to other roles) | §9.3 | M5 | Planned for M5 | Internal composition; BoS/MoM/VAC |
 | Mental-health counsellor roster downloadable as DOCX (Director letterhead, AY-scoped) | §9.3 | M5 | Planned for M5 | Immutable on AY rollover |
 | Class teacher assignments auto-flow into faculty workload | §9.3 | M5 | Planned for M5 | Requires Faculty (M10) model |
 | UG timetable configured by Director, auto-projected to dept timetables | §9.3 | M5 | Planned for M5 | Requires Student (M12) model |
-| Student category counts managed by Registrar/office per AY; read-only for non-Student roles | §9.3 | M4 | Planned for M4 | AY-scoped; immutable on rollover |
+| Student category counts managed by Registrar/office per AY; read-only for non-Student roles | §9.3 | M4 | Shipped at M4 | AY-scoped singleton edit; immutable on rollover |
 | Vision/mission: update-only, no delete (university + department) | E-001 | M3 | Shipped at M3 | NotDeletableError in VisionMissionService |
 | Vision/mission: viewable by all authenticated users | E-001 | M3 | Shipped at M3 | /about/university + /about/departments + /about/departments/[code] — Session 7 |
 | Class timings and working-days config: singleton, configure action | §9.3, §12 M3 | M3 | Shipped at M3 | Singleton edit forms; configure-action guard; Session 7 |
@@ -100,6 +103,38 @@ Faculty (M10) and Student (M12), which arrive after M5. M5 planning must decide:
 - **Option B:** Fully defer to M14 when all referenced entities are available.
 
 This note was added at M3 close-out. See `docs/milestones/M3.md` Session 5 resume notes.
+
+---
+
+## M10 Forward Concern — Dual-Role Calendar Ownership
+
+At M4 Session 5, the calendar entry page uses auto-detect to determine the creating
+user's `owner_role_code` from `ENTRY_TYPE_ROLE_MAP`. This works because no M4 user
+holds two calendar-owning roles for different entry types.
+
+**Trigger to revisit**: any user holds 2+ roles that appear in `ENTRY_TYPE_ROLE_MAP`.
+At that point, the calendar page will need a "Creating as" role selector dropdown.
+
+**Related institutional fact**: a Dean of Student Welfare or campus Director is
+typically also a faculty member (Professor in a department) — holding both an
+administrative role and a faculty appointment simultaneously. Faculty is not modeled
+until M10. When Faculty (M10) arrives, people holding both a faculty appointment and
+an administrative role (Dean/Director/HOD) create cross-cutting design questions for
+workload, leave sanctioning, and scope resolution. M10 and M14 planning must address
+how one person's two appointments interact.
+
+---
+
+## UI Polish Backlog — Visual Calendar (from M4)
+
+The M4 Calendar page uses a filtered list/table view. A richer visual calendar
+(month/week grid view, drag-and-drop, colour-coded entry types) is a separate,
+larger feature not part of M4. If a future milestone requests a visual calendar,
+scope it as a distinct UI task — the data model, service, and filter logic from M4
+are reusable; the work is purely frontend.
+
+Calendar clash detection is deliberately NOT implemented — see `docs/milestones/M4.md`
+Session 5 design decision for rationale.
 
 ---
 
