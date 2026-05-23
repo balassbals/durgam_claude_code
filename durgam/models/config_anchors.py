@@ -21,6 +21,7 @@ class AcademicYear(TimestampedSoftDelete, table=True):
     ends_on: date = Field(nullable=False)
     is_locked: bool = Field(default=False, nullable=False)
     master_calendar_locked: bool = Field(default=False, nullable=False)
+    iqac_confirmed: bool = Field(default=False, nullable=False)
 
 
 class Holiday(TimestampedSoftDelete, table=True):

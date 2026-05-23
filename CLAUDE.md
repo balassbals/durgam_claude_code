@@ -1096,6 +1096,31 @@ Public read-only pages visible to all authenticated users use:
 Pattern established at Session 7 for `/about/university`, `/about/departments`,
 `/about/departments/[dept_code]`.
 
+## Patterns established at M4
+
+### Seed data is development/demo only — no institution-specific data
+
+`scripts/seed.py` populates a development database for feature testing and
+gate verification. It is NOT a deployment artifact.
+
+Rules:
+- Use placeholder/example domains for emails (e.g., `example.com`,
+  `dev.local`, or Mailpit-compatible addresses). Never use the real
+  institution's domain (`sssihl.edu.in` or similar) in seed.
+- Use clearly-fictional but realistic names for entities. Close to
+  real is fine for demonstrating the feature; the exact real names
+  are not needed.
+- Demo user passwords follow the `_Dev1!XZ` convention — obviously
+  development-only.
+- Any data that implies "this IS the live institutional configuration"
+  does not belong in seed. That data gets configured through the
+  admin UI during real deployment.
+- When a seed row represents a bootstrap placeholder for
+  runtime-managed data (e.g., RoleEmail addresses), add a code
+  comment saying so — e.g.:
+  `# Bootstrap placeholder — real addresses configured via admin UI
+  by Registrar/SysAdmin.`
+
 ## Current milestone
 **M4 — Configuration — AY & Calendar.**
 

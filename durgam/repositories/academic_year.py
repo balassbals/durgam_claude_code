@@ -37,6 +37,13 @@ class AcademicYearRepository(BaseRepository[AcademicYear]):
         ay.master_calendar_locked = True
         return self.save(ay)
 
+    def confirm_iqac(self, ay_id: UUID) -> AcademicYear:
+        ay = self.get_by_id(ay_id)
+        if ay is None:
+            raise ValueError("AcademicYear not found")
+        ay.iqac_confirmed = True
+        return self.save(ay)
+
     def lock_for_rollover(self, ay_id: UUID) -> AcademicYear:
         ay = self.get_by_id(ay_id)
         if ay is None:

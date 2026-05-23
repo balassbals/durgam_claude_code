@@ -60,7 +60,7 @@ def _entry(session, ay: AcademicYear, user: User) -> CalendarEntry:
     e = CalendarEntry(
         academic_year_id=ay.id,
         title=f"Entry {uuid4().hex[:6]}",
-        entry_type="master",
+        entry_type="sem_begin",
         starts_at=now,
         ends_at=now + timedelta(hours=2),
         owner_user_id=user.id,
@@ -178,6 +178,18 @@ class TestAcademicYearRepository:
             )
             db_session.flush()
 
+    def test_confirm_iqac(self, db_session):
+        ay = _ay(db_session)
+        assert ay.iqac_confirmed is False
+        repo = AcademicYearRepository(db_session)
+        updated = repo.confirm_iqac(ay.id)
+        assert updated.iqac_confirmed is True
+
+    def test_confirm_iqac_nonexistent_raises(self, db_session):
+        repo = AcademicYearRepository(db_session)
+        with pytest.raises(ValueError, match="not found"):
+            repo.confirm_iqac(uuid4())
+
     def test_lock_nonexistent_raises(self, db_session):
         repo = AcademicYearRepository(db_session)
         with pytest.raises(ValueError, match="not found"):
@@ -196,7 +208,7 @@ class TestCalendarEntryRepository:
         e1 = CalendarEntry(
             academic_year_id=ay.id,
             title="Later",
-            entry_type="master",
+            entry_type="sem_begin",
             starts_at=now + timedelta(hours=2),
             ends_at=now + timedelta(hours=4),
             owner_user_id=user.id,
@@ -205,7 +217,7 @@ class TestCalendarEntryRepository:
         e2 = CalendarEntry(
             academic_year_id=ay.id,
             title="Earlier",
-            entry_type="master",
+            entry_type="sem_begin",
             starts_at=now,
             ends_at=now + timedelta(hours=1),
             owner_user_id=user.id,
@@ -225,7 +237,7 @@ class TestCalendarEntryRepository:
         user = _user(db_session)
         now = datetime.now(UTC)
 
-        for etype in ("master", "activity", "sports"):
+        for etype in ("sem_begin", "activity", "sports"):
             db_session.add(
                 CalendarEntry(
                     academic_year_id=ay.id,
@@ -240,9 +252,9 @@ class TestCalendarEntryRepository:
         db_session.flush()
 
         repo = CalendarEntryRepository(db_session)
-        masters = repo.list_by_ay_and_type(ay.id, "master")
-        assert len(masters) == 1
-        assert masters[0].entry_type == "master"
+        sem_begins = repo.list_by_ay_and_type(ay.id, "sem_begin")
+        assert len(sem_begins) == 1
+        assert sem_begins[0].entry_type == "sem_begin"
 
     def test_list_by_ay_and_owner(self, db_session):
         ay = _ay(db_session)
@@ -274,7 +286,7 @@ class TestCalendarEntryRepository:
         entry = CalendarEntry(
             academic_year_id=ay.id,
             title="Should fail",
-            entry_type="master",
+            entry_type="sem_begin",
             starts_at=now,
             ends_at=now + timedelta(hours=1),
             owner_user_id=user.id,
@@ -324,7 +336,7 @@ class TestCalendarEntryRepository:
                 CalendarEntry(
                     academic_year_id=uuid4(),
                     title="Bad FK",
-                    entry_type="master",
+                    entry_type="sem_begin",
                     starts_at=now,
                     ends_at=now + timedelta(hours=1),
                     owner_user_id=user.id,
@@ -341,7 +353,7 @@ class TestCalendarEntryRepository:
                 CalendarEntry(
                     academic_year_id=ay.id,
                     title="Bad FK",
-                    entry_type="master",
+                    entry_type="sem_begin",
                     starts_at=now,
                     ends_at=now + timedelta(hours=1),
                     owner_user_id=uuid4(),

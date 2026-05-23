@@ -1,4 +1,4 @@
-"""Unit tests for CalendarEntryService."""
+"""Unit tests for CalendarEntryService — three-phase collaboration chain."""
 
 from datetime import UTC, datetime
 from unittest.mock import MagicMock
@@ -9,7 +9,11 @@ import pytest
 from durgam.services.calendar_entry import (
     CalendarEntryError,
     CalendarEntryService,
-    MASTER_TYPES,
+    EXCLUDED_ROLES,
+    PHASE1_TYPES,
+    PHASE2_TYPES,
+    PHASE3_GENERIC_TYPES,
+    PHASE3_RESTRICTED_TYPES,
     VALID_ENTRY_TYPES,
 )
 
@@ -25,12 +29,28 @@ def _dt(year=2025, month=8, day=1, hour=9) -> datetime:
     return datetime(year, month, day, hour, tzinfo=UTC)
 
 
-class TestCreate:
+def _ay_mock(*, master_locked=False, iqac_confirmed=False, is_locked=False):
+    ay = MagicMock()
+    ay.master_calendar_locked = master_locked
+    ay.iqac_confirmed = iqac_confirmed
+    ay.is_locked = is_locked
+    return ay
+
+
+def _repos(ay):
+    ay_repo = MagicMock()
+    ay_repo.get_by_id.return_value = ay
+    entry_repo = MagicMock()
+    entry_repo.save.side_effect = lambda e: e
+    return entry_repo, ay_repo
+
+
+class TestCreateValidation:
     def test_empty_title_raises(self):
         svc = _make_svc()
         with pytest.raises(CalendarEntryError, match="Title is required"):
             svc.create(
-                uuid4(), "  ", "master", _dt(), _dt(hour=10),
+                uuid4(), "  ", "sem_begin", _dt(), _dt(hour=10),
                 uuid4(), "REGISTRAR", uuid4(),
             )
 
@@ -47,7 +67,7 @@ class TestCreate:
         t = _dt()
         with pytest.raises(CalendarEntryError, match="Start must be before end"):
             svc.create(
-                uuid4(), "Test", "master", t, t,
+                uuid4(), "Test", "sem_begin", t, t,
                 uuid4(), "REGISTRAR", uuid4(),
             )
 
@@ -55,15 +75,27 @@ class TestCreate:
         svc = _make_svc()
         with pytest.raises(CalendarEntryError, match="Start must be before end"):
             svc.create(
-                uuid4(), "Test", "master", _dt(hour=10), _dt(hour=9),
+                uuid4(), "Test", "sem_begin", _dt(hour=10), _dt(hour=9),
                 uuid4(), "REGISTRAR", uuid4(),
             )
 
-    def test_invalid_role_for_entry_type_raises(self):
+    def test_ay_not_found_raises(self):
+        ay_repo = MagicMock()
+        ay_repo.get_by_id.return_value = None
+        svc = _make_svc(ay_repo=ay_repo)
+        with pytest.raises(CalendarEntryError, match="Academic year not found"):
+            svc.create(
+                uuid4(), "Test", "sem_begin", _dt(), _dt(hour=10),
+                uuid4(), "REGISTRAR", uuid4(),
+            )
+
+
+class TestRoleEnforcement:
+    def test_invalid_role_for_phase1_raises(self):
         svc = _make_svc()
         with pytest.raises(CalendarEntryError, match="cannot create"):
             svc.create(
-                uuid4(), "Test", "master", _dt(), _dt(hour=10),
+                uuid4(), "Test", "sem_begin", _dt(), _dt(hour=10),
                 uuid4(), "HOD", uuid4(),
             )
 
@@ -83,62 +115,49 @@ class TestCreate:
                 uuid4(), "IQAC_COORDINATOR", uuid4(),
             )
 
-    def test_invalid_role_for_department_raises(self):
+    def test_excluded_role_for_generic_type_raises(self):
         svc = _make_svc()
-        with pytest.raises(CalendarEntryError, match="cannot create"):
+        with pytest.raises(CalendarEntryError, match="cannot create calendar entries"):
             svc.create(
-                uuid4(), "Test", "department", _dt(), _dt(hour=10),
-                uuid4(), "DIRECTOR", uuid4(),
+                uuid4(), "Test", "academic_activity", _dt(), _dt(hour=10),
+                uuid4(), "STUDENT", uuid4(),
             )
 
-    def test_meeting_allows_any_role(self):
-        ay = MagicMock()
-        ay.master_calendar_locked = True
-        ay_repo = MagicMock()
-        ay_repo.get_by_id.return_value = ay
+    def test_basic_user_for_generic_type_raises(self):
+        svc = _make_svc()
+        with pytest.raises(CalendarEntryError, match="cannot create calendar entries"):
+            svc.create(
+                uuid4(), "Test", "other_activity", _dt(), _dt(hour=10),
+                uuid4(), "BASIC_USER", uuid4(),
+            )
 
-        entry_repo = MagicMock()
-        entry_repo.save.side_effect = lambda e: e
-
+    def test_generic_type_allows_non_excluded_role(self):
+        ay = _ay_mock(master_locked=True, iqac_confirmed=True)
+        entry_repo, ay_repo = _repos(ay)
         svc = _make_svc(entry_repo, ay_repo)
         result = svc.create(
-            uuid4(), "Staff Sync", "meeting", _dt(), _dt(hour=10),
-            uuid4(), "BASIC_USER", uuid4(),
+            uuid4(), "Faculty Workshop", "academic_activity", _dt(), _dt(hour=10),
+            uuid4(), "HOD", uuid4(),
         )
-        assert result.entry_type == "meeting"
+        assert result.entry_type == "academic_activity"
 
-    def test_ay_not_found_raises(self):
-        ay_repo = MagicMock()
-        ay_repo.get_by_id.return_value = None
-        svc = _make_svc(ay_repo=ay_repo)
-        with pytest.raises(CalendarEntryError, match="Academic year not found"):
-            svc.create(
-                uuid4(), "Test", "master", _dt(), _dt(hour=10),
-                uuid4(), "REGISTRAR", uuid4(),
-            )
+    def test_generic_type_allows_registrar(self):
+        ay = _ay_mock(master_locked=True, iqac_confirmed=True)
+        entry_repo, ay_repo = _repos(ay)
+        svc = _make_svc(entry_repo, ay_repo)
+        result = svc.create(
+            uuid4(), "Other Event", "other_activity", _dt(), _dt(hour=10),
+            uuid4(), "REGISTRAR", uuid4(),
+        )
+        assert result.entry_type == "other_activity"
 
-    def test_non_master_before_master_lock_raises(self):
-        ay = MagicMock()
-        ay.master_calendar_locked = False
-        ay_repo = MagicMock()
-        ay_repo.get_by_id.return_value = ay
 
-        svc = _make_svc(ay_repo=ay_repo)
-        with pytest.raises(CalendarEntryError, match="master calendar must be locked"):
-            svc.create(
-                uuid4(), "IQAC Orientation", "activity", _dt(), _dt(hour=10),
-                uuid4(), "IQAC_COORDINATOR", uuid4(),
-            )
+class TestPhaseGating:
+    """Three-phase sequential collaboration chain."""
 
-    def test_master_type_allowed_before_master_lock(self):
-        ay = MagicMock()
-        ay.master_calendar_locked = False
-        ay_repo = MagicMock()
-        ay_repo.get_by_id.return_value = ay
-
-        entry_repo = MagicMock()
-        entry_repo.save.side_effect = lambda e: e
-
+    def test_phase1_allowed_before_master_lock(self):
+        ay = _ay_mock(master_locked=False)
+        entry_repo, ay_repo = _repos(ay)
         svc = _make_svc(entry_repo, ay_repo)
         result = svc.create(
             uuid4(), "Semester 1 Begins", "sem_begin", _dt(), _dt(hour=10),
@@ -146,15 +165,80 @@ class TestCreate:
         )
         assert result.entry_type == "sem_begin"
 
-    def test_non_master_allowed_after_master_lock(self):
-        ay = MagicMock()
-        ay.master_calendar_locked = True
-        ay_repo = MagicMock()
-        ay_repo.get_by_id.return_value = ay
+    def test_phase1_allowed_after_master_lock(self):
+        ay = _ay_mock(master_locked=True)
+        entry_repo, ay_repo = _repos(ay)
+        svc = _make_svc(entry_repo, ay_repo)
+        result = svc.create(
+            uuid4(), "Holiday Addition", "holiday", _dt(), _dt(hour=10),
+            uuid4(), "REGISTRAR", uuid4(),
+        )
+        assert result.entry_type == "holiday"
 
-        entry_repo = MagicMock()
-        entry_repo.save.side_effect = lambda e: e
+    def test_all_phase1_types_allowed_with_registrar(self):
+        ay = _ay_mock(master_locked=False)
+        entry_repo, ay_repo = _repos(ay)
+        svc = _make_svc(entry_repo, ay_repo)
+        for pt in PHASE1_TYPES:
+            result = svc.create(
+                uuid4(), f"Test {pt}", pt, _dt(), _dt(hour=10),
+                uuid4(), "REGISTRAR", uuid4(),
+            )
+            assert result.entry_type == pt
 
+    def test_phase2_blocked_before_master_lock(self):
+        ay = _ay_mock(master_locked=False)
+        _, ay_repo = _repos(ay)
+        svc = _make_svc(ay_repo=ay_repo)
+        with pytest.raises(CalendarEntryError, match="Registrar must confirm"):
+            svc.create(
+                uuid4(), "IQAC Orientation", "activity", _dt(), _dt(hour=10),
+                uuid4(), "IQAC_COORDINATOR", uuid4(),
+            )
+
+    def test_phase2_allowed_after_master_lock(self):
+        ay = _ay_mock(master_locked=True, iqac_confirmed=False)
+        entry_repo, ay_repo = _repos(ay)
+        svc = _make_svc(entry_repo, ay_repo)
+        result = svc.create(
+            uuid4(), "Quality Audit", "activity", _dt(), _dt(hour=10),
+            uuid4(), "IQAC_COORDINATOR", uuid4(),
+        )
+        assert result.entry_type == "activity"
+
+    def test_phase2_blocked_after_iqac_confirmed(self):
+        ay = _ay_mock(master_locked=True, iqac_confirmed=True)
+        _, ay_repo = _repos(ay)
+        svc = _make_svc(ay_repo=ay_repo)
+        with pytest.raises(CalendarEntryError, match="IQAC has already confirmed"):
+            svc.create(
+                uuid4(), "Late IQAC Event", "activity", _dt(), _dt(hour=10),
+                uuid4(), "IQAC_COORDINATOR", uuid4(),
+            )
+
+    def test_phase3_blocked_before_iqac_confirmed(self):
+        ay = _ay_mock(master_locked=True, iqac_confirmed=False)
+        _, ay_repo = _repos(ay)
+        svc = _make_svc(ay_repo=ay_repo)
+        with pytest.raises(CalendarEntryError, match="IQAC must confirm"):
+            svc.create(
+                uuid4(), "Sports Day", "sports", _dt(), _dt(hour=10),
+                uuid4(), "DIRECTOR", uuid4(),
+            )
+
+    def test_phase3_blocked_before_master_lock(self):
+        ay = _ay_mock(master_locked=False, iqac_confirmed=False)
+        _, ay_repo = _repos(ay)
+        svc = _make_svc(ay_repo=ay_repo)
+        with pytest.raises(CalendarEntryError, match="IQAC must confirm"):
+            svc.create(
+                uuid4(), "Cultural Fest", "cultural", _dt(), _dt(hour=10),
+                uuid4(), "DIRECTOR", uuid4(),
+            )
+
+    def test_phase3_restricted_allowed_after_iqac(self):
+        ay = _ay_mock(master_locked=True, iqac_confirmed=True)
+        entry_repo, ay_repo = _repos(ay)
         svc = _make_svc(entry_repo, ay_repo)
         result = svc.create(
             uuid4(), "Annual Sports Day", "sports", _dt(), _dt(hour=10),
@@ -162,15 +246,19 @@ class TestCreate:
         )
         assert result.entry_type == "sports"
 
+    def test_phase3_generic_allowed_after_iqac(self):
+        ay = _ay_mock(master_locked=True, iqac_confirmed=True)
+        entry_repo, ay_repo = _repos(ay)
+        svc = _make_svc(entry_repo, ay_repo)
+        result = svc.create(
+            uuid4(), "Dept Seminar", "academic_activity", _dt(), _dt(hour=10),
+            uuid4(), "HOD", uuid4(),
+        )
+        assert result.entry_type == "academic_activity"
+
     def test_creates_with_scope(self):
-        ay = MagicMock()
-        ay.master_calendar_locked = True
-        ay_repo = MagicMock()
-        ay_repo.get_by_id.return_value = ay
-
-        entry_repo = MagicMock()
-        entry_repo.save.side_effect = lambda e: e
-
+        ay = _ay_mock(master_locked=True, iqac_confirmed=True)
+        entry_repo, ay_repo = _repos(ay)
         svc = _make_svc(entry_repo, ay_repo)
         campus_id = uuid4()
         result = svc.create(
@@ -180,23 +268,6 @@ class TestCreate:
         )
         assert result.scope_type == "campus"
         assert result.scope_id == campus_id
-
-    def test_all_master_types_allowed_with_registrar(self):
-        ay = MagicMock()
-        ay.master_calendar_locked = False
-        ay_repo = MagicMock()
-        ay_repo.get_by_id.return_value = ay
-
-        entry_repo = MagicMock()
-        entry_repo.save.side_effect = lambda e: e
-
-        svc = _make_svc(entry_repo, ay_repo)
-        for mt in MASTER_TYPES:
-            result = svc.create(
-                uuid4(), f"Test {mt}", mt, _dt(), _dt(hour=10),
-                uuid4(), "REGISTRAR", uuid4(),
-            )
-            assert result.entry_type == mt
 
 
 class TestUpdate:
@@ -296,8 +367,19 @@ class TestListMethods:
 
 
 class TestEntryTypeConstants:
-    def test_all_master_types_in_valid_types(self):
-        assert MASTER_TYPES <= VALID_ENTRY_TYPES
+    def test_all_phase_types_in_valid_types(self):
+        all_phases = PHASE1_TYPES | PHASE2_TYPES | PHASE3_RESTRICTED_TYPES | PHASE3_GENERIC_TYPES
+        assert all_phases == VALID_ENTRY_TYPES
 
     def test_valid_types_count(self):
-        assert len(VALID_ENTRY_TYPES) == 10
+        assert len(VALID_ENTRY_TYPES) == 18
+
+    def test_phases_are_disjoint(self):
+        sets = [PHASE1_TYPES, PHASE2_TYPES, PHASE3_RESTRICTED_TYPES, PHASE3_GENERIC_TYPES]
+        for i, a in enumerate(sets):
+            for b in sets[i + 1:]:
+                assert a.isdisjoint(b), f"Overlap: {a & b}"
+
+    def test_excluded_roles_defined(self):
+        assert "STUDENT" in EXCLUDED_ROLES
+        assert "BASIC_USER" in EXCLUDED_ROLES

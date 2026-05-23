@@ -1,4 +1,17 @@
-"""CalendarEntryService — collaboration chain, ownership, and master-lock gate (§8.5 M4)."""
+"""CalendarEntryService — three-phase collaboration chain, ownership (§8.5, §9.3 M4).
+
+Phase 1 — Registrar framework: sem_begin, sem_end, holiday, class_suspension, cie,
+          end_sem_exam, admission_exam, phd_admission, winter_vacation, summer_vacation,
+          academic_council_meeting, finance_committee_meeting, executive_committee_meeting.
+          Creatable when AY is unlocked, before or after master_calendar_locked.
+
+Phase 2 — IQAC: activity.
+          Creatable when master_calendar_locked=True AND iqac_confirmed=False AND NOT is_locked.
+
+Phase 3 — All others: sports, cultural (restricted roles), academic_activity,
+          other_activity (any role except STUDENT/BASIC_USER).
+          Creatable when iqac_confirmed=True AND NOT is_locked.
+"""
 
 from __future__ import annotations
 
@@ -14,19 +27,47 @@ from durgam.services.org_exceptions import OrgServiceError
 
 log = structlog.get_logger(__name__)
 
-MASTER_TYPES = frozenset({"master", "sem_begin", "sem_end", "cie", "holiday"})
+_REGISTRAR_ROLES = frozenset({"REGISTRAR", "DEPUTY_REGISTRAR", "REGISTRAR_OFFICE", "SYSTEM_ADMIN"})
+
+PHASE1_TYPES = frozenset({
+    "sem_begin", "sem_end", "holiday", "class_suspension", "cie",
+    "end_sem_exam", "admission_exam", "phd_admission",
+    "winter_vacation", "summer_vacation",
+    "academic_council_meeting", "finance_committee_meeting",
+    "executive_committee_meeting",
+})
+
+PHASE2_TYPES = frozenset({"activity"})
+
+PHASE3_RESTRICTED_TYPES = frozenset({"sports", "cultural"})
+
+PHASE3_GENERIC_TYPES = frozenset({"academic_activity", "other_activity"})
+
+EXCLUDED_ROLES = frozenset({"STUDENT", "BASIC_USER"})
 
 ENTRY_TYPE_ROLE_MAP: dict[str, frozenset[str]] = {
-    "master":     frozenset({"REGISTRAR", "DEPUTY_REGISTRAR", "REGISTRAR_OFFICE"}),
-    "sem_begin":  frozenset({"REGISTRAR", "DEPUTY_REGISTRAR", "REGISTRAR_OFFICE"}),
-    "sem_end":    frozenset({"REGISTRAR", "DEPUTY_REGISTRAR", "REGISTRAR_OFFICE"}),
-    "cie":        frozenset({"REGISTRAR", "DEPUTY_REGISTRAR", "REGISTRAR_OFFICE"}),
-    "holiday":    frozenset({"REGISTRAR", "DEPUTY_REGISTRAR", "REGISTRAR_OFFICE"}),
-    "activity":   frozenset({"IQAC_COORDINATOR"}),
-    "sports":     frozenset({"DIRECTOR", "DEPUTY_DIRECTOR", "DIRECTOR_OFFICE", "DEAN_STUDENT_WELFARE"}),
-    "cultural":   frozenset({"DIRECTOR", "DEPUTY_DIRECTOR", "DIRECTOR_OFFICE", "DEAN_STUDENT_WELFARE"}),
-    "department": frozenset({"HOD", "AHOD", "HOD_OFFICE"}),
-    "meeting":    frozenset(),  # any calendar_entry:write holder
+    # Phase 1 — Registrar framework
+    "sem_begin": _REGISTRAR_ROLES,
+    "sem_end": _REGISTRAR_ROLES,
+    "holiday": _REGISTRAR_ROLES,
+    "class_suspension": _REGISTRAR_ROLES,
+    "cie": _REGISTRAR_ROLES,
+    "end_sem_exam": _REGISTRAR_ROLES,
+    "admission_exam": _REGISTRAR_ROLES,
+    "phd_admission": _REGISTRAR_ROLES,
+    "winter_vacation": _REGISTRAR_ROLES,
+    "summer_vacation": _REGISTRAR_ROLES,
+    "academic_council_meeting": _REGISTRAR_ROLES,
+    "finance_committee_meeting": _REGISTRAR_ROLES,
+    "executive_committee_meeting": _REGISTRAR_ROLES,
+    # Phase 2 — IQAC
+    "activity": frozenset({"IQAC_COORDINATOR"}),
+    # Phase 3 — restricted
+    "sports": frozenset({"DIRECTOR", "DEPUTY_DIRECTOR", "DIRECTOR_OFFICE", "DEAN_STUDENT_WELFARE"}),
+    "cultural": frozenset({"DIRECTOR", "DEPUTY_DIRECTOR", "DIRECTOR_OFFICE", "DEAN_STUDENT_WELFARE"}),
+    # Phase 3 — generic (empty set = any non-excluded role)
+    "academic_activity": frozenset(),
+    "other_activity": frozenset(),
 }
 
 VALID_ENTRY_TYPES = frozenset(ENTRY_TYPE_ROLE_MAP.keys())
@@ -77,19 +118,41 @@ class CalendarEntryService:
         if starts_at >= ends_at:
             raise CalendarEntryError("Start must be before end.")
 
+        # Role check
         allowed_roles = ENTRY_TYPE_ROLE_MAP[entry_type]
-        if allowed_roles and owner_role_code not in allowed_roles:
-            raise CalendarEntryError(
-                f"Role {owner_role_code!r} cannot create {entry_type!r} entries."
-            )
+        if allowed_roles:
+            if owner_role_code not in allowed_roles:
+                raise CalendarEntryError(
+                    f"Role {owner_role_code!r} cannot create {entry_type!r} entries."
+                )
+        else:
+            # Generic types: any role except STUDENT/BASIC_USER
+            if owner_role_code in EXCLUDED_ROLES:
+                raise CalendarEntryError(
+                    f"Role {owner_role_code!r} cannot create calendar entries."
+                )
 
         ay = self._ays.get_by_id(academic_year_id)
         if ay is None:
             raise CalendarEntryError("Academic year not found.")
-        if entry_type not in MASTER_TYPES and not ay.master_calendar_locked:
-            raise CalendarEntryError(
-                "The master calendar must be locked before non-master entries can be added."
-            )
+
+        # Phase gating
+        if entry_type in PHASE1_TYPES:
+            pass  # Phase 1: only needs AY unlocked (repo enforces)
+        elif entry_type in PHASE2_TYPES:
+            if not ay.master_calendar_locked:
+                raise CalendarEntryError(
+                    "The Registrar must confirm the master calendar before IQAC entries can be added."
+                )
+            if ay.iqac_confirmed:
+                raise CalendarEntryError(
+                    "IQAC has already confirmed. No further IQAC entries can be added."
+                )
+        elif entry_type in PHASE3_RESTRICTED_TYPES or entry_type in PHASE3_GENERIC_TYPES:
+            if not ay.iqac_confirmed:
+                raise CalendarEntryError(
+                    "IQAC must confirm before other entries can be added."
+                )
 
         now = datetime.now(UTC)
         entry = CalendarEntry(

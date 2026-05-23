@@ -37,6 +37,7 @@ register(NavEntry(
         ("configure", "academic_year",              None),
         ("write",     "holiday",                    None),
         ("write",     "student_category_count",     None),
+        ("write",     "calendar_entry",              None),
     ),
 ))
 register(NavEntry(
@@ -139,4 +140,12 @@ register(NavEntry(
     group="Config",
     permission_action="write",
     permission_resource="student_category_count",
+))
+register(NavEntry(
+    label="Calendar",
+    href="/admin/config/calendar",
+    icon="calendar-days",
+    group="Config",
+    permission_action="write",
+    permission_resource="calendar_entry",
 ))

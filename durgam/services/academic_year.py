@@ -81,6 +81,18 @@ class AcademicYearService:
         log.info("master_calendar_locked", ay_id=str(ay_id), actor=str(actor_id))
         return ay
 
+    def confirm_iqac(self, ay_id: UUID, actor_id: UUID) -> AcademicYear:
+        ay = self.get(ay_id)
+        if ay.is_locked:
+            raise AcademicYearLockedError()
+        if not ay.master_calendar_locked:
+            raise AcademicYearError(
+                "The master calendar must be locked before IQAC can confirm."
+            )
+        ay = self._ays.confirm_iqac(ay_id)
+        log.info("iqac_confirmed", ay_id=str(ay_id), actor=str(actor_id))
+        return ay
+
     def lock_expired_academic_years(self, as_of: date | None = None) -> int:
         expired = self._ays.list_expired_unlocked(as_of)
         for ay in expired:

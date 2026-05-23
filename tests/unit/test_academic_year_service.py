@@ -111,6 +111,47 @@ class TestLockMasterCalendar:
         assert result.master_calendar_locked is True
 
 
+class TestConfirmIqac:
+    def test_not_found_raises(self):
+        repo = MagicMock()
+        repo.get_by_id.return_value = None
+        svc = _make_svc(repo)
+        with pytest.raises(AcademicYearError, match="not found"):
+            svc.confirm_iqac(uuid4(), uuid4())
+
+    def test_locked_ay_raises(self):
+        repo = MagicMock()
+        fake = MagicMock()
+        fake.is_locked = True
+        repo.get_by_id.return_value = fake
+        svc = _make_svc(repo)
+        with pytest.raises(AcademicYearLockedError):
+            svc.confirm_iqac(uuid4(), uuid4())
+
+    def test_master_not_locked_raises(self):
+        repo = MagicMock()
+        fake = MagicMock()
+        fake.is_locked = False
+        fake.master_calendar_locked = False
+        repo.get_by_id.return_value = fake
+        svc = _make_svc(repo)
+        with pytest.raises(AcademicYearError, match="master calendar must be locked"):
+            svc.confirm_iqac(uuid4(), uuid4())
+
+    def test_confirms_iqac_successfully(self):
+        repo = MagicMock()
+        fake = MagicMock()
+        fake.is_locked = False
+        fake.master_calendar_locked = True
+        repo.get_by_id.return_value = fake
+        confirmed = MagicMock()
+        confirmed.iqac_confirmed = True
+        repo.confirm_iqac.return_value = confirmed
+        svc = _make_svc(repo)
+        result = svc.confirm_iqac(uuid4(), uuid4())
+        assert result.iqac_confirmed is True
+
+
 class TestLockExpired:
     def test_locks_expired_unlocked_ays(self):
         repo = MagicMock()

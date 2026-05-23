@@ -158,6 +158,29 @@ accessibility audit; (c) UI Polish milestone arrives per project plan.
 
 ---
 
+### TD-009 — Seed data uses institution-specific names and codes
+
+**Location:** `scripts/seed.py`
+
+**What it is:** `scripts/seed.py` uses names close to SSSIHL's real
+structure (campus codes PSN/BRN/NDG/ATP, school/department names,
+role names). This is intentional for making gate demonstrations
+realistic and for testing multi-campus logic. However it implies a
+specific institution.
+
+**Why this is not a development issue:** Seed is a development/demo
+artifact only — it is never run in production. At deployment, the
+institution configures real data through admin UIs. The seed is
+discarded or kept only for CI/test environments.
+
+**Trigger to re-open:** (a) The codebase is open-sourced or shared
+outside the development team — at that point, seed should be
+anonymised or replaced with fully fictional data. (b) M20 (final
+milestone) review — confirm seed is clearly labelled as demo-only
+before any external handoff.
+
+---
+
 ## Resolved
 
 ### TD-002 — SAWarning: transaction already deassociated from connection (resolved in m0-cleanup)

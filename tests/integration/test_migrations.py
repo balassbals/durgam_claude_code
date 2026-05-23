@@ -88,7 +88,7 @@ class TestMigrations:
         assert result.returncode == 0
 
     def test_m4_calendar_entry_and_ay_master_lock(self):
-        """Verify M4 migration adds calendar_entries table and master_calendar_locked column."""
+        """Verify M4 migrations: calendar_entries, master_calendar_locked, iqac_confirmed."""
         _reset_test_db()
 
         engine = sqlalchemy.create_engine(settings.test_database_url)
@@ -98,6 +98,7 @@ class TestMigrations:
             assert "calendar_entries" in inspector.get_table_names()
             ay_cols = {c["name"] for c in inspector.get_columns("academic_years")}
             assert "master_calendar_locked" in ay_cols
+            assert "iqac_confirmed" in ay_cols
 
             ce_cols = {c["name"] for c in inspector.get_columns("calendar_entries")}
             for expected in (
@@ -107,14 +108,24 @@ class TestMigrations:
             ):
                 assert expected in ce_cols, f"Missing column: {expected}"
 
-            # Downgrade -1 should remove M4 additions
+            # Downgrade -1 removes iqac_confirmed (latest M4 migration)
             result = _alembic("downgrade", "-1")
             assert result.returncode == 0, f"downgrade -1 failed:\n{result.stderr}"
 
             inspector = sqlalchemy.inspect(engine)
-            assert "calendar_entries" not in inspector.get_table_names()
             ay_cols_after = {c["name"] for c in inspector.get_columns("academic_years")}
-            assert "master_calendar_locked" not in ay_cols_after
+            assert "iqac_confirmed" not in ay_cols_after
+            assert "master_calendar_locked" in ay_cols_after
+            assert "calendar_entries" in inspector.get_table_names()
+
+            # Downgrade -1 again removes calendar_entries + master_calendar_locked
+            result = _alembic("downgrade", "-1")
+            assert result.returncode == 0, f"downgrade -2 failed:\n{result.stderr}"
+
+            inspector = sqlalchemy.inspect(engine)
+            assert "calendar_entries" not in inspector.get_table_names()
+            ay_cols_after2 = {c["name"] for c in inspector.get_columns("academic_years")}
+            assert "master_calendar_locked" not in ay_cols_after2
 
             # Upgrade back
             result = _alembic("upgrade", "head")

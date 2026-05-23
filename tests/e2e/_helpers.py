@@ -163,6 +163,60 @@ def _hard_delete_by_code(table: str, code: str) -> None:
         engine.dispose()
 
 
+def _hard_delete_calendar_entries_by_title(pattern: str) -> None:
+    """Hard-delete calendar_entries rows whose title matches a SQL LIKE pattern."""
+    from sqlalchemy import create_engine, text
+
+    from durgam.config import settings
+
+    engine = create_engine(settings.database_url_sync)
+    try:
+        with engine.connect() as conn:
+            conn.execute(
+                text("DELETE FROM calendar_entries WHERE title LIKE :p"),  # noqa: S608
+                {"p": pattern},
+            )
+            conn.commit()
+    finally:
+        engine.dispose()
+
+
+def _hard_delete_academic_year_by_code(code: str) -> None:
+    """Hard-delete an academic year and its dependent rows (holidays, calendar entries, student category counts)."""
+    from sqlalchemy import create_engine, text
+
+    from durgam.config import settings
+
+    engine = create_engine(settings.database_url_sync)
+    try:
+        with engine.connect() as conn:
+            ay_id = conn.execute(
+                text("SELECT id FROM academic_years WHERE code = :code"),  # noqa: S608
+                {"code": code},
+            ).fetchone()
+            if ay_id:
+                ay_uuid = ay_id[0]
+                conn.execute(
+                    text("DELETE FROM calendar_entries WHERE academic_year_id = :id"),
+                    {"id": ay_uuid},
+                )
+                conn.execute(
+                    text("DELETE FROM holidays WHERE academic_year_id = :id"),
+                    {"id": ay_uuid},
+                )
+                conn.execute(
+                    text("DELETE FROM student_category_counts WHERE academic_year_id = :id"),
+                    {"id": ay_uuid},
+                )
+                conn.execute(
+                    text("DELETE FROM academic_years WHERE id = :id"),
+                    {"id": ay_uuid},
+                )
+            conn.commit()
+    finally:
+        engine.dispose()
+
+
 def _latest_mailpit_email(
     to_address: str, subject_contains: str, timeout: int = 15
 ) -> dict:

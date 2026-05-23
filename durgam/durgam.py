@@ -131,9 +131,11 @@ app.add_page(admin_config_dept_vm,
 from durgam.pages.admin.config.academic_years import admin_config_academic_years
 from durgam.pages.admin.config.holidays import admin_config_holidays
 from durgam.pages.admin.config.student_categories import admin_config_student_categories
+from durgam.pages.admin.config.calendar_entries import admin_config_calendar
 from durgam.states.config_academic_year import AcademicYearConfigState
 from durgam.states.config_holiday import HolidayConfigState
 from durgam.states.config_student_category import StudentCategoryConfigState
+from durgam.states.config_calendar_entry import CalendarEntryConfigState
 
 app.add_page(admin_config_academic_years, route="/admin/config/academic-years",
              on_load=AcademicYearConfigState.load_academic_years)
@@ -141,6 +143,8 @@ app.add_page(admin_config_holidays, route="/admin/config/holidays",
              on_load=HolidayConfigState.load_holidays)
 app.add_page(admin_config_student_categories, route="/admin/config/student-categories",
              on_load=StudentCategoryConfigState.load_student_categories)
+app.add_page(admin_config_calendar, route="/admin/config/calendar",
+             on_load=CalendarEntryConfigState.load_entries)
 
 app.add_page(about_university, route="/about/university",
              on_load=AboutUniversityState.load_university_about)

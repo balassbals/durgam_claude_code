@@ -323,8 +323,9 @@ def seed(session: Session) -> dict[str, int]:
         ("department",                 "read",      "school"),
         ("leave_request",              "read",      "department"),
         ("leave_request",              "approve",   "department"),
-        # M4 — Deans can read calendar + student category
+        # M4 — Deans can read/write calendar (Phase 3 generic types) + read student category
         ("calendar_entry",             "read",      "*"),
+        ("calendar_entry",             "write",     "*"),
         ("student_category_count",     "read",      "*"),
     ]
 
@@ -365,7 +366,11 @@ def seed(session: Session) -> dict[str, int]:
         "DEAN_STUDENT_WELFARE": _PUBLIC_READ + _DEAN_SW_SPECIFIC,
         "HOD":                  _PUBLIC_READ + _HOD_SPECIFIC,
         "AHOD":                 _PUBLIC_READ + _HOD_SPECIFIC,
-        "HOD_OFFICE":           _PUBLIC_READ,
+        "HOD_OFFICE":           _PUBLIC_READ + [
+            ("calendar_entry",             "read",      "*"),
+            ("calendar_entry",             "write",     "*"),
+            ("student_category_count",     "read",      "*"),
+        ],
         "STUDENT":              _PUBLIC_READ,
         "BASIC_USER":           _PUBLIC_READ,
     }
@@ -569,24 +574,44 @@ def seed(session: Session) -> dict[str, int]:
     counts["holidays"] = hol_inserted
 
     # ── RoleEmail ─────────────────────────────────────────────────────────────
-    existing_re = session.exec(
-        select(RoleEmail).where(
-            RoleEmail.role_code == "SYSTEM_ADMIN",
-            RoleEmail.scope_type.is_(None),  # type: ignore[union-attr]
-        )
-    ).first()
-    if not existing_re:
-        session.execute(
-            pg_insert(RoleEmail).values(
-                role_code="SYSTEM_ADMIN",
-                scope_type=None,
-                scope_id=None,
-                email="admin@sssihl.edu.in",
+    # BOOTSTRAP PLACEHOLDERS — sufficient to demonstrate M4 calendar
+    # phase-transition emails at the gate.  Real role-email addresses are
+    # runtime-managed data configured by Registrar/Reg-office/SysAdmin via
+    # the role-email management UI (scheduled ~M5).  Seed is NOT the
+    # authoritative address book; these rows exist only so the notification
+    # mechanism can be exercised on a fresh DB.
+    _role_emails = [
+        {"role_code": "SYSTEM_ADMIN",         "email": "admin@example.dev"},
+        {"role_code": "IQAC_COORDINATOR",     "email": "iqac@example.dev"},
+        {"role_code": "REGISTRAR",            "email": "registrar@example.dev"},
+        {"role_code": "DIRECTOR",             "email": "director@example.dev"},
+        {"role_code": "DEAN_STUDENT_WELFARE", "email": "dean.sw@example.dev"},
+        {"role_code": "HOD",                  "email": "hod.office@example.dev"},
+    ]
+    re_inserted = 0
+    for re_data in _role_emails:
+        existing_re = session.exec(
+            select(RoleEmail).where(
+                RoleEmail.role_code == re_data["role_code"],
+                RoleEmail.scope_type.is_(None),  # type: ignore[union-attr]
             )
-        )
-        counts["role_emails"] = 1
-    else:
-        counts["role_emails"] = 0
+        ).first()
+        if existing_re:
+            if existing_re.email != re_data["email"]:
+                existing_re.email = re_data["email"]
+                session.add(existing_re)
+                re_inserted += 1
+        else:
+            session.execute(
+                pg_insert(RoleEmail).values(
+                    role_code=re_data["role_code"],
+                    scope_type=None,
+                    scope_id=None,
+                    email=re_data["email"],
+                )
+            )
+            re_inserted += 1
+    counts["role_emails"] = re_inserted
 
     # ── StudentCategoryCount ──────────────────────────────────────────────────
     counts["student_category_counts"] = _exec_insert(
