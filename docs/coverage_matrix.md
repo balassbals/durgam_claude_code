@@ -10,6 +10,8 @@ status is "In flight at M{N}" reflect the current implementation state.
 
 **M3 gate passed: 2026-05-21.** All M3 rows verified via fresh-clone ritual.
 
+**M4 gate passed: 2026-05-23.** All M4 rows verified via fresh-clone ritual.
+
 Errata bindings: E-001 (vision/mission) extends the M3 row.
 
 ---

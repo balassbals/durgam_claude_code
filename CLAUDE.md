@@ -4,7 +4,7 @@
 **Spec**: `docs/durgam_rfp_v3.pdf` — all section references (§8, §12, etc.) point to this file.
 **Python**: 3.13 (pinned via `.python-version`).
 **Theme**: Puttaparthi Saffron–Indigo–Ivory (§15.1). Single committed theme; no alternatives in v3.
-**Current milestone**: M4 — Configuration — AY & Calendar.
+**Current milestone**: M5 — Configuration — Identity Attachments.
 
 ## Authority files (binding, in priority order)
 
@@ -1160,7 +1160,7 @@ and the phase sets. If a future requirement asks for configurable types, it must
 address role-mapping and phase-gating implications.
 
 ## Current milestone
-**M4 — Configuration — AY & Calendar.**
+**M5 — Configuration — Identity Attachments.**
 
 This line is the source of truth for "where are we." Before opening a milestone-completing PR, Claude Code MUST:
 1. Grep this file for "Current milestone" and update both occurrences (the top status line and this section).
