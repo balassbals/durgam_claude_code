@@ -659,6 +659,9 @@ def seed(session: Session) -> dict[str, int]:
 
     # ── Placeholder LetterheadAsset ──────────────────────────────────────────
     # A minimal DOCX so the gate demo has a downloadable letterhead template.
+    # DB row creation and file-byte writes are decoupled: uploaded_files/ is
+    # gitignored and lost on fresh clone, but the DB persists. The seed must
+    # ensure the physical file exists even when the DB row already does.
     from io import BytesIO as _LH_BytesIO
 
     from docx import Document as _LH_Document
@@ -707,13 +710,27 @@ def seed(session: Session) -> dict[str, int]:
         session.add(lh)
         session.flush()
         lh_inserted = 1
+    else:
+        fa = session.get(FileAsset, existing_lh.file_id)
+        if fa and not backend.exists(fa.storage_key):
+            backend.put(fa.storage_key, _PLACEHOLDER_DOCX, _DOCX_MIME)
+            log.info("seed_file_restored", key=fa.storage_key, asset="letterhead_REGISTRAR")
     counts["letterhead_assets"] = lh_inserted
 
     # ── Placeholder TemplateAsset ────────────────────────────────────────────
     # A minimal DOCX so the gate demo has a downloadable BoS template.
+    # Same decoupled DB-row/file-byte pattern as letterhead above.
     from io import BytesIO as _BytesIO
 
     from docx import Document as _Document
+
+    _tpl_doc = _Document()
+    _tpl_doc.add_heading("Board of Studies — Template", level=1)
+    _tpl_doc.add_paragraph("Placeholder template for gate demonstration.")
+    _tpl_buf = _BytesIO()
+    _tpl_doc.save(_tpl_buf)
+    _TPL_DOCX = _tpl_buf.getvalue()
+    _TPL_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
     existing_tpl = session.exec(
         select(TemplateAsset).where(
@@ -723,24 +740,16 @@ def seed(session: Session) -> dict[str, int]:
     ).first()
     tpl_inserted = 0
     if existing_tpl is None:
-        _doc = _Document()
-        _doc.add_heading("Board of Studies — Template", level=1)
-        _doc.add_paragraph("Placeholder template for gate demonstration.")
-        _buf = _BytesIO()
-        _doc.save(_buf)
-        _tpl_bytes = _buf.getvalue()
-
         tpl_storage_key = uuid4().hex
-        tpl_sha = hashlib.sha256(_tpl_bytes).hexdigest()
-        tpl_mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        tpl_sha = hashlib.sha256(_TPL_DOCX).hexdigest()
 
-        backend.put(tpl_storage_key, _tpl_bytes, tpl_mime)
+        backend.put(tpl_storage_key, _TPL_DOCX, _TPL_MIME)
 
         tpl_fa = FileAsset(
             storage_key=tpl_storage_key,
             original_name="bos_template.docx",
-            mime_type=tpl_mime,
-            size_bytes=len(_tpl_bytes),
+            mime_type=_TPL_MIME,
+            size_bytes=len(_TPL_DOCX),
             sha256=tpl_sha,
             owner_user_id=_seed_actor_id,
             purpose="template",
@@ -758,6 +767,11 @@ def seed(session: Session) -> dict[str, int]:
         session.add(tpl)
         session.flush()
         tpl_inserted = 1
+    else:
+        tpl_fa = session.get(FileAsset, existing_tpl.file_id)
+        if tpl_fa and not backend.exists(tpl_fa.storage_key):
+            backend.put(tpl_fa.storage_key, _TPL_DOCX, _TPL_MIME)
+            log.info("seed_file_restored", key=tpl_fa.storage_key, asset="template_bos")
     counts["template_assets"] = tpl_inserted
 
     # ── StudentCategoryCount ──────────────────────────────────────────────────
