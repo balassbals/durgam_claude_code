@@ -40,6 +40,7 @@ register(NavEntry(
         ("write",     "calendar_entry",              None),
         ("write",     "role_email",                  None),
         ("write",     "letterhead_asset",             None),
+        ("write",     "template_asset",                None),
     ),
 ))
 register(NavEntry(
@@ -167,4 +168,12 @@ register(NavEntry(
     group="Config",
     permission_action="write",
     permission_resource="letterhead_asset",
+))
+register(NavEntry(
+    label="Templates",
+    href="/admin/config/templates",
+    icon="file-text",
+    group="Config",
+    permission_action="write",
+    permission_resource="template_asset",
 ))

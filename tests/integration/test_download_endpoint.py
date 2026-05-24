@@ -1,12 +1,14 @@
 """Integration tests for the authenticated download endpoint.
 
-Proves six behaviours:
+Proves eight behaviours:
   1. Permitted session → 200 + file bytes
   2. No session cookie → 403
   3. Valid session but no file_asset:read permission → 403
   4. Valid session + permission but file_id not found → 404
   5. Non-Registrar with file_asset:read but no letterhead_asset:read → 403 on letterhead
   6. Registrar with letterhead_asset:read → 200 on same letterhead
+  7. Non-IQAC with file_asset:read but no template_asset:read → 403 on template
+  8. IQAC with template_asset:read → 200 on same template
 """
 
 import hashlib
@@ -263,5 +265,58 @@ class TestDownloadEndpoint:
             )
             assert resp.status_code == 200
             assert resp.content == b"letterhead-bytes"
+        finally:
+            backend.delete(key)
+
+    def test_non_iqac_cannot_download_template(self, db_engine):
+        """User with file_asset:read but no template_asset:read
+        must be denied access to files with purpose='template'."""
+        backend = get_storage_backend()
+        key = f"test_tpl_{uuid4().hex}"
+        backend.put(key, b"template-bytes", "application/octet-stream")
+
+        try:
+            with Session(db_engine) as session:
+                user = _create_user(session, f"dl_ntpl_{uuid4().hex[:6]}")
+                raw_token = uuid4().hex
+                _create_session_row(session, user.id, raw_token)
+                _grant_file_read(session, user.id)
+                fa = _create_file_asset(session, user.id, key, purpose="template")
+                file_id = fa.id
+                session.commit()
+
+            client = _test_client()
+            resp = client.get(
+                f"/api/files/{file_id}",
+                cookies={"dsession": raw_token},
+            )
+            assert resp.status_code == 403
+        finally:
+            backend.delete(key)
+
+    def test_iqac_can_download_template(self, db_engine):
+        """IQAC with template_asset:read passes the escalation check."""
+        backend = get_storage_backend()
+        key = f"test_tplr_{uuid4().hex}"
+        backend.put(key, b"template-bytes", "application/octet-stream")
+
+        try:
+            with Session(db_engine) as session:
+                user = _create_user(session, f"dl_iqac_{uuid4().hex[:6]}")
+                raw_token = uuid4().hex
+                _create_session_row(session, user.id, raw_token)
+                _grant_file_read(session, user.id)
+                _grant_permission(session, user.id, "template_asset", "read")
+                fa = _create_file_asset(session, user.id, key, purpose="template")
+                file_id = fa.id
+                session.commit()
+
+            client = _test_client()
+            resp = client.get(
+                f"/api/files/{file_id}",
+                cookies={"dsession": raw_token},
+            )
+            assert resp.status_code == 200
+            assert resp.content == b"template-bytes"
         finally:
             backend.delete(key)

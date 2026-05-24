@@ -88,6 +88,23 @@ class LetterheadAsset(TimestampedSoftDelete, table=True):
     file_id: UUID = Field(foreign_key="file_assets.id", nullable=False)
 
 
+class TemplateAsset(TimestampedSoftDelete, table=True):
+    """Document template bound to a type (bos/mom/vac) — §9.3."""
+
+    __tablename__ = "template_assets"
+    __table_args__ = (
+        sa.Index(
+            "uq_template_assets_type",
+            "template_type",
+            unique=True,
+            postgresql_where=sa.text("is_deleted = false"),
+        ),
+    )
+
+    template_type: str = Field(max_length=16, nullable=False)
+    file_id: UUID = Field(foreign_key="file_assets.id", nullable=False)
+
+
 class StudentCategoryCount(TimestampedSoftDelete, table=True):
     """One row per academic year; enforced by unique constraint."""
 

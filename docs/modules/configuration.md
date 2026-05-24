@@ -46,7 +46,10 @@ The Configuration module manages the organisational core of SSSIHL: campuses, sc
 | Holiday | `holidays` | AY-scoped; unique `(holiday_date, academic_year_id)` |
 | StudentCategoryCount | `student_category_counts` | AY-scoped singleton; unique `academic_year_id` |
 | CalendarEntry | `calendar_entries` | AY-scoped; `entry_type` from 18 fixed types; `owner_user_id`, `owner_role_code` |
-| RoleEmail | `role_emails` | Unique `(role_code, scope_type, scope_id)`; bootstrap placeholders at M4 |
+| RoleEmail | `role_emails` | Unique `(role_code, scope_type, scope_id)` via partial unique indexes; UUID PK (re-keyed at M5a E-004) |
+| FileAsset | `file_assets` | Cross-cutting; `storage_key` + `purpose` field for permission escalation |
+| LetterheadAsset | `letterhead_assets` | Partial unique indexes: global `(role_code)` + scoped `(role_code, scope_type, scope_id)` WHERE `is_deleted=false` |
+| TemplateAsset | `template_assets` | Partial unique index on `template_type` WHERE `is_deleted=false`; types: `bos`, `mom`, `vac` |
 
 All entities inherit `TimestampedSoftDelete` (id UUID v4, created_at, updated_at, is_deleted, etc.).
 
@@ -69,6 +72,10 @@ All entities inherit `TimestampedSoftDelete` (id UUID v4, created_at, updated_at
 | `HolidayService` | `create`, `update`, `soft_delete`, `list_by_ay` | AY-scoped; date validation; blocked when AY locked |
 | `StudentCategoryCountService` | `get_or_create`, `update` | AY-scoped singleton; blocked when AY locked |
 | `CalendarExportService` | `export_csv`, `export_excel`, `export_pdf`, `export_docx` | Takes list of entries; returns bytes |
+| `RoleEmailService` | `list_all`, `create`, `update`, `soft_delete` | Role-code + email; scope validation; Registrar family only |
+| `UploadService` | `upload(data, name, mime, actor, purpose)` | Validates, hashes, stores via backend; returns FileAsset |
+| `LetterheadAssetService` | `upload_letterhead`, `soft_delete`, `list_all` | MIME filter (PDF/PNG/JPG); max 5 MB; replace = soft-delete old + upload new |
+| `TemplateAssetService` | `upload_template`, `soft_delete`, `list_all` | Type-specific MIME (bos/mom=DOCX, vac=PPTX); max 2 MB; replace = soft-delete old + upload new |
 
 ---
 
@@ -93,6 +100,9 @@ All entities inherit `TimestampedSoftDelete` (id UUID v4, created_at, updated_at
 | `/admin/config/holidays` | `holiday:write:*` | `HolidayConfigState` | SYSTEM_ADMIN, Registrar family |
 | `/admin/config/student-categories` | `student_category_count:write:*` | `StudentCategoryConfigState` | SYSTEM_ADMIN, Registrar family |
 | `/admin/config/calendar` | `calendar_entry:write:*` | `CalendarEntryConfigState` | All calendar-owning roles (phase-gated) |
+| `/admin/config/role-emails` | `role_email:write:*` | `RoleEmailConfigState` | SYSTEM_ADMIN, Registrar family |
+| `/admin/config/letterheads` | `letterhead_asset:write:*` | `LetterheadConfigState` | SYSTEM_ADMIN, Registrar family |
+| `/admin/config/templates` | `template_asset:write:*` | `TemplateConfigState` | SYSTEM_ADMIN, IQAC_COORDINATOR |
 
 ### About pages (read-only, all authenticated users)
 
@@ -185,9 +195,30 @@ locked AYs via `AcademicYearLockedError`.
 
 ---
 
+## Authenticated File Download (M5a)
+
+All file downloads go through `/api/files/{file_id}`, a Starlette route registered
+on Reflex's ASGI underpinning via `app._api.add_route()`.
+
+Authentication: reads `dsession` cookie → resolves session → requires `file_asset:read:*`.
+
+Purpose-based permission escalation: files with `purpose="letterhead"` require
+`letterhead_asset:read:*`; files with `purpose="template"` require
+`template_asset:read:*`. This prevents users with only `file_asset:read` from
+downloading restricted assets.
+
+## Docgen Merge Primitive (M5a)
+
+`durgam.docgen.merge.merge_letterhead_and_content(letterhead_bytes, content_blocks)`
+creates a DOCX with the letterhead image in the document header and content blocks
+(heading / paragraph / table) in the body. PNG/JPG letterheads only; PDF raises
+`DocgenError` (TD-012).
+
+---
+
 ## Future Work
 
 | Milestone | What it adds to this module |
 |---|---|
-| **M5** (Configuration — Identity Attachments) | LetterheadAsset, MentalHealthCounsellor roster, FacultyMentorAssignment, ClassTeacherAssignment, ClassCoordinatorAssignment, UGTimetable, TemplateAsset, RoleEmail UI |
+| **M5b** (Configuration — Assignments) | MentalHealthCounsellor roster, FacultyMentorAssignment, ClassTeacherAssignment, ClassCoordinatorAssignment, UGTimetable |
 | **M13** (Program & Course Management) | Rich edit UI for Program sub-entities (PEO/PO/PSO forms, regulation editor, scheme builder, specialisation editor, exit-level editor); Course extended fields (course_type, delivery_mode, IKS flags); credit-hour ratio per ProgramRegulation |

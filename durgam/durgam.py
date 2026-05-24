@@ -159,6 +159,12 @@ from durgam.states.config_letterhead import LetterheadConfigState
 app.add_page(admin_config_letterheads, route="/admin/config/letterheads",
              on_load=LetterheadConfigState.load_letterheads)
 
+from durgam.pages.admin.config.templates import admin_config_templates
+from durgam.states.config_template import TemplateConfigState
+
+app.add_page(admin_config_templates, route="/admin/config/templates",
+             on_load=TemplateConfigState.load_templates)
+
 # ── M5a authenticated file download API ──────────────────────────────────────
 from durgam.api.download import download_file
 

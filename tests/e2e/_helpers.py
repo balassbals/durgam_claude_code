@@ -243,3 +243,83 @@ def _latest_mailpit_email(
         f"No Mailpit email to {to_address!r} with subject containing "
         f"{subject_contains!r} within {timeout}s"
     )
+
+
+def _hard_delete_letterhead_by_role(role_code: str) -> None:
+    """Hard-delete letterhead_assets (and their file_assets) for a given role_code.
+
+    Removes letterhead rows first, then the associated file_asset rows
+    (referenced by file_id FK). Also removes the storage blob.
+    """
+    from sqlalchemy import create_engine, text
+
+    from durgam.config import settings
+    from durgam.storage import get_storage_backend
+
+    engine = create_engine(settings.database_url_sync)
+    try:
+        backend = get_storage_backend()
+        with engine.connect() as conn:
+            rows = conn.execute(
+                text(
+                    "SELECT la.id, fa.storage_key, la.file_id "
+                    "FROM letterhead_assets la "
+                    "JOIN file_assets fa ON fa.id = la.file_id "
+                    "WHERE la.role_code = :rc"
+                ),
+                {"rc": role_code},
+            ).fetchall()
+            for row in rows:
+                conn.execute(
+                    text("DELETE FROM letterhead_assets WHERE id = :id"),
+                    {"id": row[0]},
+                )
+                conn.execute(
+                    text("DELETE FROM file_assets WHERE id = :id"),
+                    {"id": row[2]},
+                )
+                try:
+                    backend.delete(row[1])
+                except FileNotFoundError:
+                    pass
+            conn.commit()
+    finally:
+        engine.dispose()
+
+
+def _hard_delete_template_by_type(template_type: str) -> None:
+    """Hard-delete template_assets (and their file_assets) for a given template_type."""
+    from sqlalchemy import create_engine, text
+
+    from durgam.config import settings
+    from durgam.storage import get_storage_backend
+
+    engine = create_engine(settings.database_url_sync)
+    try:
+        backend = get_storage_backend()
+        with engine.connect() as conn:
+            rows = conn.execute(
+                text(
+                    "SELECT ta.id, fa.storage_key, ta.file_id "
+                    "FROM template_assets ta "
+                    "JOIN file_assets fa ON fa.id = ta.file_id "
+                    "WHERE ta.template_type = :tt"
+                ),
+                {"tt": template_type},
+            ).fetchall()
+            for row in rows:
+                conn.execute(
+                    text("DELETE FROM template_assets WHERE id = :id"),
+                    {"id": row[0]},
+                )
+                conn.execute(
+                    text("DELETE FROM file_assets WHERE id = :id"),
+                    {"id": row[2]},
+                )
+                try:
+                    backend.delete(row[1])
+                except FileNotFoundError:
+                    pass
+            conn.commit()
+    finally:
+        engine.dispose()

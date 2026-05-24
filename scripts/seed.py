@@ -32,6 +32,7 @@ from durgam.models.config_anchors import (
     LetterheadAsset,
     RoleEmail,
     StudentCategoryCount,
+    TemplateAsset,
     WorkingDaysConfig,
 )
 from durgam.models.crosscutting import FileAsset
@@ -255,6 +256,10 @@ def seed(session: Session) -> dict[str, int]:
         {"resource": "letterhead_asset",           "action": "read",      "scope": "*"},
         {"resource": "letterhead_asset",           "action": "write",     "scope": "*"},
         {"resource": "letterhead_asset",           "action": "delete",    "scope": "*"},
+        # M5a — Template asset (IQAC + SysAdmin only; NOT in _PUBLIC_READ)
+        {"resource": "template_asset",             "action": "read",      "scope": "*"},
+        {"resource": "template_asset",             "action": "write",     "scope": "*"},
+        {"resource": "template_asset",             "action": "delete",    "scope": "*"},
     ]
     perm_inserted = 0
     for p in perms_data:
@@ -359,10 +364,14 @@ def seed(session: Session) -> dict[str, int]:
     ]
 
     # M4 — IQAC can read/write calendar, read student category
+    # M5a — IQAC owns template assets
     _IQAC_SPECIFIC = [
         ("calendar_entry",             "read",      "*"),
         ("calendar_entry",             "write",     "*"),
         ("student_category_count",     "read",      "*"),
+        ("template_asset",             "read",      "*"),
+        ("template_asset",             "write",     "*"),
+        ("template_asset",             "delete",    "*"),
     ]
 
     # M4 — Dean of Student Welfare can read/write calendar, read student category
@@ -636,11 +645,20 @@ def seed(session: Session) -> dict[str, int]:
             re_inserted += 1
     counts["role_emails"] = re_inserted
 
-    # ── Placeholder LetterheadAsset ──────────────────────────────────────────
-    # A tiny 1×1 transparent PNG so the gate demo has a downloadable letterhead.
-    # owner_user_id = sys_admin for audit cleanliness.
+    # ── Placeholder assets (letterhead + template) ────────────────────────────
     import hashlib
     from uuid import uuid4
+
+    from durgam.storage import get_storage_backend
+
+    backend = get_storage_backend()
+    sys_admin_user = session.exec(
+        select(User).where(User.username == "sys_admin")
+    ).first()
+    _seed_actor_id = sys_admin_user.id if sys_admin_user else None
+
+    # ── Placeholder LetterheadAsset ──────────────────────────────────────────
+    # A tiny 1×1 transparent PNG so the gate demo has a downloadable letterhead.
 
     _PLACEHOLDER_PNG = (
         b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
@@ -659,14 +677,6 @@ def seed(session: Session) -> dict[str, int]:
     if existing_lh is None:
         storage_key = uuid4().hex
         sha = hashlib.sha256(_PLACEHOLDER_PNG).hexdigest()
-        sys_admin_user = session.exec(
-            select(User).where(User.username == "sys_admin")
-        ).first()
-        sys_admin_id = sys_admin_user.id if sys_admin_user else None
-
-        from durgam.storage import get_storage_backend
-
-        backend = get_storage_backend()
         backend.put(storage_key, _PLACEHOLDER_PNG, "image/png")
 
         fa = FileAsset(
@@ -675,7 +685,7 @@ def seed(session: Session) -> dict[str, int]:
             mime_type="image/png",
             size_bytes=len(_PLACEHOLDER_PNG),
             sha256=sha,
-            owner_user_id=sys_admin_id,
+            owner_user_id=_seed_actor_id,
             purpose="letterhead",
         )
         session.add(fa)
@@ -687,13 +697,64 @@ def seed(session: Session) -> dict[str, int]:
             scope_type=None,
             scope_id=None,
             file_id=fa.id,
-            created_by=sys_admin_id,
-            updated_by=sys_admin_id,
+            created_by=_seed_actor_id,
+            updated_by=_seed_actor_id,
         )
         session.add(lh)
         session.flush()
         lh_inserted = 1
     counts["letterhead_assets"] = lh_inserted
+
+    # ── Placeholder TemplateAsset ────────────────────────────────────────────
+    # A minimal DOCX so the gate demo has a downloadable BoS template.
+    from io import BytesIO as _BytesIO
+
+    from docx import Document as _Document
+
+    existing_tpl = session.exec(
+        select(TemplateAsset).where(
+            TemplateAsset.template_type == "bos",
+            TemplateAsset.is_deleted == False,  # noqa: E712
+        )
+    ).first()
+    tpl_inserted = 0
+    if existing_tpl is None:
+        _doc = _Document()
+        _doc.add_heading("Board of Studies — Template", level=1)
+        _doc.add_paragraph("Placeholder template for gate demonstration.")
+        _buf = _BytesIO()
+        _doc.save(_buf)
+        _tpl_bytes = _buf.getvalue()
+
+        tpl_storage_key = uuid4().hex
+        tpl_sha = hashlib.sha256(_tpl_bytes).hexdigest()
+        tpl_mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+        backend.put(tpl_storage_key, _tpl_bytes, tpl_mime)
+
+        tpl_fa = FileAsset(
+            storage_key=tpl_storage_key,
+            original_name="bos_template.docx",
+            mime_type=tpl_mime,
+            size_bytes=len(_tpl_bytes),
+            sha256=tpl_sha,
+            owner_user_id=_seed_actor_id,
+            purpose="template",
+        )
+        session.add(tpl_fa)
+        session.flush()
+        session.refresh(tpl_fa)
+
+        tpl = TemplateAsset(
+            template_type="bos",
+            file_id=tpl_fa.id,
+            created_by=_seed_actor_id,
+            updated_by=_seed_actor_id,
+        )
+        session.add(tpl)
+        session.flush()
+        tpl_inserted = 1
+    counts["template_assets"] = tpl_inserted
 
     # ── StudentCategoryCount ──────────────────────────────────────────────────
     counts["student_category_counts"] = _exec_insert(

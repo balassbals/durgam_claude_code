@@ -1,9 +1,10 @@
-"""Playwright E2E config suite — M3+M4 gate: Configuration.
+"""Playwright E2E config suite — M3+M4+M5a gate: Configuration.
 
 Covers all admin config flows: campus, school, centre, department, course,
 program read-only detail, vision/mission (university + department), class
 timings, working days, and route-protection checks (M3). Also covers M4:
 academic year, holiday, student category, and calendar entry config.
+M5a: role email, letterhead, template config.
 
 Requires a running stack:
   docker compose up db redis mailpit -d
@@ -16,6 +17,7 @@ Seeded read-only users (account state never mutated):
   sys_admin     / SysAdmin_Dev1!XZ      — SYSTEM_ADMIN
   registrar_user / Registrar_Dev1!XZ   — REGISTRAR
   hod_dmacs     / HodDmacs_Dev1!XZ     — HOD scoped to DMACS
+  iqac_user     / IqacCoord_Dev1!XZ    — IQAC_COORDINATOR
   student_001   / Student_Dev1!XZ      — STUDENT (used only for route-protection)
 
 CRUD tests:
@@ -27,12 +29,18 @@ CRUD tests:
 V&M/singletons:
   - Edit using seeded editor accounts (registrar_user, hod_dmacs).
   - State is restored to a known value at the end of each test.
+
+File upload tests (M5a):
+  - rx.upload renders a hidden <input type="file"> via react-dropzone.
+  - Playwright targets it with page.locator('input[type="file"]').set_input_files().
+  - The on_drop handler fires automatically when the file is set.
 """
 
 from __future__ import annotations
 
 import os
 import uuid
+from pathlib import Path
 
 import pytest
 from playwright.sync_api import Page, expect
@@ -44,10 +52,15 @@ from tests.e2e._helpers import (
     _hard_delete_by_code,
     _hard_delete_calendar_entries_by_title,
     _hard_delete_dept_by_code,
+    _hard_delete_letterhead_by_role,
+    _hard_delete_template_by_type,
     _login,
     _logout,
     _wait_for_admin_page,
 )
+
+_TEST_PNG = str(Path(__file__).parent / "_test_letterhead.png")
+_TEST_DOCX = str(Path(__file__).parent / "_test_template.docx")
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("DURGAM_E2E") != "1",
@@ -60,6 +73,8 @@ _REGISTRAR_USER = "registrar_user"
 _REGISTRAR_PASS = "Registrar_Dev1!XZ"
 _HOD_USER = "hod_dmacs"
 _HOD_PASS = "HodDmacs_Dev1!XZ"
+_IQAC_USER = "iqac_user"
+_IQAC_PASS = "IqacCoord_Dev1!XZ"
 _STUDENT_USER = "student_001"
 _STUDENT_PASS = "Student_Dev1!XZ"
 
@@ -69,6 +84,8 @@ _SCHOOL_CODE = "TSC"
 _CENTRE_CODE = "TCE"
 _DEPT_CODE = "TDE"
 _COURSE_CODE = "TST101"
+_LH_TEST_ROLE = "E2E_LH_TEST"
+_TPL_TEST_TYPE = "bos"
 
 
 # ── Route Protection ─────────────────────────────────────────────────────────
@@ -91,6 +108,9 @@ class TestConfigRouteProtection:
         "/admin/config/holidays",
         "/admin/config/student-categories",
         "/admin/config/calendar",
+        "/admin/config/role-emails",
+        "/admin/config/letterheads",
+        "/admin/config/templates",
     ]
 
     @pytest.mark.parametrize("route", _PROTECTED_ROUTES)
@@ -704,3 +724,152 @@ class TestLockedAYEnforcement:
         # Should show the AY Locked badge
         expect(page.get_by_text("AY Locked")).to_be_visible(timeout=10_000)
         _logout(page)
+
+
+# ── RoleEmail Config (M5a) ──────────────────────────────────────────────────
+
+class TestRoleEmailConfig:
+    def test_registrar_sees_seeded_role_emails(self, page: Page) -> None:
+        _login(page, _REGISTRAR_USER, _REGISTRAR_PASS)
+        page.goto(f"{BASE_URL}/admin/config/role-emails")
+        page.wait_for_load_state("networkidle")
+        _wait_for_admin_page(page, "+ New Role Email", timeout=15_000)
+        expect(page.get_by_text("REGISTRAR", exact=True).first).to_be_visible(
+            timeout=10_000
+        )
+        _logout(page)
+
+    def test_student_blocked_from_role_emails(self, page: Page) -> None:
+        _login(page, _STUDENT_USER, _STUDENT_PASS)
+        page.goto(f"{BASE_URL}/admin/config/role-emails")
+        page.wait_for_url(
+            lambda url: "/admin/config/role-emails" not in url, timeout=10_000
+        )
+
+
+# ── Letterhead Config (M5a) ──────────────────────────────────────────────────
+
+class TestLetterheadConfig:
+    def test_registrar_upload_and_deactivate_letterhead(self, page: Page) -> None:
+        """Registrar uploads a letterhead via file_upload_zone, sees it in the list,
+        then deactivates it. Proves the rx.upload + Playwright selector works."""
+        _hard_delete_letterhead_by_role(_LH_TEST_ROLE)
+        try:
+            _login(page, _REGISTRAR_USER, _REGISTRAR_PASS)
+            page.goto(f"{BASE_URL}/admin/config/letterheads")
+            page.wait_for_load_state("networkidle")
+            _wait_for_admin_page(page, "+ Upload Letterhead", timeout=15_000)
+
+            # Open upload form
+            page.get_by_text("+ Upload Letterhead").click()
+            expect(
+                page.get_by_role("heading", name="Upload Letterhead")
+            ).to_be_visible(timeout=5_000)
+
+            # Fill role code — wait for the value to round-trip through Reflex
+            # state before triggering the upload. Without this, set_input_files
+            # fires on_drop before the on_change for role_code has been processed
+            # by the server, and the handler sees an empty role code.
+            role_input = page.get_by_placeholder("e.g. REGISTRAR")
+            role_input.fill(_LH_TEST_ROLE)
+            expect(role_input).to_have_value(_LH_TEST_ROLE, timeout=5_000)
+            page.wait_for_timeout(500)
+
+            # Upload file via hidden <input type="file"> rendered by react-dropzone.
+            file_input = page.locator("input[type='file']")
+            file_input.set_input_files(_TEST_PNG)
+
+            # Wait for upload success toast
+            expect(
+                page.get_by_text("Letterhead uploaded.", exact=True)
+            ).to_be_visible(timeout=15_000)
+
+            # Verify row appears in list
+            expect(
+                page.get_by_text(_LH_TEST_ROLE, exact=True)
+            ).to_be_visible(timeout=10_000)
+
+            # Deactivate via kebab
+            row = page.locator("tr", has_text=_LH_TEST_ROLE)
+            row.get_by_role("button", name="⋮").click()
+            page.get_by_role("menuitem", name="Deactivate").click()
+            page.get_by_role("button", name="Deactivate").click()
+            expect(
+                page.get_by_text("Letterhead deactivated.", exact=True)
+            ).to_be_visible(timeout=15_000)
+            expect(
+                page.get_by_text(_LH_TEST_ROLE, exact=True)
+            ).not_to_be_visible(timeout=10_000)
+        finally:
+            _hard_delete_letterhead_by_role(_LH_TEST_ROLE)
+
+    def test_student_blocked_from_letterheads(self, page: Page) -> None:
+        _login(page, _STUDENT_USER, _STUDENT_PASS)
+        page.goto(f"{BASE_URL}/admin/config/letterheads")
+        page.wait_for_url(
+            lambda url: "/admin/config/letterheads" not in url, timeout=10_000
+        )
+
+
+# ── Template Config (M5a) ──────────────────────────────────────────────────
+
+class TestTemplateConfig:
+    def test_iqac_upload_and_deactivate_template(self, page: Page) -> None:
+        """IQAC user uploads a BoS template, sees it in the list, deactivates it."""
+        _hard_delete_template_by_type(_TPL_TEST_TYPE)
+        try:
+            _login(page, _IQAC_USER, _IQAC_PASS)
+            page.goto(f"{BASE_URL}/admin/config/templates")
+            page.wait_for_load_state("networkidle")
+            _wait_for_admin_page(page, "+ Upload Template", timeout=15_000)
+
+            # Open upload form
+            page.get_by_text("+ Upload Template").click()
+            expect(
+                page.get_by_role("heading", name="Upload Template")
+            ).to_be_visible(timeout=5_000)
+
+            # Select template type — triggers render of upload zone
+            page.locator(".rt-SelectTrigger", has_text="Select type").click()
+            page.get_by_role("option", name="BOS").click()
+            page.wait_for_timeout(500)
+
+            # Upload DOCX file
+            file_input = page.locator("input[type='file']")
+            file_input.set_input_files(_TEST_DOCX)
+
+            # Wait for upload success toast
+            expect(
+                page.get_by_text("Template uploaded.", exact=True)
+            ).to_be_visible(timeout=15_000)
+
+            # Verify row appears in list
+            expect(
+                page.get_by_text("BOS", exact=True)
+            ).to_be_visible(timeout=10_000)
+
+            # Deactivate via kebab
+            row = page.locator("tr", has_text="BOS")
+            row.get_by_role("button", name="⋮").click()
+            page.get_by_role("menuitem", name="Deactivate").click()
+            page.get_by_role("button", name="Deactivate").click()
+            expect(
+                page.get_by_text("Template deactivated.", exact=True)
+            ).to_be_visible(timeout=15_000)
+        finally:
+            _hard_delete_template_by_type(_TPL_TEST_TYPE)
+
+    def test_student_blocked_from_templates(self, page: Page) -> None:
+        _login(page, _STUDENT_USER, _STUDENT_PASS)
+        page.goto(f"{BASE_URL}/admin/config/templates")
+        page.wait_for_url(
+            lambda url: "/admin/config/templates" not in url, timeout=10_000
+        )
+
+    def test_registrar_blocked_from_templates(self, page: Page) -> None:
+        """Registrar lacks template_asset:write and is redirected."""
+        _login(page, _REGISTRAR_USER, _REGISTRAR_PASS)
+        page.goto(f"{BASE_URL}/admin/config/templates")
+        page.wait_for_url(
+            lambda url: "/admin/config/templates" not in url, timeout=10_000
+        )

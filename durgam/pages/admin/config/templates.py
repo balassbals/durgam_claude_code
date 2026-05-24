@@ -1,4 +1,4 @@
-"""Letterhead management page — /admin/config/letterheads."""
+"""Template management page — /admin/config/templates."""
 
 import reflex as rx
 
@@ -14,7 +14,21 @@ from durgam.pages.components import (
 from durgam.pages.shared.confirmation_dialog import confirmation_dialog
 from durgam.pages.shared.data_table import TableColumn, data_table
 from durgam.pages.shared.file_upload import file_upload_zone
-from durgam.states.config_letterhead import LetterheadConfigState
+from durgam.states.config_template import TemplateConfigState
+
+_TYPE_OPTIONS = ["bos", "mom", "vac"]
+
+_ACCEPT_MAP = {
+    "bos": {
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
+    },
+    "mom": {
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
+    },
+    "vac": {
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation": [".pptx"],
+    },
+}
 
 
 def _kebab(row: dict) -> rx.Component:
@@ -43,11 +57,28 @@ def _kebab(row: dict) -> rx.Component:
             ),
             rx.menu.item(
                 "Deactivate",
-                on_click=LetterheadConfigState.open_deactivate_confirm(  # type: ignore[call-arg, func-returns-value]
-                    row["id"], row["role_code"]
+                on_click=TemplateConfigState.open_deactivate_confirm(  # type: ignore[call-arg, func-returns-value]
+                    row["id"], row["template_type"]
                 ),
                 color="var(--color-danger, #c0392b)",
             ),
+        ),
+    )
+
+
+def _upload_zone() -> rx.Component:
+    """Upload zone that adapts accept filter based on selected template type."""
+    return rx.cond(
+        TemplateConfigState.form_template_type == "vac",
+        file_upload_zone(
+            on_drop=TemplateConfigState.upload_template,  # type: ignore[arg-type]
+            accept=_ACCEPT_MAP["vac"],
+            label="Drag & drop a PPTX file (≤ 2 MB)",
+        ),
+        file_upload_zone(
+            on_drop=TemplateConfigState.upload_template,  # type: ignore[arg-type]
+            accept=_ACCEPT_MAP["bos"],
+            label="Drag & drop a DOCX file (≤ 2 MB)",
         ),
     )
 
@@ -56,52 +87,28 @@ def _inline_form() -> rx.Component:
     return form_modal(
         content=rx.vstack(
             rx.heading(
-                "Upload Letterhead",
+                "Upload Template",
                 size="4",
                 font_family="var(--font-sans)",
                 margin_bottom="1rem",
             ),
             rx.vstack(
                 rx.vstack(
-                    rx.text("Role Code", font_size="0.85rem", color="var(--color-muted)"),
-                    rx.input(
-                        value=LetterheadConfigState.form_role_code,
-                        on_change=LetterheadConfigState.set_form_role_code,
-                        placeholder="e.g. REGISTRAR",
-                        max_length=64,
-                        width="100%",
-                    ),
-                    align="start",
-                    gap="0.25rem",
-                    width="100%",
-                ),
-                rx.vstack(
                     rx.text(
-                        "Scope Type (optional)",
+                        "Template Type",
                         font_size="0.85rem",
                         color="var(--color-muted)",
                     ),
-                    rx.input(
-                        value=LetterheadConfigState.form_scope_type,
-                        on_change=LetterheadConfigState.set_form_scope_type,
-                        placeholder="e.g. department",
-                        max_length=32,
-                        width="100%",
-                    ),
-                    align="start",
-                    gap="0.25rem",
-                    width="100%",
-                ),
-                rx.vstack(
-                    rx.text(
-                        "Scope ID (optional)",
-                        font_size="0.85rem",
-                        color="var(--color-muted)",
-                    ),
-                    rx.input(
-                        value=LetterheadConfigState.form_scope_id,
-                        on_change=LetterheadConfigState.set_form_scope_id,
-                        placeholder="UUID of the scope entity",
+                    rx.select.root(
+                        rx.select.trigger(placeholder="Select type"),
+                        rx.select.content(
+                            *[
+                                rx.select.item(t.upper(), value=t)
+                                for t in _TYPE_OPTIONS
+                            ],
+                        ),
+                        value=TemplateConfigState.form_template_type,
+                        on_change=TemplateConfigState.set_form_template_type,
                         width="100%",
                     ),
                     align="start",
@@ -109,19 +116,11 @@ def _inline_form() -> rx.Component:
                     width="100%",
                 ),
                 rx.cond(
-                    LetterheadConfigState.form_role_code != "",
-                    file_upload_zone(
-                        on_drop=LetterheadConfigState.upload_letterhead,  # type: ignore[arg-type]
-                        accept={
-                            "image/png": [".png"],
-                            "image/jpeg": [".jpg", ".jpeg"],
-                            "application/pdf": [".pdf"],
-                        },
-                        label="Drag & drop a letterhead image (PNG, JPG, PDF ≤ 5 MB)",
-                    ),
+                    TemplateConfigState.form_template_type != "",
+                    _upload_zone(),
                     rx.box(
                         rx.text(
-                            "Enter a role code to enable upload",
+                            "Select a template type to enable upload",
                             color="var(--color-muted)",
                             font_size="0.875rem",
                             text_align="center",
@@ -135,7 +134,7 @@ def _inline_form() -> rx.Component:
                 rx.hstack(
                     secondary_btn(
                         "Cancel",
-                        on_click=LetterheadConfigState.cancel_form,
+                        on_click=TemplateConfigState.cancel_form,
                         type="button",
                     ),
                     gap="0.75rem",
@@ -148,63 +147,61 @@ def _inline_form() -> rx.Component:
             align="start",
             width="100%",
         ),
-        is_open=LetterheadConfigState.show_form,
+        is_open=TemplateConfigState.show_form,
     )
 
 
-def admin_config_letterheads() -> rx.Component:
+def admin_config_templates() -> rx.Component:
     return admin_page(
         rx.vstack(
             nav_shell(),
             rx.box(
                 rx.hstack(
                     rx.heading(
-                        "Letterheads",
+                        "Templates",
                         size="5",
                         font_family="var(--font-sans)",
                     ),
                     rx.spacer(),
                     primary_btn(
-                        "+ Upload Letterhead",
-                        on_click=LetterheadConfigState.open_upload,
+                        "+ Upload Template",
+                        on_click=TemplateConfigState.open_upload,
                     ),
                     align="center",
                     width="100%",
                     margin_bottom="1.5rem",
                 ),
                 config_toast(
-                    LetterheadConfigState.flash,
-                    LetterheadConfigState.flash_type,
-                    LetterheadConfigState.dismiss_flash,
+                    TemplateConfigState.flash,
+                    TemplateConfigState.flash_type,
+                    TemplateConfigState.dismiss_flash,
                 ),
                 _inline_form(),
                 rx.cond(
-                    LetterheadConfigState.loading,
+                    TemplateConfigState.loading,
                     rx.center(rx.spinner(), padding="2rem"),
                     data_table(
-                        rows=LetterheadConfigState.letterheads,
+                        rows=TemplateConfigState.templates,
                         columns=[
-                            TableColumn(key="role_code", label="Role Code"),
-                            TableColumn(key="scope", label="Scope"),
+                            TableColumn(key="template_type", label="Type"),
                         ],
-                        card_primary_key="role_code",
+                        card_primary_key="template_type",
                         is_mobile=False,
                         actions=_kebab,
-                        empty_message="No letterheads uploaded.",
+                        empty_message="No templates uploaded.",
                     ),
                 ),
                 confirmation_dialog(
-                    is_open=LetterheadConfigState.confirm_open,
-                    title=LetterheadConfigState.confirm_title,
-                    body=LetterheadConfigState.confirm_body,
-                    on_confirm=LetterheadConfigState.soft_delete_letterhead,
-                    on_cancel=LetterheadConfigState.cancel_confirm,
+                    is_open=TemplateConfigState.confirm_open,
+                    title=TemplateConfigState.confirm_title,
+                    body=TemplateConfigState.confirm_body,
+                    on_confirm=TemplateConfigState.soft_delete_template,
+                    on_cancel=TemplateConfigState.cancel_confirm,
                     confirm_label="Deactivate",
                 ),
                 padding="2rem",
                 max_width="1200px",
                 width="100%",
-                id="letterhead-page-top",
             ),
             page_footer(),
             align="start",

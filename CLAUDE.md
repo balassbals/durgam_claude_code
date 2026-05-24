@@ -4,7 +4,7 @@
 **Spec**: `docs/durgam_rfp_v3.pdf` — all section references (§8, §12, etc.) point to this file.
 **Python**: 3.13 (pinned via `.python-version`).
 **Theme**: Puttaparthi Saffron–Indigo–Ivory (§15.1). Single committed theme; no alternatives in v3.
-**Current milestone**: M5 — Configuration — Identity Attachments.
+**Current milestone**: M5 — Configuration — Identity Attachments (M5a complete; M5b next).
 
 ## Authority files (binding, in priority order)
 
@@ -1159,8 +1159,42 @@ runtime-configurable. This applies to `ENTRY_TYPE_ROLE_MAP`, `EXCLUDED_ROLES`,
 and the phase sets. If a future requirement asks for configurable types, it must
 address role-mapping and phase-gating implications.
 
+## Patterns established at M5a
+
+### File upload zone render-after-confirm guard
+
+File upload zones render only after their dependent form fields have confirmed
+through state (`rx.cond(field != "", upload_zone, placeholder)`). This prevents the
+on_drop/on_change race where the upload handler fires before a prior field's WebSocket
+round-trip completes. Applies to every reuse of `file_upload_zone`.
+
+```python
+rx.cond(
+    State.form_role_code != "",
+    file_upload_zone(
+        on_drop=State.upload_handler,
+        accept={...},
+        label="...",
+    ),
+    rx.box(
+        rx.text("Enter a role code to enable upload", ...),
+        border="2px dashed var(--color-rule)",
+        opacity="0.5",
+    ),
+)
+```
+
+The upload zone only renders after the server has received and confirmed the required
+field via WebSocket. Even with this guard, the service must still validate the field
+(defense in depth) — but the UI prevents the confusing UX where a file uploads, bytes
+transfer, and then the server rejects with "field required."
+
+Discovered at M5a: Playwright's `set_input_files` triggers `on_drop` before a prior
+`on_change` completes its WebSocket round-trip. In production, a fast user or laggy
+connection would hit the same race.
+
 ## Current milestone
-**M5 — Configuration — Identity Attachments.**
+**M5 — Configuration — Identity Attachments (M5a complete; M5b next).**
 
 This line is the source of truth for "where are we." Before opening a milestone-completing PR, Claude Code MUST:
 1. Grep this file for "Current milestone" and update both occurrences (the top status line and this section).

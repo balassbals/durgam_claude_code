@@ -146,7 +146,7 @@ possible M7+ enhancement, not required by the source).
 
 ## E-004 — RoleEmail model diverges from §8.5 canonical schema; NULL-scope uniqueness gap
 
-**Status**: Acknowledged. M5a in scope.
+**Status**: Resolved-at-M5a.
 
 **Source**: Code review at M5 planning, against RFP §8.5 and the M0 inherited
 note in `docs/milestones/M5.md`.

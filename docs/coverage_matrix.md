@@ -64,8 +64,8 @@ E-004 (RoleEmail) bind to this split.
 | WorkingDaysConfig (singleton) | §9.3 | M3 | Shipped at M3 | Singleton edit page (Session 7); 5/6-day radio; configure action only |
 | Faculty (basic info in config module) | §9.3 | M10 | Planned for M10 | Faculty profile module |
 | Student (basic info in config module) | §9.3 | M12 | Planned for M12 | Student profile module |
-| RoleEmail (email bound to role/scope) | §9.3 | M2/M5a | Shipped at M2 (model); M5a for UI | M2 seeded; M4 reads for calendar phase-transition emails (bootstrap placeholders on `@example.dev`); E-004 remediation at M5a (re-key to §8.5 TimestampedSoftDelete + NULL-scope partial-index fix) preceding the management UI; real address management by Registrar/Reg-office/SysAdmin via role-email UI in M5a (per informal req: "configure and manage all role-based email IDs"); group-list vs per-scope address design belongs to that module |
-| LetterheadAsset (file per role/scope) | §9.3 | M5a | Planned for M5a | Configuration — Identity Attachments |
+| RoleEmail (email bound to role/scope) | §9.3 | M2/M5a | Shipped at M5a | M2 seeded; M4 reads for calendar phase-transition emails; E-004 remediation at M5a (re-key to UUID PK + TimestampedSoftDelete + partial unique indexes); management UI at `/admin/config/role-emails` (Registrar family + SysAdmin) |
+| LetterheadAsset (file per role/scope) | §9.3 | M5a | Shipped at M5a | Upload/replace/deactivate/download; partial unique indexes (global + scoped); MIME filter (PDF/PNG/JPG); max 5 MB; `/admin/config/letterheads` |
 | ApprovalProcess (workflow config) | §9.3 | M7 | Planned for M7 | Approval Engine |
 | StudentCategoryCount (SC/ST/OBC/EWS/General per AY) | §9.3 | M4 | Shipped at M4 | AY-scoped singleton edit; Registrar-managed; blocked when AY locked |
 | MentalHealthCounsellor (AY-scoped roster, Director's letterhead) | §9.3 | M5b | Planned for M5b | Configuration — Identity Attachments |
@@ -74,9 +74,9 @@ E-004 (RoleEmail) bind to this split.
 | ClassCoordinatorAssignment | §9.3 | M5b | Planned for M5b | Same dependency as ClassTeacher; Option A confirmed |
 | NonOwnedCourse | §9.3 | M5b | Planned for M5b | Course shared across departments |
 | UGTimetable (first/second year, Director's office) | §9.3 | M5b | Planned for M5b | Auto-projects into dept timetables |
-| TemplateAsset (BoS, MoM, VAC certificate) | §9.3 | M5a | Planned for M5a | IQAC-managed; used for docgen; BoS=docx, MoM=docx, VAC=ppt per informal doc; errata-level entity (not in §8 schema) |
+| TemplateAsset (BoS, MoM, VAC certificate) | §9.3 | M5a | Shipped at M5a | IQAC-managed; types: bos/mom=DOCX, vac=PPTX; partial unique index on type; max 2 MB; `/admin/config/templates` |
 | VisitingFaculty (external personnel per department) | E-003, informal req | M5b | Planned for M5b | HoD-managed; inline external-personnel details; date-windowed availability; feeds M13 course allocation; does not depend on M10 Faculty |
-| FileAsset + StorageBackend (file storage foundation) | §8.4, §4.1, §6.1 | M5a | Planned for M5a | Foundation for all uploads; local-fs dev / MinIO prod behind interface; ClamAV scan hook (mocked, real at M20); UUID storage keys |
+| FileAsset + StorageBackend (file storage foundation) | §8.4, §4.1, §6.1 | M5a | Shipped at M5a | Local-fs dev / MinIO prod; UploadService orchestrates validate→store→record; UUID storage keys; purpose-based permission escalation on download endpoint |
 
 ---
 
@@ -91,7 +91,7 @@ E-004 (RoleEmail) bind to this split.
 | Holiday management | §9.3 | M4 | Shipped at M4 | AY-scoped CRUD; separate Holiday model (not CalendarEntry type) |
 | Calendar exports (CSV/Excel/PDF/DOCX) | §9.3 | M4 | Shipped at M4 | CalendarExportService + rx.download via bytes data |
 | Phase-transition email notifications | §9.3 | M4 | Shipped at M4 | Registrar confirm → IQAC notified; IQAC confirm → Phase 3 roles notified; reads RoleEmail bootstrap placeholders; fire-and-forget via asyncio.create_task |
-| Letterheads / templates used for docgen (not directly visible to other roles) | §9.3 | M5a | Planned for M5a | Internal composition; BoS/MoM/VAC |
+| Letterheads / templates used for docgen (not directly visible to other roles) | §9.3 | M5a | Shipped at M5a | `merge_letterhead_and_content()` docgen primitive; PNG/JPG only (PDF → DocgenError TD-012); purpose-based download permission escalation |
 | Mental-health counsellor roster downloadable as DOCX (Director letterhead, AY-scoped) | §9.3 | M5b | Planned for M5b | Immutable on AY rollover |
 | Class teacher assignments auto-flow into faculty workload | §9.3 | M5b | Planned for M5b | Requires Faculty (M10) model |
 | UG timetable configured by Director, auto-projected to dept timetables | §9.3 | M5b | Planned for M5b | Requires Student (M12) model |
