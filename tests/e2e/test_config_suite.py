@@ -777,7 +777,7 @@ class TestLetterheadConfig:
             file_input.set_input_files(_TEST_LH_DOCX)
 
             # Click Upload to commit the staged file
-            page.get_by_role("button", name="Upload").click()
+            page.get_by_role("button", name="Upload", exact=True).click()
 
             # Wait for upload success toast
             expect(
@@ -839,7 +839,7 @@ class TestTemplateConfig:
             file_input.set_input_files(_TEST_DOCX)
 
             # Click Upload to commit the staged file
-            page.get_by_role("button", name="Upload").click()
+            page.get_by_role("button", name="Upload", exact=True).click()
 
             # Wait for upload success toast
             expect(
