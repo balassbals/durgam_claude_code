@@ -17,12 +17,9 @@ from uuid import uuid4
 
 import pytest
 from sqlmodel import Session, select
-from starlette.applications import Starlette
-from starlette.routing import Route
 from starlette.testclient import TestClient
 
 import durgam.db as _db_mod
-from durgam.api.download import download_file
 from durgam.models.auth import UserSession
 from durgam.models.crosscutting import FileAsset
 from durgam.models.identity import (
@@ -144,16 +141,17 @@ def _create_file_asset(
     return fa
 
 
-def _test_client() -> TestClient:
-    app = Starlette(routes=[
-        Route("/api/files/{file_id}", download_file, methods=["GET"]),
-    ])
-    return TestClient(app)
+@pytest.fixture()
+def real_api_client() -> TestClient:
+    """TestClient wrapping the real Reflex app's internal API, which has the
+    download route registered via app._api.add_route() in durgam.py."""
+    from durgam.durgam import app
+    return TestClient(app._api)
 
 
 @pytest.mark.usefixtures("_patch_engine")
 class TestDownloadEndpoint:
-    def test_permitted_returns_bytes(self, db_engine):
+    def test_permitted_returns_bytes(self, db_engine, real_api_client):
         backend = get_storage_backend()
         key = f"test_{uuid4().hex}"
         backend.put(key, b"test", "image/png")
@@ -168,7 +166,7 @@ class TestDownloadEndpoint:
                 file_id = fa.id
                 session.commit()
 
-            client = _test_client()
+            client = real_api_client
             resp = client.get(
                 f"/api/files/{file_id}",
                 cookies={"dsession": raw_token},
@@ -181,26 +179,26 @@ class TestDownloadEndpoint:
         finally:
             backend.delete(key)
 
-    def test_no_session_returns_403(self, db_engine):
-        client = _test_client()
+    def test_no_session_returns_403(self, db_engine, real_api_client):
+        client = real_api_client
         resp = client.get(f"/api/files/{uuid4()}")
         assert resp.status_code == 403
 
-    def test_no_permission_returns_403(self, db_engine):
+    def test_no_permission_returns_403(self, db_engine, real_api_client):
         with Session(db_engine) as session:
             user = _create_user(session, f"dl_nop_{uuid4().hex[:6]}")
             raw_token = uuid4().hex
             _create_session_row(session, user.id, raw_token)
             session.commit()
 
-        client = _test_client()
+        client = real_api_client
         resp = client.get(
             f"/api/files/{uuid4()}",
             cookies={"dsession": raw_token},
         )
         assert resp.status_code == 403
 
-    def test_missing_file_returns_404(self, db_engine):
+    def test_missing_file_returns_404(self, db_engine, real_api_client):
         with Session(db_engine) as session:
             user = _create_user(session, f"dl_nf_{uuid4().hex[:6]}")
             raw_token = uuid4().hex
@@ -208,14 +206,14 @@ class TestDownloadEndpoint:
             _grant_file_read(session, user.id)
             session.commit()
 
-        client = _test_client()
+        client = real_api_client
         resp = client.get(
             f"/api/files/{uuid4()}",
             cookies={"dsession": raw_token},
         )
         assert resp.status_code == 404
 
-    def test_non_registrar_cannot_download_letterhead(self, db_engine):
+    def test_non_registrar_cannot_download_letterhead(self, db_engine, real_api_client):
         """§9.3 regression: user with file_asset:read but no letterhead_asset:read
         must be denied access to files with purpose='letterhead'."""
         backend = get_storage_backend()
@@ -232,7 +230,7 @@ class TestDownloadEndpoint:
                 file_id = fa.id
                 session.commit()
 
-            client = _test_client()
+            client = real_api_client
             resp = client.get(
                 f"/api/files/{file_id}",
                 cookies={"dsession": raw_token},
@@ -241,7 +239,7 @@ class TestDownloadEndpoint:
         finally:
             backend.delete(key)
 
-    def test_registrar_can_download_letterhead(self, db_engine):
+    def test_registrar_can_download_letterhead(self, db_engine, real_api_client):
         """Registrar with letterhead_asset:read passes the escalation check."""
         backend = get_storage_backend()
         key = f"test_lhr_{uuid4().hex}"
@@ -258,7 +256,7 @@ class TestDownloadEndpoint:
                 file_id = fa.id
                 session.commit()
 
-            client = _test_client()
+            client = real_api_client
             resp = client.get(
                 f"/api/files/{file_id}",
                 cookies={"dsession": raw_token},
@@ -268,7 +266,7 @@ class TestDownloadEndpoint:
         finally:
             backend.delete(key)
 
-    def test_non_iqac_cannot_download_template(self, db_engine):
+    def test_non_iqac_cannot_download_template(self, db_engine, real_api_client):
         """User with file_asset:read but no template_asset:read
         must be denied access to files with purpose='template'."""
         backend = get_storage_backend()
@@ -285,7 +283,7 @@ class TestDownloadEndpoint:
                 file_id = fa.id
                 session.commit()
 
-            client = _test_client()
+            client = real_api_client
             resp = client.get(
                 f"/api/files/{file_id}",
                 cookies={"dsession": raw_token},
@@ -294,7 +292,7 @@ class TestDownloadEndpoint:
         finally:
             backend.delete(key)
 
-    def test_iqac_can_download_template(self, db_engine):
+    def test_iqac_can_download_template(self, db_engine, real_api_client):
         """IQAC with template_asset:read passes the escalation check."""
         backend = get_storage_backend()
         key = f"test_tplr_{uuid4().hex}"
@@ -311,7 +309,7 @@ class TestDownloadEndpoint:
                 file_id = fa.id
                 session.commit()
 
-            client = _test_client()
+            client = real_api_client
             resp = client.get(
                 f"/api/files/{file_id}",
                 cookies={"dsession": raw_token},
