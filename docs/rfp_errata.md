@@ -100,3 +100,82 @@ The three phases are:
 Each confirm action is irreversible and triggers a phase-transition email notification to the next phase's roles.
 
 **Disposition**: M4 (shipped). Entry types are a fixed code-defined set (`ENTRY_TYPE_ROLE_MAP`); adding or changing types requires a code change. See `docs/milestones/M4.md` Session 5 for implementation detail and `docs/modules/configuration.md` → "Three-Phase Calendar Collaboration Chain" for the canonical reference.
+
+---
+
+## E-003 — VisitingFaculty / adjunct / guest / contract / honorary faculty entity
+
+**Status**: Acknowledged. M5b in scope.
+
+**Source**: Original informal requirements
+(`docs/durgam_informal_requirements.docx`), Configuration Module section:
+
+> "Dept HoD/AHoD/HoD office should be able to manage the visiting
+> faculty/adjunct faculty/guest faculty/contract faculty/honorary faculty
+> of their department. Name, designation, organization, expertise,
+> available from when to when, approved by admin or not. During course
+> allocation in department module, the faculty whose availability is valid
+> shall be pulled in."
+
+**Gap in v3 RFP**: §9.3 lists course allocation pulling from a faculty pool
+including "visiting/adjunct/guest with valid availability dates" (§9.10
+Department module), but neither §8 nor §9.3 defines a configuration entity to
+hold these people. They are NOT system Faculty (no User account, no M10
+Faculty record) — they are inline-stored external personnel. The v3 coverage
+matrix omitted the entity entirely.
+
+**Disposition for M5b**: Add a `VisitingFaculty` entity in the configuration
+module.
+- Managed by: HoD, AHoD, HoD Office (scoped to their department).
+- Fields: department_id (FK), name, designation, organization, expertise,
+  available_from (date), available_to (date), is_admin_approved (bool), plus
+  TimestampedSoftDelete mixin.
+- AY-relevance: availability is date-windowed, not AY-locked (a visiting
+  faculty's window may straddle AYs); no AY-immutability rule applies.
+- Does NOT depend on M10 Faculty — details are stored inline. This makes it
+  M5-ready, unlike the mentor/class-teacher assignments.
+- Feeds M13 course allocation (the "valid availability" filter) — M13
+  consumes; M5b stores.
+
+**M5b planning prompt must address**: whether `is_admin_approved` uses a
+simple boolean set by SYSTEM_ADMIN, or routes through the approval engine
+(recommend: simple boolean at M5b; approval-routed admin sign-off is a
+possible M7+ enhancement, not required by the source).
+
+---
+
+## E-004 — RoleEmail model diverges from §8.5 canonical schema; NULL-scope uniqueness gap
+
+**Status**: Acknowledged. M5a in scope.
+
+**Source**: Code review at M5 planning, against RFP §8.5 and the M0 inherited
+note in `docs/milestones/M5.md`.
+
+**Gap**: The current `RoleEmail` model (`durgam/models/config_anchors.py`)
+diverges from the §8.5 canonical definition in two ways:
+1. It uses an `int` primary key and plain `SQLModel` base, where §8.5
+   specifies `TimestampedSoftDelete` (UUID PK + audit + soft-delete columns).
+   Every other config entity uses the mixin. RoleEmail was created as a
+   bootstrap artifact at M4 to support calendar phase-transition emails.
+2. Its unique constraint `(role_code, scope_type, scope_id)` does NOT prevent
+   duplicate NULL-scope rows: in PostgreSQL, NULL != NULL, so two rows with
+   the same role_code and NULL scope_type/scope_id both satisfy the
+   constraint. The M0 inherited note flagged this: "resolve RoleEmail
+   NULL-scope constraint before role-email assignment goes live."
+
+**Disposition for M5a**: Before building the RoleEmail management UI:
+1. Migrate RoleEmail to TimestampedSoftDelete (UUID PK, audit columns,
+   soft-delete) to match §8.5. Alembic migration must preserve the M4
+   bootstrap placeholder rows (re-key from int to UUID; the calendar email
+   lookups read by (role_code, scope) not by id, so the re-key is safe —
+   verify in migration test).
+2. Fix the NULL-scope gap with a partial unique index:
+   `CREATE UNIQUE INDEX uq_role_emails_global ON role_emails (role_code)
+    WHERE scope_type IS NULL AND is_deleted = false;`
+   plus the existing scoped constraint for non-NULL scopes (also made partial
+   on is_deleted = false to match the soft-delete pattern used elsewhere).
+
+**M5a planning prompt must address**: migration ordering (the RoleEmail re-key
+must run and be verified before the management UI is wired), and confirm the
+M4 calendar phase-transition email lookups still resolve after the re-key (an
+integration test asserting this).
