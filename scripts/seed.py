@@ -658,14 +658,18 @@ def seed(session: Session) -> dict[str, int]:
     _seed_actor_id = sys_admin_user.id if sys_admin_user else None
 
     # ── Placeholder LetterheadAsset ──────────────────────────────────────────
-    # A tiny 1×1 transparent PNG so the gate demo has a downloadable letterhead.
+    # A minimal DOCX so the gate demo has a downloadable letterhead template.
+    from io import BytesIO as _LH_BytesIO
 
-    _PLACEHOLDER_PNG = (
-        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
-        b"\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89"
-        b"\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01"
-        b"\r\n\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
-    )
+    from docx import Document as _LH_Document
+
+    _lh_doc = _LH_Document()
+    _lh_doc.add_paragraph("Placeholder letterhead template — replace via admin UI.")
+    _lh_buf = _LH_BytesIO()
+    _lh_doc.save(_lh_buf)
+    _PLACEHOLDER_DOCX = _lh_buf.getvalue()
+    _DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
     existing_lh = session.exec(
         select(LetterheadAsset).where(
             LetterheadAsset.role_code == "REGISTRAR",
@@ -676,14 +680,14 @@ def seed(session: Session) -> dict[str, int]:
     lh_inserted = 0
     if existing_lh is None:
         storage_key = uuid4().hex
-        sha = hashlib.sha256(_PLACEHOLDER_PNG).hexdigest()
-        backend.put(storage_key, _PLACEHOLDER_PNG, "image/png")
+        sha = hashlib.sha256(_PLACEHOLDER_DOCX).hexdigest()
+        backend.put(storage_key, _PLACEHOLDER_DOCX, _DOCX_MIME)
 
         fa = FileAsset(
             storage_key=storage_key,
-            original_name="placeholder_letterhead.png",
-            mime_type="image/png",
-            size_bytes=len(_PLACEHOLDER_PNG),
+            original_name="placeholder_letterhead.docx",
+            mime_type=_DOCX_MIME,
+            size_bytes=len(_PLACEHOLDER_DOCX),
             sha256=sha,
             owner_user_id=_seed_actor_id,
             purpose="letterhead",

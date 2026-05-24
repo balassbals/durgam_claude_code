@@ -15,7 +15,9 @@ from durgam.services.upload import UploadService
 
 log = structlog.get_logger(__name__)
 
-_LETTERHEAD_MIMES = frozenset({"image/png", "image/jpeg", "application/pdf"})
+_LETTERHEAD_MIMES = frozenset({
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+})
 _MAX_SIZE_MB = 5
 
 

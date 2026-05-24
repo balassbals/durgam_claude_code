@@ -59,7 +59,7 @@ from tests.e2e._helpers import (
     _wait_for_admin_page,
 )
 
-_TEST_PNG = str(Path(__file__).parent / "_test_letterhead.png")
+_TEST_LH_DOCX = str(Path(__file__).parent / "_test_letterhead.docx")
 _TEST_DOCX = str(Path(__file__).parent / "_test_template.docx")
 
 pytestmark = pytest.mark.skipif(
@@ -777,7 +777,7 @@ class TestLetterheadConfig:
 
             # Upload file via hidden <input type="file"> rendered by react-dropzone.
             file_input = page.locator("input[type='file']")
-            file_input.set_input_files(_TEST_PNG)
+            file_input.set_input_files(_TEST_LH_DOCX)
 
             # Wait for upload success toast
             expect(

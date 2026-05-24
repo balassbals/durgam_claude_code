@@ -72,7 +72,9 @@ def test_at_most_one_active_per_role_scope(ops):
     for role_code, action in ops:
         if action == "upload":
             svc.upload_letterhead(
-                role_code, b"data", "f.png", "image/png", actor,
+                role_code, b"data", "f.docx",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                actor,
             )
         elif action == "delete":
             existing = active.get((role_code, None, None))

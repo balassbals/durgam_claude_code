@@ -210,9 +210,11 @@ downloading restricted assets.
 ## Docgen Merge Primitive (M5a)
 
 `durgam.docgen.merge.merge_letterhead_and_content(letterhead_bytes, content_blocks)`
-creates a DOCX with the letterhead image in the document header and content blocks
-(heading / paragraph / table) in the body. PNG/JPG letterheads only; PDF raises
-`DocgenError` (TD-012).
+creates a DOCX with a letterhead image in the document header and content blocks
+(heading / paragraph / table) in the body. Accepts PNG/JPG image bytes only.
+Letterheads are now stored as DOCX templates (E-005), so this image-based primitive
+is not used with stored letterheads. DOCX-to-DOCX merge deferred to M5b (TD-012
+superseded by E-005).
 
 ---
 

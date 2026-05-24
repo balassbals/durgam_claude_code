@@ -7,6 +7,8 @@ import pytest
 
 from durgam.services.letterhead_asset import LetterheadAssetService, LetterheadError
 
+_DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
 
 def _make_svc(repo=None, upload_svc=None) -> LetterheadAssetService:
     return LetterheadAssetService(
@@ -19,24 +21,29 @@ class TestUploadLetterhead:
     def test_empty_role_code_raises(self):
         svc = _make_svc()
         with pytest.raises(LetterheadError, match="Role code is required"):
-            svc.upload_letterhead("", b"data", "f.png", "image/png", uuid4())
+            svc.upload_letterhead("", b"data", "f.docx", _DOCX_MIME, uuid4())
 
     def test_invalid_mime_raises(self):
         svc = _make_svc()
         with pytest.raises(LetterheadError, match="not allowed"):
             svc.upload_letterhead("REGISTRAR", b"data", "f.txt", "text/plain", uuid4())
 
+    def test_image_mime_rejected(self):
+        svc = _make_svc()
+        with pytest.raises(LetterheadError, match="not allowed"):
+            svc.upload_letterhead("REGISTRAR", b"data", "f.png", "image/png", uuid4())
+
     def test_too_large_raises(self):
         svc = _make_svc()
         big = b"x" * (6 * 1024 * 1024)
         with pytest.raises(LetterheadError, match="5 MB"):
-            svc.upload_letterhead("REGISTRAR", big, "f.png", "image/png", uuid4())
+            svc.upload_letterhead("REGISTRAR", big, "f.docx", _DOCX_MIME, uuid4())
 
     def test_scope_type_without_scope_id_raises(self):
         svc = _make_svc()
         with pytest.raises(LetterheadError, match="scope_type and scope_id"):
             svc.upload_letterhead(
-                "HOD", b"data", "f.png", "image/png", uuid4(),
+                "HOD", b"data", "f.docx", _DOCX_MIME, uuid4(),
                 scope_type="department",
             )
 
@@ -51,7 +58,7 @@ class TestUploadLetterhead:
         repo.save.side_effect = lambda r: r
         svc = _make_svc(repo, upload_svc)
 
-        svc.upload_letterhead("REGISTRAR", b"data", "f.png", "image/png", uuid4())
+        svc.upload_letterhead("REGISTRAR", b"data", "f.docx", _DOCX_MIME, uuid4())
         repo.soft_delete.assert_called_once_with(old, ANY)
 
     def test_success_saves_and_returns(self):
@@ -64,7 +71,7 @@ class TestUploadLetterhead:
         repo.save.side_effect = lambda r: r
         svc = _make_svc(repo, upload_svc)
 
-        result = svc.upload_letterhead("registrar", b"data", "f.png", "image/png", uuid4())
+        result = svc.upload_letterhead("registrar", b"data", "f.docx", _DOCX_MIME, uuid4())
         assert result.role_code == "REGISTRAR"
         assert result.file_id == file_asset.id
         repo.save.assert_called_once()

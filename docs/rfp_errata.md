@@ -179,3 +179,36 @@ diverges from the §8.5 canonical definition in two ways:
 must run and be verified before the management UI is wired), and confirm the
 M4 calendar phase-transition email lookups still resolve after the re-key (an
 integration test asserting this).
+
+---
+
+## E-005 — LetterheadAsset and TemplateAsset are both DOCX; unification deferred to M5b
+
+**Status**: Acknowledged. M5b in scope.
+
+**Source**: Stakeholder confirmation during M5a gate verification. The
+institution's letterheads are DOCX templates (not images or PDFs as originally
+assumed from §9.3's phrasing "identity assets — letterheads, stamps, seals").
+
+**Gap in v3 RFP**: §9.3 describes letterheads as "identity assets" alongside
+stamps and seals, implying image files (PNG/JPG/PDF). The actual stakeholder
+workflow is: a DOCX template contains the letterhead formatting (header, footer,
+institutional branding), and document generation merges content into this
+template. This makes LetterheadAsset and TemplateAsset structurally identical —
+both store DOCX files, both are role-scoped, both use the same upload/replace/
+deactivate lifecycle.
+
+**Disposition**:
+- **M5a (done)**: LetterheadAsset MIME filter changed from PNG/JPG/PDF to DOCX
+  only. The existing `merge_letterhead_and_content()` docgen primitive (which
+  inserts a letterhead IMAGE into a DOCX header) is no longer usable with DOCX
+  letterheads. It remains in the codebase as a working image-merge primitive
+  but is not called by any production code path at M5a.
+- **M5b (planned)**: Evaluate unifying LetterheadAsset and TemplateAsset into a
+  single `DocumentTemplate` model with a `purpose` discriminator (letterhead,
+  bos, mom, vac). Update the docgen merge to accept a DOCX base template
+  instead of an image. This is the natural refactoring point since M5b adds
+  bulk import and additional config entities.
+- **TD-012 superseded**: The original TD-012 ("PDF letterheads in docgen merge")
+  is no longer relevant — letterheads are DOCX, not PDF. The new concern is
+  DOCX-to-DOCX merge, addressed at M5b via E-005.

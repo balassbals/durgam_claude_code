@@ -115,11 +115,9 @@ def _inline_form() -> rx.Component:
                     file_upload_zone(
                         on_drop=LetterheadConfigState.upload_letterhead,  # type: ignore[arg-type]
                         accept={
-                            "image/png": [".png"],
-                            "image/jpeg": [".jpg", ".jpeg"],
-                            "application/pdf": [".pdf"],
+                            "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
                         },
-                        label="Drag & drop a letterhead image (PNG, JPG, PDF ≤ 5 MB)",
+                        label="Drag & drop a letterhead DOCX template (≤ 5 MB)",
                     ),
                     rx.box(
                         rx.text(

@@ -58,7 +58,7 @@
 
 ## Tech Debt Recorded
 
-- **TD-012**: PDF letterheads accepted for storage but `merge_letterhead_and_content()` raises `DocgenError` if called with `mime_type="application/pdf"`. Add `pdf2image` + `poppler-utils` when PDF merge is needed.
+- **TD-012**: Superseded by E-005. Letterheads changed from image (PNG/JPG/PDF) to DOCX-only per stakeholder confirmation. The image-based `merge_letterhead_and_content()` is no longer usable with stored letterheads. DOCX-to-DOCX merge deferred to M5b.
 - **TD-013**: Download endpoint registered via `app._api.add_route()` (private Reflex attribute). Re-verify on any Reflex version bump.
 
 ## Gate Checklist

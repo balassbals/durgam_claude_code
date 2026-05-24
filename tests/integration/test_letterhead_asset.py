@@ -43,12 +43,8 @@ def _svc(session) -> LetterheadAssetService:
     )
 
 
-_PNG_1X1 = (
-    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
-    b"\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89"
-    b"\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01"
-    b"\r\n\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
-)
+_DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+_TEST_BYTES = b"PK\x03\x04fake-docx-bytes-for-testing"
 
 
 class TestUploadPipeline:
@@ -56,22 +52,22 @@ class TestUploadPipeline:
         user = _user(db_session)
         svc = _svc(db_session)
         lh = svc.upload_letterhead(
-            "TEST_LH", _PNG_1X1, "test.png", "image/png", user.id,
+            "TEST_LH", _TEST_BYTES, "test.docx", _DOCX_MIME, user.id,
         )
         assert lh.role_code == "TEST_LH"
         assert lh.file_id is not None
         fa = db_session.get(FileAsset, lh.file_id)
         assert fa is not None
-        assert fa.mime_type == "image/png"
+        assert fa.mime_type == _DOCX_MIME
 
     def test_replace_soft_deletes_old(self, db_session):
         user = _user(db_session)
         svc = _svc(db_session)
         old = svc.upload_letterhead(
-            "REPLACE_LH", _PNG_1X1, "old.png", "image/png", user.id,
+            "REPLACE_LH", _TEST_BYTES, "old.docx", _DOCX_MIME, user.id,
         )
         new = svc.upload_letterhead(
-            "REPLACE_LH", _PNG_1X1, "new.png", "image/png", user.id,
+            "REPLACE_LH", _TEST_BYTES, "new.docx", _DOCX_MIME, user.id,
         )
         db_session.refresh(old)
         assert old.is_deleted is True
@@ -83,14 +79,14 @@ class TestPartialUniqueIndexes:
     def test_global_duplicate_prevented(self, db_session):
         """Two active NULL-scope rows for same role_code must be rejected."""
         user = _user(db_session)
-        sha = hashlib.sha256(_PNG_1X1).hexdigest()
+        sha = hashlib.sha256(_TEST_BYTES).hexdigest()
 
         def _make_fa():
             fa = FileAsset(
                 storage_key=uuid4().hex,
-                original_name="lh.png",
-                mime_type="image/png",
-                size_bytes=len(_PNG_1X1),
+                original_name="lh.docx",
+                mime_type=_DOCX_MIME,
+                size_bytes=len(_TEST_BYTES),
                 sha256=sha,
                 owner_user_id=user.id,
                 purpose="letterhead",
@@ -115,27 +111,27 @@ class TestPartialUniqueIndexes:
         user = _user(db_session)
         svc = _svc(db_session)
         old = svc.upload_letterhead(
-            "SD_LH", _PNG_1X1, "old.png", "image/png", user.id,
+            "SD_LH", _TEST_BYTES, "old.docx", _DOCX_MIME, user.id,
         )
         repo = LetterheadAssetRepository(db_session)
         repo.soft_delete(old, user.id)
         db_session.flush()
         new = svc.upload_letterhead(
-            "SD_LH", _PNG_1X1, "new.png", "image/png", user.id,
+            "SD_LH", _TEST_BYTES, "new.docx", _DOCX_MIME, user.id,
         )
         assert new.id != old.id
 
     def test_scoped_duplicate_prevented(self, db_session):
         user = _user(db_session)
-        sha = hashlib.sha256(_PNG_1X1).hexdigest()
+        sha = hashlib.sha256(_TEST_BYTES).hexdigest()
         dept_id = uuid4()
 
         def _make_fa():
             fa = FileAsset(
                 storage_key=uuid4().hex,
-                original_name="lh.png",
-                mime_type="image/png",
-                size_bytes=len(_PNG_1X1),
+                original_name="lh.docx",
+                mime_type=_DOCX_MIME,
+                size_bytes=len(_TEST_BYTES),
                 sha256=sha,
                 owner_user_id=user.id,
             )
@@ -165,10 +161,10 @@ class TestPartialUniqueIndexes:
         user = _user(db_session)
         svc = _svc(db_session)
         svc.upload_letterhead(
-            "HOD", _PNG_1X1, "lh1.png", "image/png", user.id,
+            "HOD", _TEST_BYTES, "lh1.docx", _DOCX_MIME, user.id,
             scope_type="department", scope_id=uuid4(),
         )
         svc.upload_letterhead(
-            "HOD", _PNG_1X1, "lh2.png", "image/png", user.id,
+            "HOD", _TEST_BYTES, "lh2.docx", _DOCX_MIME, user.id,
             scope_type="department", scope_id=uuid4(),
         )

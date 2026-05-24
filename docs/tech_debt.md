@@ -248,30 +248,21 @@ risk and the version-pinning discipline in CLAUDE.md "Milestone discipline").
 
 ---
 
-### TD-012 — PDF letterheads not supported in docgen merge
+### TD-012 — Docgen merge assumes image letterheads; letterheads are now DOCX
+
+**Status:** Superseded by E-005.
 
 **Location:** `durgam/docgen/merge.py` (`merge_letterhead_and_content()`)
 
-**What it is:** The docgen merge primitive inserts a letterhead image into a
-DOCX document header using python-docx. PNG and JPG letterheads work
-directly. PDF letterheads require converting the first page to an image
-via `pdf2image` + system-level `poppler-utils`, neither of which is
-installed. The upload UI accepts PDF letterheads for storage (they are
-valid assets), but `merge_letterhead_and_content()` raises `DocgenError`
-if called with `mime_type="application/pdf"`.
+**What it is:** The docgen merge primitive was built to insert a letterhead
+IMAGE (PNG/JPG) into a DOCX header. At M5a gate verification, stakeholders
+confirmed letterheads are actually DOCX templates, not images. The MIME
+filter was changed to DOCX-only; the image-based merge primitive is no
+longer usable with stored letterheads.
 
-**Why this is not a blocker now:** No M5a consumer calls merge with a PDF
-letterhead. The mental-health counsellor roster (M5b) and future docgen
-consumers can use PNG/JPG letterheads. The error message is explicit and
-directs the user to re-upload in a supported format.
-
-**Fix:** `uv add pdf2image`, install `poppler-utils` in the Docker image,
-and add a PDF-to-image conversion step at the top of
-`merge_letterhead_and_content()` when `mime_type == "application/pdf"`.
-
-**Trigger to re-open:** A downstream milestone requires merging a PDF
-letterhead, or a stakeholder reports that their only letterhead source is
-PDF.
+**Fix:** At M5b (per E-005), update docgen to accept a DOCX base template
+and merge content into it, replacing the image-insertion approach. Evaluate
+unifying LetterheadAsset and TemplateAsset into a single model.
 
 ---
 

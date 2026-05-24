@@ -91,7 +91,7 @@ E-004 (RoleEmail) bind to this split.
 | Holiday management | §9.3 | M4 | Shipped at M4 | AY-scoped CRUD; separate Holiday model (not CalendarEntry type) |
 | Calendar exports (CSV/Excel/PDF/DOCX) | §9.3 | M4 | Shipped at M4 | CalendarExportService + rx.download via bytes data |
 | Phase-transition email notifications | §9.3 | M4 | Shipped at M4 | Registrar confirm → IQAC notified; IQAC confirm → Phase 3 roles notified; reads RoleEmail bootstrap placeholders; fire-and-forget via asyncio.create_task |
-| Letterheads / templates used for docgen (not directly visible to other roles) | §9.3 | M5a | Shipped at M5a | `merge_letterhead_and_content()` docgen primitive; PNG/JPG only (PDF → DocgenError TD-012); purpose-based download permission escalation |
+| Letterheads / templates used for docgen (not directly visible to other roles) | §9.3 | M5a | Shipped at M5a | Letterheads are DOCX templates (E-005); image-based merge primitive exists but not used with DOCX letterheads (TD-012 superseded by E-005); purpose-based download permission escalation |
 | Mental-health counsellor roster downloadable as DOCX (Director letterhead, AY-scoped) | §9.3 | M5b | Planned for M5b | Immutable on AY rollover |
 | Class teacher assignments auto-flow into faculty workload | §9.3 | M5b | Planned for M5b | Requires Faculty (M10) model |
 | UG timetable configured by Director, auto-projected to dept timetables | §9.3 | M5b | Planned for M5b | Requires Student (M12) model |
