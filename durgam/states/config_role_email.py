@@ -190,14 +190,14 @@ class RoleEmailConfigState(BaseState):
                         actor_id,
                     )
                 session.commit()
+            self.show_form = False
+            self.editing_id = ""
+            await self.load_role_emails()
             self.flash = "Role email saved."
             self.flash_type = "success"
         except RoleEmailError as e:
             self.flash = e.message
             self.flash_type = "error"
-        self.show_form = False
-        self.editing_id = ""
-        await self.load_role_emails()
 
     def open_deactivate_confirm(self, record_id: str, role_code: str) -> None:
         self.confirm_id = record_id
@@ -214,14 +214,16 @@ class RoleEmailConfigState(BaseState):
                     UUID(self.confirm_id), UUID(self.current_user_id)
                 )
                 session.commit()
+            self.confirm_open = False
+            self.confirm_id = ""
+            await self.load_role_emails()
             self.flash = "Role email deactivated."
             self.flash_type = "success"
         except RoleEmailError as e:
             self.flash = e.message
             self.flash_type = "error"
-        self.confirm_open = False
-        self.confirm_id = ""
-        await self.load_role_emails()
+            self.confirm_open = False
+            self.confirm_id = ""
 
     def cancel_confirm(self) -> None:
         self.confirm_open = False
