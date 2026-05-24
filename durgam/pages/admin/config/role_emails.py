@@ -65,27 +65,27 @@ def _inline_form() -> rx.Component:
                 margin_bottom="1rem",
             ),
             rx.form(
+                rx.el.input(
+                    type="hidden",
+                    name="editing_id",
+                    value=RoleEmailConfigState.editing_id,
+                ),
+                rx.el.input(
+                    type="hidden",
+                    name="form_role_code",
+                    value=RoleEmailConfigState.form_role_code,
+                ),
+                rx.el.input(
+                    type="hidden",
+                    name="form_scope_type",
+                    value=RoleEmailConfigState.form_scope_type,
+                ),
+                rx.el.input(
+                    type="hidden",
+                    name="form_scope_id",
+                    value=RoleEmailConfigState.form_scope_id,
+                ),
                 rx.vstack(
-                    rx.input(
-                        type="hidden",
-                        name="editing_id",
-                        value=RoleEmailConfigState.editing_id,
-                    ),
-                    rx.input(
-                        type="hidden",
-                        name="form_role_code",
-                        value=RoleEmailConfigState.form_role_code,
-                    ),
-                    rx.input(
-                        type="hidden",
-                        name="form_scope_type",
-                        value=RoleEmailConfigState.form_scope_type,
-                    ),
-                    rx.input(
-                        type="hidden",
-                        name="form_scope_id",
-                        value=RoleEmailConfigState.form_scope_id,
-                    ),
                     rx.vstack(
                         rx.text("Role", font_size="0.85rem", color="var(--color-muted)"),
                         rx.select.root(
