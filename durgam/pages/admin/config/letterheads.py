@@ -2,7 +2,7 @@
 
 import reflex as rx
 
-_API_URL = rx.config.get_config().api_url
+from durgam.api import DOWNLOAD_PREFIX
 
 from durgam.pages.components import (
     admin_page,
@@ -38,7 +38,7 @@ def _kebab(row: dict) -> rx.Component:
                 on_click=rx.redirect(
                     rx.cond(
                         row["file_id"] != "",
-                        _API_URL + "/api/files/" + row["file_id"],
+                        DOWNLOAD_PREFIX + "/api/files/" + row["file_id"],
                         "#",
                     )
                 ),
