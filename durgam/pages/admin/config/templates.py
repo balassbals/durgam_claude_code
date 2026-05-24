@@ -166,7 +166,7 @@ def _inline_form() -> rx.Component:
                     primary_btn(
                         "Upload",
                         on_click=TemplateConfigState.upload_template(  # type: ignore[call-arg]
-                            rx.upload_files(upload=_TPL_UPLOAD_ID),
+                            rx.upload_files(upload_id=_TPL_UPLOAD_ID),
                         ),
                         type="button",
                     ),

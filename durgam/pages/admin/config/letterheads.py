@@ -165,7 +165,7 @@ def _inline_form() -> rx.Component:
                     primary_btn(
                         "Upload",
                         on_click=LetterheadConfigState.upload_letterhead(  # type: ignore[call-arg]
-                            rx.upload_files(upload=_LH_UPLOAD_ID),
+                            rx.upload_files(upload_id=_LH_UPLOAD_ID),
                         ),
                         type="button",
                     ),
