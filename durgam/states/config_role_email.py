@@ -10,6 +10,7 @@ from durgam.auth.decorators import audit_action, require_role
 from durgam.db import open_session
 from durgam.repositories.campus import CampusRepository
 from durgam.repositories.department import DepartmentRepository
+from durgam.repositories.permission import PermissionRepository
 from durgam.repositories.role import RoleRepository
 from durgam.repositories.role_email import RoleEmailRepository
 from durgam.repositories.school import SchoolRepository
@@ -50,7 +51,9 @@ class RoleEmailConfigState(BaseState):
         with open_session() as session:
             self.roles_dropdown = [
                 {"id": r.code, "label": f"{r.code} — {r.name}"}
-                for r in RoleAdminService(RoleRepository(session)).list_roles()
+                for r in RoleAdminService(
+                    RoleRepository(session), PermissionRepository(session),
+                ).list_roles()
             ]
 
     def _load_scope_objects(self) -> None:
