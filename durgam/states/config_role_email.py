@@ -6,6 +6,8 @@ from uuid import UUID
 
 import reflex as rx
 
+from sqlalchemy.exc import IntegrityError
+
 from durgam.auth.decorators import audit_action, require_role
 from durgam.db import open_session
 from durgam.repositories.campus import CampusRepository
@@ -197,6 +199,12 @@ class RoleEmailConfigState(BaseState):
             self.flash_type = "success"
         except RoleEmailError as e:
             self.flash = e.message
+            self.flash_type = "error"
+        except IntegrityError:
+            self.flash = (
+                "A role email for this role and scope already exists. "
+                "Edit the existing entry instead."
+            )
             self.flash_type = "error"
 
     def open_deactivate_confirm(self, record_id: str, role_code: str) -> None:
