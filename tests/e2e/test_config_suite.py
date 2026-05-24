@@ -766,18 +766,18 @@ class TestLetterheadConfig:
                 page.get_by_role("heading", name="Upload Letterhead")
             ).to_be_visible(timeout=5_000)
 
-            # Fill role code — wait for the value to round-trip through Reflex
-            # state before triggering the upload. Without this, set_input_files
-            # fires on_drop before the on_change for role_code has been processed
-            # by the server, and the handler sees an empty role code.
+            # Fill role code
             role_input = page.get_by_placeholder("e.g. REGISTRAR")
             role_input.fill(_LH_TEST_ROLE)
             expect(role_input).to_have_value(_LH_TEST_ROLE, timeout=5_000)
             page.wait_for_timeout(500)
 
-            # Upload file via hidden <input type="file"> rendered by react-dropzone.
+            # Stage file via hidden <input type="file"> rendered by react-dropzone.
             file_input = page.locator("input[type='file']")
             file_input.set_input_files(_TEST_LH_DOCX)
+
+            # Click Upload to commit the staged file
+            page.get_by_role("button", name="Upload").click()
 
             # Wait for upload success toast
             expect(
@@ -834,9 +834,12 @@ class TestTemplateConfig:
             page.get_by_role("option", name="BOS").click()
             page.wait_for_timeout(500)
 
-            # Upload DOCX file
+            # Stage DOCX file
             file_input = page.locator("input[type='file']")
             file_input.set_input_files(_TEST_DOCX)
+
+            # Click Upload to commit the staged file
+            page.get_by_role("button", name="Upload").click()
 
             # Wait for upload success toast
             expect(

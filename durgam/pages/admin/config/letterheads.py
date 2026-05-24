@@ -54,6 +54,9 @@ def _kebab(row: dict) -> rx.Component:
     )
 
 
+_LH_UPLOAD_ID = "letterhead_upload"
+
+
 def _inline_form() -> rx.Component:
     return form_modal(
         content=rx.vstack(
@@ -112,12 +115,38 @@ def _inline_form() -> rx.Component:
                 ),
                 rx.cond(
                     LetterheadConfigState.form_role_code != "",
-                    file_upload_zone(
-                        on_drop=LetterheadConfigState.upload_letterhead,  # type: ignore[arg-type]
-                        accept={
-                            "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
-                        },
-                        label="Drag & drop a letterhead DOCX template (≤ 5 MB)",
+                    rx.vstack(
+                        file_upload_zone(
+                            upload_id=_LH_UPLOAD_ID,
+                            accept={
+                                "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
+                            },
+                            label="Drag & drop a letterhead DOCX template (≤ 5 MB)",
+                        ),
+                        rx.cond(
+                            rx.selected_files(_LH_UPLOAD_ID).length() > 0,
+                            rx.hstack(
+                                rx.text(
+                                    rx.selected_files(_LH_UPLOAD_ID)[0],
+                                    font_size="0.85rem",
+                                    color="var(--color-body)",
+                                ),
+                                rx.button(
+                                    "✕",
+                                    on_click=rx.clear_selected_files(_LH_UPLOAD_ID),
+                                    background="transparent",
+                                    border="none",
+                                    cursor="pointer",
+                                    color="var(--color-muted)",
+                                    font_size="0.85rem",
+                                    padding="0",
+                                ),
+                                align="center",
+                                gap="0.5rem",
+                            ),
+                        ),
+                        gap="0.5rem",
+                        width="100%",
                     ),
                     rx.box(
                         rx.text(
@@ -133,9 +162,19 @@ def _inline_form() -> rx.Component:
                     ),
                 ),
                 rx.hstack(
+                    primary_btn(
+                        "Upload",
+                        on_click=LetterheadConfigState.upload_letterhead(  # type: ignore[call-arg]
+                            rx.upload_files(upload=_LH_UPLOAD_ID),
+                        ),
+                        type="button",
+                    ),
                     secondary_btn(
                         "Cancel",
-                        on_click=LetterheadConfigState.cancel_form,
+                        on_click=[
+                            rx.clear_selected_files(_LH_UPLOAD_ID),
+                            LetterheadConfigState.cancel_form,
+                        ],
                         type="button",
                     ),
                     gap="0.75rem",

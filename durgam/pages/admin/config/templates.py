@@ -68,17 +68,20 @@ def _kebab(row: dict) -> rx.Component:
     )
 
 
+_TPL_UPLOAD_ID = "template_upload"
+
+
 def _upload_zone() -> rx.Component:
     """Upload zone that adapts accept filter based on selected template type."""
     return rx.cond(
         TemplateConfigState.form_template_type == "vac",
         file_upload_zone(
-            on_drop=TemplateConfigState.upload_template,  # type: ignore[arg-type]
+            upload_id=_TPL_UPLOAD_ID,
             accept=_ACCEPT_MAP["vac"],
             label="Drag & drop a PPTX file (≤ 2 MB)",
         ),
         file_upload_zone(
-            on_drop=TemplateConfigState.upload_template,  # type: ignore[arg-type]
+            upload_id=_TPL_UPLOAD_ID,
             accept=_ACCEPT_MAP["bos"],
             label="Drag & drop a DOCX file (≤ 2 MB)",
         ),
@@ -119,7 +122,33 @@ def _inline_form() -> rx.Component:
                 ),
                 rx.cond(
                     TemplateConfigState.form_template_type != "",
-                    _upload_zone(),
+                    rx.vstack(
+                        _upload_zone(),
+                        rx.cond(
+                            rx.selected_files(_TPL_UPLOAD_ID).length() > 0,
+                            rx.hstack(
+                                rx.text(
+                                    rx.selected_files(_TPL_UPLOAD_ID)[0],
+                                    font_size="0.85rem",
+                                    color="var(--color-body)",
+                                ),
+                                rx.button(
+                                    "✕",
+                                    on_click=rx.clear_selected_files(_TPL_UPLOAD_ID),
+                                    background="transparent",
+                                    border="none",
+                                    cursor="pointer",
+                                    color="var(--color-muted)",
+                                    font_size="0.85rem",
+                                    padding="0",
+                                ),
+                                align="center",
+                                gap="0.5rem",
+                            ),
+                        ),
+                        gap="0.5rem",
+                        width="100%",
+                    ),
                     rx.box(
                         rx.text(
                             "Select a template type to enable upload",
@@ -134,9 +163,19 @@ def _inline_form() -> rx.Component:
                     ),
                 ),
                 rx.hstack(
+                    primary_btn(
+                        "Upload",
+                        on_click=TemplateConfigState.upload_template(  # type: ignore[call-arg]
+                            rx.upload_files(upload=_TPL_UPLOAD_ID),
+                        ),
+                        type="button",
+                    ),
                     secondary_btn(
                         "Cancel",
-                        on_click=TemplateConfigState.cancel_form,
+                        on_click=[
+                            rx.clear_selected_files(_TPL_UPLOAD_ID),
+                            TemplateConfigState.cancel_form,
+                        ],
                         type="button",
                     ),
                     gap="0.75rem",
