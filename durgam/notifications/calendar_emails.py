@@ -27,6 +27,7 @@ def _get_role_emails(role_codes: frozenset[str]) -> list[str]:
         rows = session.exec(
             select(RoleEmail).where(
                 RoleEmail.role_code.in_(role_codes),  # type: ignore[union-attr]
+                RoleEmail.is_deleted == False,  # noqa: E712
             )
         ).all()
         return list({r.email for r in rows})

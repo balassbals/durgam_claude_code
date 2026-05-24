@@ -29,10 +29,13 @@ from durgam.models.config_anchors import (
     CalendarEntry,
     ClassTimingsConfig,
     Holiday,
+    LetterheadAsset,
     RoleEmail,
     StudentCategoryCount,
+    TemplateAsset,
     WorkingDaysConfig,
 )
+from durgam.models.crosscutting import FileAsset
 from durgam.models.course import Course
 from durgam.models.department import (
     Department,
@@ -243,6 +246,20 @@ def seed(session: Session) -> dict[str, int]:
         # Student category count
         {"resource": "student_category_count",     "action": "read",      "scope": "*"},
         {"resource": "student_category_count",     "action": "write",     "scope": "*"},
+        # M5a — Role email (not public-read; Registrar family + SysAdmin only)
+        {"resource": "role_email",                 "action": "read",      "scope": "*"},
+        {"resource": "role_email",                 "action": "write",     "scope": "*"},
+        {"resource": "role_email",                 "action": "delete",    "scope": "*"},
+        # M5a — File asset download (public-read for authenticated users)
+        {"resource": "file_asset",                 "action": "read",      "scope": "*"},
+        # M5a — Letterhead asset (Registrar family + SysAdmin only)
+        {"resource": "letterhead_asset",           "action": "read",      "scope": "*"},
+        {"resource": "letterhead_asset",           "action": "write",     "scope": "*"},
+        {"resource": "letterhead_asset",           "action": "delete",    "scope": "*"},
+        # M5a — Template asset (IQAC + SysAdmin only; NOT in _PUBLIC_READ)
+        {"resource": "template_asset",             "action": "read",      "scope": "*"},
+        {"resource": "template_asset",             "action": "write",     "scope": "*"},
+        {"resource": "template_asset",             "action": "delete",    "scope": "*"},
     ]
     perm_inserted = 0
     for p in perms_data:
@@ -290,6 +307,8 @@ def seed(session: Session) -> dict[str, int]:
         ("working_days_config",       "read", "*"),
         ("academic_year",             "read", "*"),
         ("holiday",                   "read", "*"),
+        # M5a — file download permission for all authenticated users
+        ("file_asset",                "read", "*"),
     ]
 
     _REGISTRAR_SPECIFIC = [
@@ -307,6 +326,14 @@ def seed(session: Session) -> dict[str, int]:
         ("holiday",                    "delete",    "*"),
         ("student_category_count",     "read",      "*"),
         ("student_category_count",     "write",     "*"),
+        # M5a — role email management (not in _PUBLIC_READ — internal service lookup only)
+        ("role_email",                 "read",      "*"),
+        ("role_email",                 "write",     "*"),
+        ("role_email",                 "delete",    "*"),
+        # M5a — letterhead asset management (Registrar family + SysAdmin)
+        ("letterhead_asset",           "read",      "*"),
+        ("letterhead_asset",           "write",     "*"),
+        ("letterhead_asset",           "delete",    "*"),
     ]
 
     _HOD_SPECIFIC = [
@@ -337,10 +364,14 @@ def seed(session: Session) -> dict[str, int]:
     ]
 
     # M4 — IQAC can read/write calendar, read student category
+    # M5a — IQAC owns template assets
     _IQAC_SPECIFIC = [
         ("calendar_entry",             "read",      "*"),
         ("calendar_entry",             "write",     "*"),
         ("student_category_count",     "read",      "*"),
+        ("template_asset",             "read",      "*"),
+        ("template_asset",             "write",     "*"),
+        ("template_asset",             "delete",    "*"),
     ]
 
     # M4 — Dean of Student Welfare can read/write calendar, read student category
@@ -594,6 +625,7 @@ def seed(session: Session) -> dict[str, int]:
             select(RoleEmail).where(
                 RoleEmail.role_code == re_data["role_code"],
                 RoleEmail.scope_type.is_(None),  # type: ignore[union-attr]
+                RoleEmail.is_deleted == False,  # noqa: E712
             )
         ).first()
         if existing_re:
@@ -612,6 +644,135 @@ def seed(session: Session) -> dict[str, int]:
             )
             re_inserted += 1
     counts["role_emails"] = re_inserted
+
+    # ── Placeholder assets (letterhead + template) ────────────────────────────
+    import hashlib
+    from uuid import uuid4
+
+    from durgam.storage import get_storage_backend
+
+    backend = get_storage_backend()
+    sys_admin_user = session.exec(
+        select(User).where(User.username == "sys_admin")
+    ).first()
+    _seed_actor_id = sys_admin_user.id if sys_admin_user else None
+
+    # ── Placeholder LetterheadAsset ──────────────────────────────────────────
+    # A minimal DOCX so the gate demo has a downloadable letterhead template.
+    # DB row creation and file-byte writes are decoupled: uploaded_files/ is
+    # gitignored and lost on fresh clone, but the DB persists. The seed must
+    # ensure the physical file exists even when the DB row already does.
+    from io import BytesIO as _LH_BytesIO
+
+    from docx import Document as _LH_Document
+
+    _lh_doc = _LH_Document()
+    _lh_doc.add_paragraph("Placeholder letterhead template — replace via admin UI.")
+    _lh_buf = _LH_BytesIO()
+    _lh_doc.save(_lh_buf)
+    _PLACEHOLDER_DOCX = _lh_buf.getvalue()
+    _DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+    existing_lh = session.exec(
+        select(LetterheadAsset).where(
+            LetterheadAsset.role_code == "REGISTRAR",
+            LetterheadAsset.scope_type.is_(None),  # type: ignore[union-attr]
+            LetterheadAsset.is_deleted == False,  # noqa: E712
+        )
+    ).first()
+    lh_inserted = 0
+    if existing_lh is None:
+        storage_key = uuid4().hex
+        sha = hashlib.sha256(_PLACEHOLDER_DOCX).hexdigest()
+        backend.put(storage_key, _PLACEHOLDER_DOCX, _DOCX_MIME)
+
+        fa = FileAsset(
+            storage_key=storage_key,
+            original_name="placeholder_letterhead.docx",
+            mime_type=_DOCX_MIME,
+            size_bytes=len(_PLACEHOLDER_DOCX),
+            sha256=sha,
+            owner_user_id=_seed_actor_id,
+            purpose="letterhead",
+        )
+        session.add(fa)
+        session.flush()
+        session.refresh(fa)
+
+        lh = LetterheadAsset(
+            role_code="REGISTRAR",
+            scope_type=None,
+            scope_id=None,
+            file_id=fa.id,
+            created_by=_seed_actor_id,
+            updated_by=_seed_actor_id,
+        )
+        session.add(lh)
+        session.flush()
+        lh_inserted = 1
+    else:
+        fa = session.get(FileAsset, existing_lh.file_id)
+        if fa and not backend.exists(fa.storage_key):
+            backend.put(fa.storage_key, _PLACEHOLDER_DOCX, _DOCX_MIME)
+            log.info("seed_file_restored", key=fa.storage_key, asset="letterhead_REGISTRAR")
+    counts["letterhead_assets"] = lh_inserted
+
+    # ── Placeholder TemplateAsset ────────────────────────────────────────────
+    # A minimal DOCX so the gate demo has a downloadable BoS template.
+    # Same decoupled DB-row/file-byte pattern as letterhead above.
+    from io import BytesIO as _BytesIO
+
+    from docx import Document as _Document
+
+    _tpl_doc = _Document()
+    _tpl_doc.add_heading("Board of Studies — Template", level=1)
+    _tpl_doc.add_paragraph("Placeholder template for gate demonstration.")
+    _tpl_buf = _BytesIO()
+    _tpl_doc.save(_tpl_buf)
+    _TPL_DOCX = _tpl_buf.getvalue()
+    _TPL_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+    existing_tpl = session.exec(
+        select(TemplateAsset).where(
+            TemplateAsset.template_type == "bos",
+            TemplateAsset.is_deleted == False,  # noqa: E712
+        )
+    ).first()
+    tpl_inserted = 0
+    if existing_tpl is None:
+        tpl_storage_key = uuid4().hex
+        tpl_sha = hashlib.sha256(_TPL_DOCX).hexdigest()
+
+        backend.put(tpl_storage_key, _TPL_DOCX, _TPL_MIME)
+
+        tpl_fa = FileAsset(
+            storage_key=tpl_storage_key,
+            original_name="bos_template.docx",
+            mime_type=_TPL_MIME,
+            size_bytes=len(_TPL_DOCX),
+            sha256=tpl_sha,
+            owner_user_id=_seed_actor_id,
+            purpose="template",
+        )
+        session.add(tpl_fa)
+        session.flush()
+        session.refresh(tpl_fa)
+
+        tpl = TemplateAsset(
+            template_type="bos",
+            file_id=tpl_fa.id,
+            created_by=_seed_actor_id,
+            updated_by=_seed_actor_id,
+        )
+        session.add(tpl)
+        session.flush()
+        tpl_inserted = 1
+    else:
+        tpl_fa = session.get(FileAsset, existing_tpl.file_id)
+        if tpl_fa and not backend.exists(tpl_fa.storage_key):
+            backend.put(tpl_fa.storage_key, _TPL_DOCX, _TPL_MIME)
+            log.info("seed_file_restored", key=tpl_fa.storage_key, asset="template_bos")
+    counts["template_assets"] = tpl_inserted
 
     # ── StudentCategoryCount ──────────────────────────────────────────────────
     counts["student_category_counts"] = _exec_insert(

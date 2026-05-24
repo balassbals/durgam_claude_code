@@ -87,6 +87,34 @@ class TestMigrations:
         result = _alembic("upgrade", "head")
         assert result.returncode == 0
 
+    def test_m5a_template_assets_table(self):
+        """Verify M5a template_assets migration creates table with partial unique index."""
+        _reset_test_db()
+
+        engine = sqlalchemy.create_engine(settings.test_database_url)
+        try:
+            inspector = sqlalchemy.inspect(engine)
+            assert "template_assets" in inspector.get_table_names()
+
+            cols = {c["name"] for c in inspector.get_columns("template_assets")}
+            for expected in ("id", "template_type", "file_id", "is_deleted", "created_at"):
+                assert expected in cols, f"Missing column: {expected}"
+
+            indexes = inspector.get_indexes("template_assets")
+            idx_names = {idx["name"] for idx in indexes}
+            assert "uq_template_assets_type" in idx_names
+
+            result = _alembic("downgrade", "-1")
+            assert result.returncode == 0, f"downgrade -1 failed:\n{result.stderr}"
+
+            inspector = sqlalchemy.inspect(engine)
+            assert "template_assets" not in inspector.get_table_names()
+
+            result = _alembic("upgrade", "head")
+            assert result.returncode == 0
+        finally:
+            engine.dispose()
+
     def test_m4_calendar_entry_and_ay_master_lock(self):
         """Verify M4 migrations: calendar_entries, master_calendar_locked, iqac_confirmed."""
         _reset_test_db()
@@ -107,6 +135,10 @@ class TestMigrations:
                 "scope_type", "scope_id", "notes",
             ):
                 assert expected in ce_cols, f"Missing column: {expected}"
+
+            # Skip past M5a migrations to reach M4 head before testing M4 downgrades.
+            result = _alembic("downgrade", "8ad8124becda")
+            assert result.returncode == 0, f"downgrade to M4 head failed:\n{result.stderr}"
 
             # Downgrade -1 removes iqac_confirmed (latest M4 migration)
             result = _alembic("downgrade", "-1")

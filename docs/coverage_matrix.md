@@ -12,7 +12,18 @@ status is "In flight at M{N}" reflect the current implementation state.
 
 **M4 gate passed: 2026-05-23.** All M4 rows verified via fresh-clone ritual.
 
-Errata bindings: E-001 (vision/mission) extends the M3 row.
+Errata bindings: E-001 (vision/mission) extends the M3 row. E-003 (VisitingFaculty) → M5b; E-004 (RoleEmail divergence) → M5a.
+
+**M5 split (2026-05-24):** Milestone M5 (Configuration — Identity
+Attachments) is split into **M5a** (File Infrastructure & Identity Assets:
+FileAsset + storage layer, RoleEmail remediation + UI, LetterheadAsset,
+TemplateAsset, DOCX-merge docgen primitive) and **M5b** (Assignments &
+Approval Config: MentalHealthCounsellor, FacultyMentor/ClassTeacher/
+ClassCoordinator assignments, VisitingFaculty [E-003], NonOwnedCourse,
+UGTimetable, ApprovalProcess + CPC + PurchaseProcedureRule config, bulk
+import). M5a depends on nothing from M5b; M5b depends on M5a's file
+infrastructure and docgen primitive. Errata E-003 (VisitingFaculty) and
+E-004 (RoleEmail) bind to this split.
 
 ---
 
@@ -53,17 +64,19 @@ Errata bindings: E-001 (vision/mission) extends the M3 row.
 | WorkingDaysConfig (singleton) | §9.3 | M3 | Shipped at M3 | Singleton edit page (Session 7); 5/6-day radio; configure action only |
 | Faculty (basic info in config module) | §9.3 | M10 | Planned for M10 | Faculty profile module |
 | Student (basic info in config module) | §9.3 | M12 | Planned for M12 | Student profile module |
-| RoleEmail (email bound to role/scope) | §9.3 | M2/M5 | Shipped at M2 (model); M5 for UI | M2 seeded; M4 reads for calendar phase-transition emails (bootstrap placeholders on `@example.dev`); real address management by Registrar/Reg-office/SysAdmin via role-email UI in ~M5 (per informal req: "configure and manage all role-based email IDs"); group-list vs per-scope address design belongs to that module |
-| LetterheadAsset (file per role/scope) | §9.3 | M5 | Planned for M5 | Configuration — Identity Attachments |
+| RoleEmail (email bound to role/scope) | §9.3 | M2/M5a | Shipped at M5a | M2 seeded; M4 reads for calendar phase-transition emails; E-004 remediation at M5a (re-key to UUID PK + TimestampedSoftDelete + partial unique indexes); management UI at `/admin/config/role-emails` (Registrar family + SysAdmin) |
+| LetterheadAsset (file per role/scope) | §9.3 | M5a | Shipped at M5a | Upload/replace/deactivate/download; partial unique indexes (global + scoped); MIME filter (PDF/PNG/JPG); max 5 MB; `/admin/config/letterheads` |
 | ApprovalProcess (workflow config) | §9.3 | M7 | Planned for M7 | Approval Engine |
 | StudentCategoryCount (SC/ST/OBC/EWS/General per AY) | §9.3 | M4 | Shipped at M4 | AY-scoped singleton edit; Registrar-managed; blocked when AY locked |
-| MentalHealthCounsellor (AY-scoped roster, Director's letterhead) | §9.3 | M5 | Planned for M5 | Configuration — Identity Attachments |
-| FacultyMentorAssignment | §9.3 | M5 | Planned for M5 | Requires Faculty (M10) model — see M5 inheritance note |
-| ClassTeacherAssignment | §9.3 | M5 | Planned for M5 | Requires Faculty (M10) + Student (M12) — see M5 note |
-| ClassCoordinatorAssignment | §9.3 | M5 | Planned for M5 | Same dependency as ClassTeacher |
-| NonOwnedCourse | §9.3 | M5 | Planned for M5 | Course shared across departments |
-| UGTimetable (first/second year, Director's office) | §9.3 | M5 | Planned for M5 | Auto-projects into dept timetables |
-| TemplateAsset (BoS, MoM, VAC certificate) | §9.3 | M5 | Planned for M5 | IQAC-managed; used for docgen |
+| MentalHealthCounsellor (AY-scoped roster, Director's letterhead) | §9.3 | M5b | Planned for M5b | Configuration — Identity Attachments |
+| FacultyMentorAssignment | §9.3 | M5b | Planned for M5b | Requires Faculty (M10) model — see M5 inheritance note; Option A confirmed (model + thin UI at M5b, rich UI at M14) |
+| ClassTeacherAssignment | §9.3 | M5b | Planned for M5b | Requires Faculty (M10) + Student (M12) — see M5 note; Option A confirmed |
+| ClassCoordinatorAssignment | §9.3 | M5b | Planned for M5b | Same dependency as ClassTeacher; Option A confirmed |
+| NonOwnedCourse | §9.3 | M5b | Planned for M5b | Course shared across departments |
+| UGTimetable (first/second year, Director's office) | §9.3 | M5b | Planned for M5b | Auto-projects into dept timetables |
+| TemplateAsset (BoS, MoM, VAC certificate) | §9.3 | M5a | Shipped at M5a | IQAC-managed; types: bos/mom=DOCX, vac=PPTX; partial unique index on type; max 2 MB; `/admin/config/templates` |
+| VisitingFaculty (external personnel per department) | E-003, informal req | M5b | Planned for M5b | HoD-managed; inline external-personnel details; date-windowed availability; feeds M13 course allocation; does not depend on M10 Faculty |
+| FileAsset + StorageBackend (file storage foundation) | §8.4, §4.1, §6.1 | M5a | Shipped at M5a | Local-fs dev / MinIO prod; UploadService orchestrates validate→store→record; UUID storage keys; purpose-based permission escalation on download endpoint |
 
 ---
 
@@ -72,16 +85,16 @@ Errata bindings: E-001 (vision/mission) extends the M3 row.
 | Requirement | Source | Milestone | Status | Notes |
 |---|---|---|---|---|
 | Schools seeded once; departments declare school | §9.3 | M3 | Shipped at M3 | Seed script; school_id FK enforced |
-| Bulk-add by CSV/Excel (users, faculty, students, courses, programs) | §9.3, §16 | M5 | Planned for M5 | Explicitly out of scope at M3 (Refinement 7) |
+| Bulk-add by CSV/Excel (users, faculty, students, courses, programs) | §9.3, §16 | M5b | Planned for M5b | Explicitly out of scope at M3 (Refinement 7) |
 | AY-scoped configs immutable on rollover (is_locked=true) | §9.3 | M4 | Shipped at M4 | AcademicYearLockedError in repos; lock_for_rollover service method; Celery nightly task |
 | Calendar collaboration chain (Registrar → IQAC → others) | §9.3 | M4 | Shipped at M4 | Three-phase sequential chain; 18 fixed entry types; ENTRY_TYPE_ROLE_MAP + phase gates; sports/cultural: DIRECTOR (campus) + DEAN_SW (institution) ownership split |
 | Holiday management | §9.3 | M4 | Shipped at M4 | AY-scoped CRUD; separate Holiday model (not CalendarEntry type) |
 | Calendar exports (CSV/Excel/PDF/DOCX) | §9.3 | M4 | Shipped at M4 | CalendarExportService + rx.download via bytes data |
 | Phase-transition email notifications | §9.3 | M4 | Shipped at M4 | Registrar confirm → IQAC notified; IQAC confirm → Phase 3 roles notified; reads RoleEmail bootstrap placeholders; fire-and-forget via asyncio.create_task |
-| Letterheads / templates used for docgen (not directly visible to other roles) | §9.3 | M5 | Planned for M5 | Internal composition; BoS/MoM/VAC |
-| Mental-health counsellor roster downloadable as DOCX (Director letterhead, AY-scoped) | §9.3 | M5 | Planned for M5 | Immutable on AY rollover |
-| Class teacher assignments auto-flow into faculty workload | §9.3 | M5 | Planned for M5 | Requires Faculty (M10) model |
-| UG timetable configured by Director, auto-projected to dept timetables | §9.3 | M5 | Planned for M5 | Requires Student (M12) model |
+| Letterheads / templates used for docgen (not directly visible to other roles) | §9.3 | M5a | Shipped at M5a | Letterheads are DOCX templates (E-005); image-based merge primitive exists but not used with DOCX letterheads (TD-012 superseded by E-005); purpose-based download permission escalation |
+| Mental-health counsellor roster downloadable as DOCX (Director letterhead, AY-scoped) | §9.3 | M5b | Planned for M5b | Immutable on AY rollover |
+| Class teacher assignments auto-flow into faculty workload | §9.3 | M5b | Planned for M5b | Requires Faculty (M10) model |
+| UG timetable configured by Director, auto-projected to dept timetables | §9.3 | M5b | Planned for M5b | Requires Student (M12) model |
 | Student category counts managed by Registrar/office per AY; read-only for non-Student roles | §9.3 | M4 | Shipped at M4 | AY-scoped singleton edit; immutable on rollover |
 | Vision/mission: update-only, no delete (university + department) | E-001 | M3 | Shipped at M3 | NotDeletableError in VisionMissionService |
 | Vision/mission: viewable by all authenticated users | E-001 | M3 | Shipped at M3 | /about/university + /about/departments + /about/departments/[code] — Session 7 |
@@ -93,16 +106,16 @@ Errata bindings: E-001 (vision/mission) extends the M3 row.
 
 ## M5 Inheritance Note (from M3)
 
-ClassTeacher, ClassCoordinator, and FacultyMentor assignments are scheduled for M5
-(Configuration — Identity Attachments) per §12. However, these assignments reference
-Faculty (M10) and Student (M12), which arrive after M5. M5 planning must decide:
+ClassTeacher, ClassCoordinator, and FacultyMentor assignments are scheduled for M5b
+(Assignments & Approval Config) per §12 and the M5 split (2026-05-24). These
+assignments reference Faculty (M10) and Student (M12), which arrive after M5b.
 
-- **Option A (recommended):** Ship the assignment data model + schema at M5; leave UI as
-  a placeholder; implement full UI at M14 (Department module) when both Faculty and Student
-  exist.
-- **Option B:** Fully defer to M14 when all referenced entities are available.
+**Option A confirmed:** Ship the assignment data model + schema at M5b; leave UI as
+a thin management scaffold; implement full UI at M14 (Department module) when both
+Faculty and Student exist.
 
 This note was added at M3 close-out. See `docs/milestones/M3.md` Session 5 resume notes.
+Option A confirmed at M5 split (2026-05-24).
 
 ---
 

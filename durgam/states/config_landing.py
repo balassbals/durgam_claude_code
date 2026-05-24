@@ -23,6 +23,9 @@ _LANDING_GATES: list[tuple[str, str, str | None]] = [
     ("configure", "academic_year",              None),
     ("write",     "holiday",                    None),
     ("write",     "student_category_count",     None),
+    ("write",     "role_email",                  None),
+    ("write",     "letterhead_asset",             None),
+    ("write",     "template_asset",                None),
 ]
 
 # Tile definitions: (label, href, description, permission_gates).
@@ -90,6 +93,21 @@ _ALL_TILES: list[tuple[str, str, str, list[tuple[str, str, str | None]]]] = [
         "Student Categories", "/admin/config/student-categories",
         "SC/ST/OBC/EWS/General counts per academic year",
         [("write", "student_category_count", None)],
+    ),
+    (
+        "Role Emails", "/admin/config/role-emails",
+        "Email addresses bound to institutional roles",
+        [("write", "role_email", None)],
+    ),
+    (
+        "Letterheads", "/admin/config/letterheads",
+        "Role-bound letterhead images for document generation",
+        [("write", "letterhead_asset", None)],
+    ),
+    (
+        "Templates", "/admin/config/templates",
+        "Document templates (BoS, MoM, VAC) for IQAC",
+        [("write", "template_asset", None)],
     ),
 ]
 

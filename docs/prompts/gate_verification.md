@@ -127,6 +127,18 @@ Examples:
 - **M2**: log in as sys_admin (create user, assign role, soft-delete
   user, verify the new user can log in).
 - **M3**: log in as Registrar (browse departments, schools, programs).
+- **M5a**: log in as Registrar (upload letterhead, download it);
+  log in as student and confirm the download endpoint denies access.
+  **Important:** the download endpoint is on the backend
+  (`localhost:8000/api/files/<id>` in dev). In production the
+  frontend and backend share one origin, but in dev they run on
+  separate ports. Download links rendered by the app use
+  `DOWNLOAD_PREFIX` to target the correct origin automatically.
+  When testing download denial manually (e.g. pasting a URL into a
+  browser), use the backend port (`:8000`), not the frontend
+  (`:3000`) — the frontend dev server does not forward
+  manually-typed API paths. Expect 403 (not 404) for
+  purpose-restricted files the student lacks permission for.
 - **M8**: log in as faculty (apply for CL, view balance); log in as
   director (see pending approvals, approve one).
 

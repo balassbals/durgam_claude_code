@@ -36,17 +36,27 @@ class Holiday(TimestampedSoftDelete, table=True):
     name: str = Field(max_length=128, nullable=False)
 
 
-class RoleEmail(SQLModel, table=True):
-    """Email address bound to a role in a specific scope."""
+class RoleEmail(TimestampedSoftDelete, table=True):
+    """Email address bound to a role in a specific scope (§8.5)."""
 
     __tablename__ = "role_emails"
     __table_args__ = (
-        sa.UniqueConstraint(
-            "role_code", "scope_type", "scope_id", name="uq_role_emails_role_scope"
+        sa.Index(
+            "uq_role_emails_global",
+            "role_code",
+            unique=True,
+            postgresql_where=sa.text("scope_type IS NULL AND is_deleted = false"),
+        ),
+        sa.Index(
+            "uq_role_emails_scoped",
+            "role_code",
+            "scope_type",
+            "scope_id",
+            unique=True,
+            postgresql_where=sa.text("is_deleted = false"),
         ),
     )
 
-    id: int = Field(default=None, primary_key=True)
     role_code: str = Field(max_length=64, nullable=False)
     scope_type: str | None = Field(default=None, max_length=32)
     scope_id: UUID | None = Field(default=None)
@@ -55,10 +65,43 @@ class RoleEmail(SQLModel, table=True):
 
 class LetterheadAsset(TimestampedSoftDelete, table=True):
     __tablename__ = "letterhead_assets"
+    __table_args__ = (
+        sa.Index(
+            "uq_letterhead_assets_global",
+            "role_code",
+            unique=True,
+            postgresql_where=sa.text("scope_type IS NULL AND is_deleted = false"),
+        ),
+        sa.Index(
+            "uq_letterhead_assets_scoped",
+            "role_code",
+            "scope_type",
+            "scope_id",
+            unique=True,
+            postgresql_where=sa.text("is_deleted = false"),
+        ),
+    )
 
     role_code: str = Field(max_length=64, nullable=False)
     scope_type: str | None = Field(default=None, max_length=32)
     scope_id: UUID | None = Field(default=None)
+    file_id: UUID = Field(foreign_key="file_assets.id", nullable=False)
+
+
+class TemplateAsset(TimestampedSoftDelete, table=True):
+    """Document template bound to a type (bos/mom/vac) — §9.3."""
+
+    __tablename__ = "template_assets"
+    __table_args__ = (
+        sa.Index(
+            "uq_template_assets_type",
+            "template_type",
+            unique=True,
+            postgresql_where=sa.text("is_deleted = false"),
+        ),
+    )
+
+    template_type: str = Field(max_length=16, nullable=False)
     file_id: UUID = Field(foreign_key="file_assets.id", nullable=False)
 
 

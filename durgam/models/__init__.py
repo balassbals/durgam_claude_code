@@ -10,6 +10,7 @@ from .config_anchors import (
     LetterheadAsset,
     RoleEmail,
     StudentCategoryCount,
+    TemplateAsset,
     WorkingDaysConfig,
 )
 from .course import Course
@@ -62,6 +63,7 @@ __all__ = [
     "Holiday",
     "RoleEmail",
     "LetterheadAsset",
+    "TemplateAsset",
     "StudentCategoryCount",
     # Config anchors (M3)
     "ClassTimingsConfig",

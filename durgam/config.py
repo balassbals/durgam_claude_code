@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     debug: bool = Field(default=False, alias="DEBUG")
     environment: str = Field(default="development", alias="ENVIRONMENT")
 
+    upload_base_path: str = Field(default="uploaded_files", alias="UPLOAD_BASE_PATH")
+    upload_max_size_mb: int = Field(default=10, alias="UPLOAD_MAX_SIZE_MB")
+
     # Auth rate-limiting (OQ-2 confirmed thresholds).
     auth_user_failure_threshold: int = Field(default=5, alias="AUTH_USER_FAILURE_THRESHOLD")
     auth_user_lockout_minutes: int = Field(default=15, alias="AUTH_USER_LOCKOUT_MINUTES")

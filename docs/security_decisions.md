@@ -119,3 +119,71 @@ overlooked.
 ### Pre-production requirement
 
 SD-001 and SD-002 must both be reviewed and signed off in the M20 hardening milestone.
+
+---
+
+## SD-003 — File download endpoint uses a permissive default with purpose-based escalation
+
+**Milestone:** M5a — Configuration — Identity Attachments
+**Date:** 2026-05-24
+**Decision makers:** Project architect
+
+### Context
+
+The authenticated file download endpoint (`/api/files/{file_id}`) serves all
+`FileAsset` rows. Some file types are restricted by §9.3 (letterheads are
+"not directly visible" outside Registrar family + SysAdmin; templates are
+IQAC-only). Others (future exports, generic attachments) should be
+downloadable by any authenticated user.
+
+### Decision
+
+**Permissive default with explicit escalation.** The endpoint checks
+`file_asset:read:*` (granted to all authenticated users via `_PUBLIC_READ`)
+as the baseline. When `FileAsset.purpose` matches a key in
+`_PURPOSE_PERMISSION_MAP`, the endpoint requires the resource-specific
+`read` permission instead (e.g., `letterhead_asset:read` for
+`purpose="letterhead"`).
+
+The map at M5a:
+```python
+_PURPOSE_PERMISSION_MAP = {
+    "letterhead": "letterhead_asset",
+    "template": "template_asset",
+}
+```
+
+### Why the default is inverted (permissive, not restrictive)
+
+Most file types in DURGAM (exports, calendar ICS files, generic
+attachments) should be downloadable by any authenticated user. A restrictive
+default (`deny unless purpose is in an allow-list`) would require updating
+the allow-list for every new file type — an easy omission that silently
+blocks legitimate downloads. A permissive default with explicit restrictions
+for known-sensitive types matches the actual access pattern.
+
+### Residual risk
+
+A future milestone introduces a restricted file purpose (e.g., exam
+materials, confidential HR attachments) but forgets to add it to
+`_PURPOSE_PERMISSION_MAP`. The file would be downloadable by any
+authenticated user who knows the UUID.
+
+### Compensating controls
+
+1. UUIDs are non-guessable (v4, 122 bits of entropy).
+2. The UI for restricted pages is permission-gated — users never see
+   file IDs they shouldn't have.
+3. The `purpose` field is set server-side by the service layer — users
+   cannot forge it.
+
+### Escalation triggers
+
+- M20 hardening: audit all `purpose` values in the `file_assets` table
+  against `_PURPOSE_PERMISSION_MAP`. Any purpose that represents a
+  restricted file type must have an entry.
+- Any new module that uploads files with access restrictions must add
+  its purpose to the map as part of the module's PR.
+- If the number of restricted purposes grows large, consider inverting
+  the default (deny-unless-allowed) with an explicit allow-list for
+  public file types.

@@ -100,3 +100,146 @@ The three phases are:
 Each confirm action is irreversible and triggers a phase-transition email notification to the next phase's roles.
 
 **Disposition**: M4 (shipped). Entry types are a fixed code-defined set (`ENTRY_TYPE_ROLE_MAP`); adding or changing types requires a code change. See `docs/milestones/M4.md` Session 5 for implementation detail and `docs/modules/configuration.md` → "Three-Phase Calendar Collaboration Chain" for the canonical reference.
+
+---
+
+## E-003 — VisitingFaculty / adjunct / guest / contract / honorary faculty entity
+
+**Status**: Acknowledged. M5b in scope.
+
+**Source**: Original informal requirements
+(`docs/durgam_informal_requirements.docx`), Configuration Module section:
+
+> "Dept HoD/AHoD/HoD office should be able to manage the visiting
+> faculty/adjunct faculty/guest faculty/contract faculty/honorary faculty
+> of their department. Name, designation, organization, expertise,
+> available from when to when, approved by admin or not. During course
+> allocation in department module, the faculty whose availability is valid
+> shall be pulled in."
+
+**Gap in v3 RFP**: §9.3 lists course allocation pulling from a faculty pool
+including "visiting/adjunct/guest with valid availability dates" (§9.10
+Department module), but neither §8 nor §9.3 defines a configuration entity to
+hold these people. They are NOT system Faculty (no User account, no M10
+Faculty record) — they are inline-stored external personnel. The v3 coverage
+matrix omitted the entity entirely.
+
+**Disposition for M5b**: Add a `VisitingFaculty` entity in the configuration
+module.
+- Managed by: HoD, AHoD, HoD Office (scoped to their department).
+- Fields: department_id (FK), name, designation, organization, expertise,
+  available_from (date), available_to (date), is_admin_approved (bool), plus
+  TimestampedSoftDelete mixin.
+- AY-relevance: availability is date-windowed, not AY-locked (a visiting
+  faculty's window may straddle AYs); no AY-immutability rule applies.
+- Does NOT depend on M10 Faculty — details are stored inline. This makes it
+  M5-ready, unlike the mentor/class-teacher assignments.
+- Feeds M13 course allocation (the "valid availability" filter) — M13
+  consumes; M5b stores.
+
+**M5b planning prompt must address**: whether `is_admin_approved` uses a
+simple boolean set by SYSTEM_ADMIN, or routes through the approval engine
+(recommend: simple boolean at M5b; approval-routed admin sign-off is a
+possible M7+ enhancement, not required by the source).
+
+---
+
+## E-004 — RoleEmail model diverges from §8.5 canonical schema; NULL-scope uniqueness gap
+
+**Status**: Resolved-at-M5a.
+
+**Source**: Code review at M5 planning, against RFP §8.5 and the M0 inherited
+note in `docs/milestones/M5.md`.
+
+**Gap**: The current `RoleEmail` model (`durgam/models/config_anchors.py`)
+diverges from the §8.5 canonical definition in two ways:
+1. It uses an `int` primary key and plain `SQLModel` base, where §8.5
+   specifies `TimestampedSoftDelete` (UUID PK + audit + soft-delete columns).
+   Every other config entity uses the mixin. RoleEmail was created as a
+   bootstrap artifact at M4 to support calendar phase-transition emails.
+2. Its unique constraint `(role_code, scope_type, scope_id)` does NOT prevent
+   duplicate NULL-scope rows: in PostgreSQL, NULL != NULL, so two rows with
+   the same role_code and NULL scope_type/scope_id both satisfy the
+   constraint. The M0 inherited note flagged this: "resolve RoleEmail
+   NULL-scope constraint before role-email assignment goes live."
+
+**Disposition for M5a**: Before building the RoleEmail management UI:
+1. Migrate RoleEmail to TimestampedSoftDelete (UUID PK, audit columns,
+   soft-delete) to match §8.5. Alembic migration must preserve the M4
+   bootstrap placeholder rows (re-key from int to UUID; the calendar email
+   lookups read by (role_code, scope) not by id, so the re-key is safe —
+   verify in migration test).
+2. Fix the NULL-scope gap with a partial unique index:
+   `CREATE UNIQUE INDEX uq_role_emails_global ON role_emails (role_code)
+    WHERE scope_type IS NULL AND is_deleted = false;`
+   plus the existing scoped constraint for non-NULL scopes (also made partial
+   on is_deleted = false to match the soft-delete pattern used elsewhere).
+
+**M5a planning prompt must address**: migration ordering (the RoleEmail re-key
+must run and be verified before the management UI is wired), and confirm the
+M4 calendar phase-transition email lookups still resolve after the re-key (an
+integration test asserting this).
+
+---
+
+## E-005 — LetterheadAsset and TemplateAsset are both DOCX; unification deferred to M5b
+
+**Status**: Acknowledged. M5b in scope.
+
+**Source**: Stakeholder confirmation during M5a gate verification. The
+institution's letterheads are DOCX templates (not images or PDFs as originally
+assumed from §9.3's phrasing "identity assets — letterheads, stamps, seals").
+
+**Gap in v3 RFP**: §9.3 describes letterheads as "identity assets" alongside
+stamps and seals, implying image files (PNG/JPG/PDF). The actual stakeholder
+workflow is: a DOCX template contains the letterhead formatting (header, footer,
+institutional branding), and document generation merges content into this
+template. This makes LetterheadAsset and TemplateAsset structurally identical —
+both store DOCX files, both are role-scoped, both use the same upload/replace/
+deactivate lifecycle.
+
+**Disposition**:
+- **M5a (done)**: LetterheadAsset MIME filter changed from PNG/JPG/PDF to DOCX
+  only. The existing `merge_letterhead_and_content()` docgen primitive (which
+  inserts a letterhead IMAGE into a DOCX header) is no longer usable with DOCX
+  letterheads. It remains in the codebase as a working image-merge primitive
+  but is not called by any production code path at M5a.
+- **M5b (planned)**: Evaluate unifying LetterheadAsset and TemplateAsset into a
+  single `DocumentTemplate` model with a `purpose` discriminator (letterhead,
+  bos, mom, vac). Update the docgen merge to accept a DOCX base template
+  instead of an image. This is the natural refactoring point since M5b adds
+  bulk import and additional config entities.
+- **TD-012 superseded**: The original TD-012 ("PDF letterheads in docgen merge")
+  is no longer relevant — letterheads are DOCX, not PDF. The new concern is
+  DOCX-to-DOCX merge, addressed at M5b via E-005.
+
+---
+
+## E-006 — Scope-type extensibility (forward-concern for M5b)
+
+**Source**: M5a gate verification — RoleEmail and LetterheadAsset scope management.
+
+**Gap**: The scope_type system currently handles a fixed set of scope types:
+global (NULL), `campus`, `department`, `school`. These are hard-coded in the
+UI dropdown (`role_emails.py`, `_SCOPE_TYPE_OPTIONS`) and in the scope-object
+resolution logic (`config_role_email.py`, `_load_scope_objects()`).
+
+Future milestones will model new scope-bearing entity types — committees,
+centres, cells, statutory bodies — each of which may need a corresponding
+scope_type for role-scoped configuration (letterheads, role-emails, approval
+chains). An admin creating a role scoped to a committee would need
+`scope_type="committee"` and a dropdown of committee entities.
+
+**Forward-concern (not a bug)**:
+- M5b role-and-scope and approval configuration work must NOT hard-code
+  today's scope types. The scope_type dropdown and resolution logic must be
+  extensible to scope types added when new entity kinds are modeled.
+- Recommended approach: derive scope-type options from a registry or from
+  the DB (e.g., distinct scope_types in `user_roles`, or a config table).
+  Scope-object resolution should use a pluggable lookup keyed by scope_type,
+  not an if/elif chain.
+- At M5a this is acceptable — only three scope types exist and the admin UI
+  serves its purpose. The concern is recorded here so M5b planning accounts
+  for it before the scope-type count grows.
+
+**Disposition**: No code change at M5a. M5b planning must address this.
