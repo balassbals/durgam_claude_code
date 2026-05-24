@@ -108,6 +108,10 @@ class TestMigrations:
             ):
                 assert expected in ce_cols, f"Missing column: {expected}"
 
+            # Skip past M5a migration(s) to reach M4 head before testing M4 downgrades.
+            result = _alembic("downgrade", "8ad8124becda")
+            assert result.returncode == 0, f"downgrade to M4 head failed:\n{result.stderr}"
+
             # Downgrade -1 removes iqac_confirmed (latest M4 migration)
             result = _alembic("downgrade", "-1")
             assert result.returncode == 0, f"downgrade -1 failed:\n{result.stderr}"

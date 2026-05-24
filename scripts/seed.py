@@ -243,6 +243,10 @@ def seed(session: Session) -> dict[str, int]:
         # Student category count
         {"resource": "student_category_count",     "action": "read",      "scope": "*"},
         {"resource": "student_category_count",     "action": "write",     "scope": "*"},
+        # M5a — Role email (not public-read; Registrar family + SysAdmin only)
+        {"resource": "role_email",                 "action": "read",      "scope": "*"},
+        {"resource": "role_email",                 "action": "write",     "scope": "*"},
+        {"resource": "role_email",                 "action": "delete",    "scope": "*"},
     ]
     perm_inserted = 0
     for p in perms_data:
@@ -307,6 +311,10 @@ def seed(session: Session) -> dict[str, int]:
         ("holiday",                    "delete",    "*"),
         ("student_category_count",     "read",      "*"),
         ("student_category_count",     "write",     "*"),
+        # M5a — role email management (not in _PUBLIC_READ — internal service lookup only)
+        ("role_email",                 "read",      "*"),
+        ("role_email",                 "write",     "*"),
+        ("role_email",                 "delete",    "*"),
     ]
 
     _HOD_SPECIFIC = [
@@ -594,6 +602,7 @@ def seed(session: Session) -> dict[str, int]:
             select(RoleEmail).where(
                 RoleEmail.role_code == re_data["role_code"],
                 RoleEmail.scope_type.is_(None),  # type: ignore[union-attr]
+                RoleEmail.is_deleted == False,  # noqa: E712
             )
         ).first()
         if existing_re:

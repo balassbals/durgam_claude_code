@@ -146,6 +146,13 @@ app.add_page(admin_config_student_categories, route="/admin/config/student-categ
 app.add_page(admin_config_calendar, route="/admin/config/calendar",
              on_load=CalendarEntryConfigState.load_entries)
 
+# ── M5a routes ────────────────────────────────────────────────────────────────
+from durgam.pages.admin.config.role_emails import admin_config_role_emails
+from durgam.states.config_role_email import RoleEmailConfigState
+
+app.add_page(admin_config_role_emails, route="/admin/config/role-emails",
+             on_load=RoleEmailConfigState.load_role_emails)
+
 app.add_page(about_university, route="/about/university",
              on_load=AboutUniversityState.load_university_about)
 app.add_page(about_departments, route="/about/departments",

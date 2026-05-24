@@ -1,4 +1,4 @@
-"""Config module nav registration (M3 + M4).
+"""Config module nav registration (M3 + M4 + M5a).
 
 Import this module to register config nav entries. Called from durgam.py.
 
@@ -38,6 +38,7 @@ register(NavEntry(
         ("write",     "holiday",                    None),
         ("write",     "student_category_count",     None),
         ("write",     "calendar_entry",              None),
+        ("write",     "role_email",                  None),
     ),
 ))
 register(NavEntry(
@@ -148,4 +149,13 @@ register(NavEntry(
     group="Config",
     permission_action="write",
     permission_resource="calendar_entry",
+))
+# ── M5a nav entries ─────────────────────────────────────────────────────────────
+register(NavEntry(
+    label="Role Emails",
+    href="/admin/config/role-emails",
+    icon="mail",
+    group="Config",
+    permission_action="write",
+    permission_resource="role_email",
 ))
