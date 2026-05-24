@@ -37,6 +37,7 @@ class RoleEmailConfigState(BaseState):
     form_role_code: str = ""
     form_email: str = ""
     form_scope_type: str = ""
+    form_scope_type_ui: str = "global"
     form_scope_id: str = ""
 
     roles_dropdown: list[dict] = []
@@ -113,8 +114,10 @@ class RoleEmailConfigState(BaseState):
     def set_form_email(self, value: str) -> None:
         self.form_email = value
 
-    def set_form_scope_type(self, value: str) -> None:
-        self.form_scope_type = value
+    def set_form_scope_type_ui(self, value: str) -> None:
+        real = "" if value == "global" else value
+        self.form_scope_type_ui = value
+        self.form_scope_type = real
         self.form_scope_id = ""
         self._load_scope_objects()
 
@@ -128,6 +131,7 @@ class RoleEmailConfigState(BaseState):
         self.form_role_code = ""
         self.form_email = ""
         self.form_scope_type = ""
+        self.form_scope_type_ui = "global"
         self.form_scope_id = ""
         self.scope_objects_dropdown = []
         self.show_form = True
@@ -146,6 +150,7 @@ class RoleEmailConfigState(BaseState):
         self.form_role_code = role_code
         self.form_email = email
         self.form_scope_type = scope_type
+        self.form_scope_type_ui = scope_type if scope_type else "global"
         self.form_scope_id = scope_id
         if scope_type:
             self._load_scope_objects()

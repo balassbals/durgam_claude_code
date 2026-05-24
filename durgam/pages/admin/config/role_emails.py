@@ -129,13 +129,13 @@ def _inline_form() -> rx.Component:
                         rx.select.root(
                             rx.select.trigger(placeholder="Global (no scope)"),
                             rx.select.content(
-                                rx.select.item("Global (no scope)", value=""),
+                                rx.select.item("Global (no scope)", value="global"),
                                 rx.select.item("Campus", value="campus"),
                                 rx.select.item("Department", value="department"),
                                 rx.select.item("School", value="school"),
                             ),
-                            value=RoleEmailConfigState.form_scope_type,
-                            on_change=RoleEmailConfigState.set_form_scope_type,
+                            value=RoleEmailConfigState.form_scope_type_ui,
+                            on_change=RoleEmailConfigState.set_form_scope_type_ui,
                             width="100%",
                         ),
                         align="start",
