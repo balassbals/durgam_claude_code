@@ -2,6 +2,8 @@
 
 import reflex as rx
 
+_API_URL = rx.config.get_config().api_url
+
 from durgam.pages.components import (
     admin_page,
     config_toast,
@@ -50,7 +52,7 @@ def _kebab(row: dict) -> rx.Component:
                 on_click=rx.redirect(
                     rx.cond(
                         row["file_id"] != "",
-                        "/api/files/" + row["file_id"],
+                        _API_URL + "/api/files/" + row["file_id"],
                         "#",
                     )
                 ),
