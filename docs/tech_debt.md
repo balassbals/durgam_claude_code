@@ -227,6 +227,27 @@ gating, set it appropriately there rather than in pyproject.toml.
 
 ---
 
+### TD-013 — Download endpoint registered via private Reflex attribute (app._api)
+
+**Location:** `durgam/durgam.py` (route registration); `durgam/api/download.py` (endpoint).
+
+**What it is:** The authenticated file-download endpoint at `/api/files/{file_id}`
+is registered via `app._api.add_route()`. `_api` is Reflex's internal Starlette
+application instance, exposed as a private attribute (leading underscore). Reflex
+does not offer a public API for adding custom Starlette routes as of 0.9.2.
+
+**Why this is not a blocker now:** It works correctly on pinned Reflex 0.9.2 and is
+the only available mechanism for custom Starlette routes. The entire file-download
+surface across all modules (letterheads, templates, exports, attachments) depends
+on this single registration point.
+
+**Trigger to re-open:** (a) Any Reflex version bump — the route registration must
+be re-verified after every upgrade (cross-reference the existing Reflex API churn
+risk and the version-pinning discipline in CLAUDE.md "Milestone discipline").
+(b) If Reflex ships a public custom-route API, migrate to it and close this entry.
+
+---
+
 ## Resolved
 
 ### TD-002 — SAWarning: transaction already deassociated from connection (resolved in m0-cleanup)

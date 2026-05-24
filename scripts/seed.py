@@ -29,10 +29,12 @@ from durgam.models.config_anchors import (
     CalendarEntry,
     ClassTimingsConfig,
     Holiday,
+    LetterheadAsset,
     RoleEmail,
     StudentCategoryCount,
     WorkingDaysConfig,
 )
+from durgam.models.crosscutting import FileAsset
 from durgam.models.course import Course
 from durgam.models.department import (
     Department,
@@ -247,6 +249,12 @@ def seed(session: Session) -> dict[str, int]:
         {"resource": "role_email",                 "action": "read",      "scope": "*"},
         {"resource": "role_email",                 "action": "write",     "scope": "*"},
         {"resource": "role_email",                 "action": "delete",    "scope": "*"},
+        # M5a — File asset download (public-read for authenticated users)
+        {"resource": "file_asset",                 "action": "read",      "scope": "*"},
+        # M5a — Letterhead asset (Registrar family + SysAdmin only)
+        {"resource": "letterhead_asset",           "action": "read",      "scope": "*"},
+        {"resource": "letterhead_asset",           "action": "write",     "scope": "*"},
+        {"resource": "letterhead_asset",           "action": "delete",    "scope": "*"},
     ]
     perm_inserted = 0
     for p in perms_data:
@@ -294,6 +302,8 @@ def seed(session: Session) -> dict[str, int]:
         ("working_days_config",       "read", "*"),
         ("academic_year",             "read", "*"),
         ("holiday",                   "read", "*"),
+        # M5a — file download permission for all authenticated users
+        ("file_asset",                "read", "*"),
     ]
 
     _REGISTRAR_SPECIFIC = [
@@ -315,6 +325,10 @@ def seed(session: Session) -> dict[str, int]:
         ("role_email",                 "read",      "*"),
         ("role_email",                 "write",     "*"),
         ("role_email",                 "delete",    "*"),
+        # M5a — letterhead asset management (Registrar family + SysAdmin)
+        ("letterhead_asset",           "read",      "*"),
+        ("letterhead_asset",           "write",     "*"),
+        ("letterhead_asset",           "delete",    "*"),
     ]
 
     _HOD_SPECIFIC = [
@@ -621,6 +635,65 @@ def seed(session: Session) -> dict[str, int]:
             )
             re_inserted += 1
     counts["role_emails"] = re_inserted
+
+    # ── Placeholder LetterheadAsset ──────────────────────────────────────────
+    # A tiny 1×1 transparent PNG so the gate demo has a downloadable letterhead.
+    # owner_user_id = sys_admin for audit cleanliness.
+    import hashlib
+    from uuid import uuid4
+
+    _PLACEHOLDER_PNG = (
+        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
+        b"\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89"
+        b"\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01"
+        b"\r\n\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+    )
+    existing_lh = session.exec(
+        select(LetterheadAsset).where(
+            LetterheadAsset.role_code == "REGISTRAR",
+            LetterheadAsset.scope_type.is_(None),  # type: ignore[union-attr]
+            LetterheadAsset.is_deleted == False,  # noqa: E712
+        )
+    ).first()
+    lh_inserted = 0
+    if existing_lh is None:
+        storage_key = uuid4().hex
+        sha = hashlib.sha256(_PLACEHOLDER_PNG).hexdigest()
+        sys_admin_user = session.exec(
+            select(User).where(User.username == "sys_admin")
+        ).first()
+        sys_admin_id = sys_admin_user.id if sys_admin_user else None
+
+        from durgam.storage import get_storage_backend
+
+        backend = get_storage_backend()
+        backend.put(storage_key, _PLACEHOLDER_PNG, "image/png")
+
+        fa = FileAsset(
+            storage_key=storage_key,
+            original_name="placeholder_letterhead.png",
+            mime_type="image/png",
+            size_bytes=len(_PLACEHOLDER_PNG),
+            sha256=sha,
+            owner_user_id=sys_admin_id,
+            purpose="letterhead",
+        )
+        session.add(fa)
+        session.flush()
+        session.refresh(fa)
+
+        lh = LetterheadAsset(
+            role_code="REGISTRAR",
+            scope_type=None,
+            scope_id=None,
+            file_id=fa.id,
+            created_by=sys_admin_id,
+            updated_by=sys_admin_id,
+        )
+        session.add(lh)
+        session.flush()
+        lh_inserted = 1
+    counts["letterhead_assets"] = lh_inserted
 
     # ── StudentCategoryCount ──────────────────────────────────────────────────
     counts["student_category_counts"] = _exec_insert(

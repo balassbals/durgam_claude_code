@@ -65,6 +65,22 @@ class RoleEmail(TimestampedSoftDelete, table=True):
 
 class LetterheadAsset(TimestampedSoftDelete, table=True):
     __tablename__ = "letterhead_assets"
+    __table_args__ = (
+        sa.Index(
+            "uq_letterhead_assets_global",
+            "role_code",
+            unique=True,
+            postgresql_where=sa.text("scope_type IS NULL AND is_deleted = false"),
+        ),
+        sa.Index(
+            "uq_letterhead_assets_scoped",
+            "role_code",
+            "scope_type",
+            "scope_id",
+            unique=True,
+            postgresql_where=sa.text("is_deleted = false"),
+        ),
+    )
 
     role_code: str = Field(max_length=64, nullable=False)
     scope_type: str | None = Field(default=None, max_length=32)

@@ -153,6 +153,17 @@ from durgam.states.config_role_email import RoleEmailConfigState
 app.add_page(admin_config_role_emails, route="/admin/config/role-emails",
              on_load=RoleEmailConfigState.load_role_emails)
 
+from durgam.pages.admin.config.letterheads import admin_config_letterheads
+from durgam.states.config_letterhead import LetterheadConfigState
+
+app.add_page(admin_config_letterheads, route="/admin/config/letterheads",
+             on_load=LetterheadConfigState.load_letterheads)
+
+# ── M5a authenticated file download API ──────────────────────────────────────
+from durgam.api.download import download_file
+
+app._api.add_route("/api/files/{file_id}", download_file, methods=["GET"])
+
 app.add_page(about_university, route="/about/university",
              on_load=AboutUniversityState.load_university_about)
 app.add_page(about_departments, route="/about/departments",
