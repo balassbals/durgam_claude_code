@@ -212,3 +212,34 @@ deactivate lifecycle.
 - **TD-012 superseded**: The original TD-012 ("PDF letterheads in docgen merge")
   is no longer relevant — letterheads are DOCX, not PDF. The new concern is
   DOCX-to-DOCX merge, addressed at M5b via E-005.
+
+---
+
+## E-006 — Scope-type extensibility (forward-concern for M5b)
+
+**Source**: M5a gate verification — RoleEmail and LetterheadAsset scope management.
+
+**Gap**: The scope_type system currently handles a fixed set of scope types:
+global (NULL), `campus`, `department`, `school`. These are hard-coded in the
+UI dropdown (`role_emails.py`, `_SCOPE_TYPE_OPTIONS`) and in the scope-object
+resolution logic (`config_role_email.py`, `_load_scope_objects()`).
+
+Future milestones will model new scope-bearing entity types — committees,
+centres, cells, statutory bodies — each of which may need a corresponding
+scope_type for role-scoped configuration (letterheads, role-emails, approval
+chains). An admin creating a role scoped to a committee would need
+`scope_type="committee"` and a dropdown of committee entities.
+
+**Forward-concern (not a bug)**:
+- M5b role-and-scope and approval configuration work must NOT hard-code
+  today's scope types. The scope_type dropdown and resolution logic must be
+  extensible to scope types added when new entity kinds are modeled.
+- Recommended approach: derive scope-type options from a registry or from
+  the DB (e.g., distinct scope_types in `user_roles`, or a config table).
+  Scope-object resolution should use a pluggable lookup keyed by scope_type,
+  not an if/elif chain.
+- At M5a this is acceptable — only three scope types exist and the admin UI
+  serves its purpose. The concern is recorded here so M5b planning accounts
+  for it before the scope-type count grows.
+
+**Disposition**: No code change at M5a. M5b planning must address this.
