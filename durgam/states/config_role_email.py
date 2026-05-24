@@ -8,9 +8,19 @@ import reflex as rx
 
 from durgam.auth.decorators import audit_action, require_role
 from durgam.db import open_session
+from durgam.repositories.campus import CampusRepository
+from durgam.repositories.department import DepartmentRepository
+from durgam.repositories.role import RoleRepository
 from durgam.repositories.role_email import RoleEmailRepository
+from durgam.repositories.school import SchoolRepository
+from durgam.services.campus import CampusService
+from durgam.services.department import DepartmentService
+from durgam.services.role_admin import RoleAdminService
 from durgam.services.role_email import RoleEmailError, RoleEmailService
+from durgam.services.school import SchoolService
 from durgam.states.base import BaseState
+
+_SCOPE_TYPE_OPTIONS = ["", "campus", "department", "school"]
 
 
 def _svc(session) -> RoleEmailService:
@@ -28,10 +38,47 @@ class RoleEmailConfigState(BaseState):
     form_scope_type: str = ""
     form_scope_id: str = ""
 
+    roles_dropdown: list[dict] = []
+    scope_objects_dropdown: list[dict] = []
+
     confirm_open: bool = False
     confirm_id: str = ""
     confirm_title: str = ""
     confirm_body: str = ""
+
+    def _load_dropdowns(self) -> None:
+        with open_session() as session:
+            self.roles_dropdown = [
+                {"id": r.code, "label": f"{r.code} — {r.name}"}
+                for r in RoleAdminService(RoleRepository(session)).list_roles()
+            ]
+
+    def _load_scope_objects(self) -> None:
+        if not self.form_scope_type or self.form_scope_type == "":
+            self.scope_objects_dropdown = []
+            return
+        with open_session() as session:
+            if self.form_scope_type == "campus":
+                self.scope_objects_dropdown = [
+                    {"id": str(c.id), "label": f"{c.code} — {c.name}"}
+                    for c in CampusService(CampusRepository(session)).list()
+                ]
+            elif self.form_scope_type == "department":
+                from durgam.repositories.department import SubDepartmentRepository
+                self.scope_objects_dropdown = [
+                    {"id": str(d.id), "label": f"{d.code} — {d.name}"}
+                    for d in DepartmentService(
+                        dept_repo=DepartmentRepository(session),
+                        subdept_repo=SubDepartmentRepository(session),
+                    ).list()
+                ]
+            elif self.form_scope_type == "school":
+                self.scope_objects_dropdown = [
+                    {"id": str(s.id), "label": f"{s.code} — {s.name}"}
+                    for s in SchoolService(SchoolRepository(session)).list()
+                ]
+            else:
+                self.scope_objects_dropdown = []
 
     async def load_role_emails(self) -> None:
         guard = self._config_guard("role_email", "write")
@@ -53,6 +100,7 @@ class RoleEmailConfigState(BaseState):
                     "scope_type": r.scope_type or "",
                     "scope_id": str(r.scope_id) if r.scope_id else "",
                 })
+        self._load_dropdowns()
         self._load_nav_entries()
         self.loading = False
 
@@ -64,6 +112,8 @@ class RoleEmailConfigState(BaseState):
 
     def set_form_scope_type(self, value: str) -> None:
         self.form_scope_type = value
+        self.form_scope_id = ""
+        self._load_scope_objects()
 
     def set_form_scope_id(self, value: str) -> None:
         self.form_scope_id = value
@@ -76,6 +126,7 @@ class RoleEmailConfigState(BaseState):
         self.form_email = ""
         self.form_scope_type = ""
         self.form_scope_id = ""
+        self.scope_objects_dropdown = []
         self.show_form = True
 
     def open_edit(
@@ -93,6 +144,10 @@ class RoleEmailConfigState(BaseState):
         self.form_email = email
         self.form_scope_type = scope_type
         self.form_scope_id = scope_id
+        if scope_type:
+            self._load_scope_objects()
+        else:
+            self.scope_objects_dropdown = []
         self.show_form = True
 
     def cancel_form(self):

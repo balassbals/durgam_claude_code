@@ -71,14 +71,35 @@ def _inline_form() -> rx.Component:
                         name="editing_id",
                         value=RoleEmailConfigState.editing_id,
                     ),
+                    rx.input(
+                        type="hidden",
+                        name="form_role_code",
+                        value=RoleEmailConfigState.form_role_code,
+                    ),
+                    rx.input(
+                        type="hidden",
+                        name="form_scope_type",
+                        value=RoleEmailConfigState.form_scope_type,
+                    ),
+                    rx.input(
+                        type="hidden",
+                        name="form_scope_id",
+                        value=RoleEmailConfigState.form_scope_id,
+                    ),
                     rx.vstack(
-                        rx.text("Role Code", font_size="0.85rem", color="var(--color-muted)"),
-                        rx.input(
-                            name="form_role_code",
+                        rx.text("Role", font_size="0.85rem", color="var(--color-muted)"),
+                        rx.select.root(
+                            rx.select.trigger(placeholder="Select role"),
+                            rx.select.content(
+                                rx.foreach(
+                                    RoleEmailConfigState.roles_dropdown,
+                                    lambda item: rx.select.item(
+                                        item["label"], value=item["id"],
+                                    ),
+                                ),
+                            ),
                             value=RoleEmailConfigState.form_role_code,
                             on_change=RoleEmailConfigState.set_form_role_code,
-                            placeholder="e.g. REGISTRAR",
-                            max_length=64,
                             width="100%",
                         ),
                         align="start",
@@ -101,38 +122,52 @@ def _inline_form() -> rx.Component:
                     ),
                     rx.vstack(
                         rx.text(
-                            "Scope Type (optional)",
+                            "Scope",
                             font_size="0.85rem",
                             color="var(--color-muted)",
                         ),
-                        rx.input(
-                            name="form_scope_type",
+                        rx.select.root(
+                            rx.select.trigger(placeholder="Global (no scope)"),
+                            rx.select.content(
+                                rx.select.item("Global (no scope)", value=""),
+                                rx.select.item("Campus", value="campus"),
+                                rx.select.item("Department", value="department"),
+                                rx.select.item("School", value="school"),
+                            ),
                             value=RoleEmailConfigState.form_scope_type,
                             on_change=RoleEmailConfigState.set_form_scope_type,
-                            placeholder="e.g. department",
-                            max_length=32,
                             width="100%",
                         ),
                         align="start",
                         gap="0.25rem",
                         width="100%",
                     ),
-                    rx.vstack(
-                        rx.text(
-                            "Scope ID (optional)",
-                            font_size="0.85rem",
-                            color="var(--color-muted)",
-                        ),
-                        rx.input(
-                            name="form_scope_id",
-                            value=RoleEmailConfigState.form_scope_id,
-                            on_change=RoleEmailConfigState.set_form_scope_id,
-                            placeholder="UUID of the scope entity",
+                    rx.cond(
+                        RoleEmailConfigState.form_scope_type != "",
+                        rx.vstack(
+                            rx.text(
+                                "Scope Object",
+                                font_size="0.85rem",
+                                color="var(--color-muted)",
+                            ),
+                            rx.select.root(
+                                rx.select.trigger(placeholder="Select scope object"),
+                                rx.select.content(
+                                    rx.foreach(
+                                        RoleEmailConfigState.scope_objects_dropdown,
+                                        lambda item: rx.select.item(
+                                            item["label"], value=item["id"],
+                                        ),
+                                    ),
+                                ),
+                                value=RoleEmailConfigState.form_scope_id,
+                                on_change=RoleEmailConfigState.set_form_scope_id,
+                                width="100%",
+                            ),
+                            align="start",
+                            gap="0.25rem",
                             width="100%",
                         ),
-                        align="start",
-                        gap="0.25rem",
-                        width="100%",
                     ),
                     rx.hstack(
                         primary_btn("Save", type="submit"),
