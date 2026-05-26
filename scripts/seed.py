@@ -1,4 +1,4 @@
-"""Idempotent seed script for M4 development and CI.
+"""Idempotent seed script for M5b development and CI.
 
 Upserts data keyed on natural identifiers (codes, emails) — never on UUIDs.
 All personal data is synthetic. Real names / emails / IDs are NEVER hardcoded
@@ -28,11 +28,10 @@ from durgam.models.config_anchors import (
     AcademicYear,
     CalendarEntry,
     ClassTimingsConfig,
+    DocumentTemplate,
     Holiday,
-    LetterheadAsset,
     RoleEmail,
     StudentCategoryCount,
-    TemplateAsset,
     WorkingDaysConfig,
 )
 from durgam.models.crosscutting import FileAsset
@@ -137,6 +136,10 @@ def seed(session: Session) -> dict[str, int]:
         {"code": "DEAN_LL",              "name": "Dean — School of Languages & Literature",          "level": 70},
         {"code": "DEAN_MC",              "name": "Dean — School of Management & Commerce",           "level": 70},
         {"code": "DEAN_STUDENT_WELFARE", "name": "Dean of Student Welfare",                          "level": 70},
+        {"code": "DEAN_STUDENT_WELFARE_OFFICE", "name": "Dean of Student Welfare Office",              "level": 69},
+        # Academic affairs (M5b — assignment config ownership)
+        {"code": "DEAN_ACADEMIC_AFFAIRS",       "name": "Dean of Academic Affairs",                    "level": 70},
+        {"code": "DEAN_ACADEMIC_AFFAIRS_OFFICE", "name": "Dean of Academic Affairs Office",            "level": 69},
         # HoD family
         {"code": "HOD",                  "name": "Head of Department",                 "level": 50},
         {"code": "AHOD",                 "name": "Associate Head of Department",       "level": 45},
@@ -268,6 +271,36 @@ def seed(session: Session) -> dict[str, int]:
         {"resource": "template_asset",             "action": "read",      "scope": "*"},
         {"resource": "template_asset",             "action": "write",     "scope": "*"},
         {"resource": "template_asset",             "action": "delete",    "scope": "*"},
+        # ── M5b new triples ────────────────────────────────────────────────────
+        # Mental health counsellor (Dean SW family + SysAdmin)
+        {"resource": "mental_health_counsellor",   "action": "read",      "scope": "*"},
+        {"resource": "mental_health_counsellor",   "action": "write",     "scope": "*"},
+        {"resource": "mental_health_counsellor",   "action": "delete",    "scope": "*"},
+        # Faculty mentor assignment (Dean SW family + SysAdmin)
+        {"resource": "faculty_mentor_assignment",  "action": "read",      "scope": "*"},
+        {"resource": "faculty_mentor_assignment",  "action": "write",     "scope": "*"},
+        {"resource": "faculty_mentor_assignment",  "action": "delete",    "scope": "*"},
+        # Class teacher assignment (Dean Academic Affairs family + HOD + SysAdmin)
+        {"resource": "class_teacher_assignment",   "action": "read",      "scope": "*"},
+        {"resource": "class_teacher_assignment",   "action": "write",     "scope": "*"},
+        {"resource": "class_teacher_assignment",   "action": "delete",    "scope": "*"},
+        # Class coordinator assignment (Dean Academic Affairs family + HOD + SysAdmin)
+        {"resource": "class_coordinator_assignment", "action": "read",    "scope": "*"},
+        {"resource": "class_coordinator_assignment", "action": "write",   "scope": "*"},
+        {"resource": "class_coordinator_assignment", "action": "delete",  "scope": "*"},
+        # Visiting faculty (HoD family read/write/delete + SysAdmin; approve = SysAdmin only)
+        {"resource": "visiting_faculty",             "action": "read",    "scope": "*"},
+        {"resource": "visiting_faculty",             "action": "write",   "scope": "*"},
+        {"resource": "visiting_faculty",             "action": "delete",  "scope": "*"},
+        {"resource": "visiting_faculty",             "action": "approve", "scope": "*"},
+        # Non-owned course (Director family + DAA family + SysAdmin; no department_id)
+        {"resource": "non_owned_course",             "action": "read",    "scope": "*"},
+        {"resource": "non_owned_course",             "action": "write",   "scope": "*"},
+        {"resource": "non_owned_course",             "action": "delete",  "scope": "*"},
+        # UG timetable (Director family + SysAdmin only)
+        {"resource": "ug_timetable",                 "action": "read",    "scope": "*"},
+        {"resource": "ug_timetable",                 "action": "write",   "scope": "*"},
+        {"resource": "ug_timetable",                 "action": "delete",  "scope": "*"},
     ]
     perm_inserted = 0
     for p in perms_data:
@@ -317,6 +350,9 @@ def seed(session: Session) -> dict[str, int]:
         ("holiday",                   "read", "*"),
         # M5a — file download permission for all authenticated users
         ("file_asset",                "read", "*"),
+        # M5b — non-owned courses + UG timetable (scheduling info all users see)
+        ("non_owned_course",          "read", "*"),
+        ("ug_timetable",              "read", "*"),
     ]
 
     _REGISTRAR_SPECIFIC = [
@@ -352,6 +388,10 @@ def seed(session: Session) -> dict[str, int]:
         ("calendar_entry",             "read",      "*"),
         ("calendar_entry",             "write",     "*"),
         ("student_category_count",     "read",      "*"),
+        # M5b — visiting faculty (read/write/delete but NOT approve)
+        ("visiting_faculty",           "read",      "*"),
+        ("visiting_faculty",           "write",     "*"),
+        ("visiting_faculty",           "delete",    "*"),
     ]
 
     _DEAN_SPECIFIC = [
@@ -365,10 +405,19 @@ def seed(session: Session) -> dict[str, int]:
     ]
 
     # M4 — Director family can read/write calendar, read student category
+    # M5b — Director family can read counsellor roster (download gated by purpose map)
     _DIRECTOR_SPECIFIC = [
         ("calendar_entry",             "read",      "*"),
         ("calendar_entry",             "write",     "*"),
         ("student_category_count",     "read",      "*"),
+        ("mental_health_counsellor",   "read",      "*"),
+        # M5b — non-owned courses (Director + DAA) + UG timetable (Director only)
+        ("non_owned_course",           "read",      "*"),
+        ("non_owned_course",           "write",     "*"),
+        ("non_owned_course",           "delete",    "*"),
+        ("ug_timetable",               "read",      "*"),
+        ("ug_timetable",               "write",     "*"),
+        ("ug_timetable",               "delete",    "*"),
     ]
 
     # M4 — IQAC can read/write calendar, read student category
@@ -383,10 +432,34 @@ def seed(session: Session) -> dict[str, int]:
     ]
 
     # M4 — Dean of Student Welfare can read/write calendar, read student category
+    # M5b — Dean SW owns counsellor + faculty mentor assignment config
     _DEAN_SW_SPECIFIC = [
         ("calendar_entry",             "read",      "*"),
         ("calendar_entry",             "write",     "*"),
         ("student_category_count",     "read",      "*"),
+        ("mental_health_counsellor",   "read",      "*"),
+        ("mental_health_counsellor",   "write",     "*"),
+        ("mental_health_counsellor",   "delete",    "*"),
+        ("faculty_mentor_assignment",  "read",      "*"),
+        ("faculty_mentor_assignment",  "write",     "*"),
+        ("faculty_mentor_assignment",  "delete",    "*"),
+    ]
+
+    # M5b — Dean Academic Affairs owns class teacher + coordinator assignments
+    _DEAN_AA_SPECIFIC = [
+        ("calendar_entry",             "read",      "*"),
+        ("calendar_entry",             "write",     "*"),
+        ("student_category_count",     "read",      "*"),
+        ("class_teacher_assignment",   "read",      "*"),
+        ("class_teacher_assignment",   "write",     "*"),
+        ("class_teacher_assignment",   "delete",    "*"),
+        ("class_coordinator_assignment", "read",    "*"),
+        ("class_coordinator_assignment", "write",   "*"),
+        ("class_coordinator_assignment", "delete",  "*"),
+        # M5b — non-owned courses (DAA family; NOT ug_timetable — Director only)
+        ("non_owned_course",           "read",      "*"),
+        ("non_owned_course",           "write",     "*"),
+        ("non_owned_course",           "delete",    "*"),
     ]
 
     role_perm_map: dict[str, list[tuple[str, str, str]]] = {
@@ -403,12 +476,31 @@ def seed(session: Session) -> dict[str, int]:
         "DEAN_LL":              _PUBLIC_READ + _DEAN_SPECIFIC,
         "DEAN_MC":              _PUBLIC_READ + _DEAN_SPECIFIC,
         "DEAN_STUDENT_WELFARE": _PUBLIC_READ + _DEAN_SW_SPECIFIC,
-        "HOD":                  _PUBLIC_READ + _HOD_SPECIFIC,
-        "AHOD":                 _PUBLIC_READ + _HOD_SPECIFIC,
+        "DEAN_STUDENT_WELFARE_OFFICE": _PUBLIC_READ + _DEAN_SW_SPECIFIC,
+        "DEAN_ACADEMIC_AFFAIRS": _PUBLIC_READ + _DEAN_AA_SPECIFIC,
+        "DEAN_ACADEMIC_AFFAIRS_OFFICE": _PUBLIC_READ + _DEAN_AA_SPECIFIC,
+        "HOD":                  _PUBLIC_READ + _HOD_SPECIFIC + [
+            ("class_teacher_assignment",   "read",      "*"),
+            ("class_teacher_assignment",   "write",     "*"),
+            ("class_teacher_assignment",   "delete",    "*"),
+            ("class_coordinator_assignment", "read",    "*"),
+            ("class_coordinator_assignment", "write",   "*"),
+            ("class_coordinator_assignment", "delete",  "*"),
+        ],
+        "AHOD":                 _PUBLIC_READ + _HOD_SPECIFIC + [
+            ("class_teacher_assignment",   "read",      "*"),
+            ("class_teacher_assignment",   "write",     "*"),
+            ("class_teacher_assignment",   "delete",    "*"),
+            ("class_coordinator_assignment", "read",    "*"),
+            ("class_coordinator_assignment", "write",   "*"),
+            ("class_coordinator_assignment", "delete",  "*"),
+        ],
         "HOD_OFFICE":           _PUBLIC_READ + [
             ("calendar_entry",             "read",      "*"),
             ("calendar_entry",             "write",     "*"),
             ("student_category_count",     "read",      "*"),
+            # M5b — visiting faculty read-only
+            ("visiting_faculty",           "read",      "*"),
         ],
         # M5b — approver/channel roles; no config-write permissions yet (runtime → M7)
         "VC":                   _PUBLIC_READ,
@@ -464,6 +556,8 @@ def seed(session: Session) -> dict[str, int]:
     #   director_psn / DirectorPsn_Dev1!XZ — DIRECTOR scoped to PSN (new at M4; scoped role added after campuses)
     #   iqac_user / IqacCoord_Dev1!XZ    — IQAC_COORDINATOR unscoped (new at M4)
     #   dean_sw / DeanSW_Dev1!XZ         — DEAN_STUDENT_WELFARE unscoped (new at M4)
+    #   finance_user / Finance_Dev1!XZ  — FINANCE_OFFICER unscoped (new at M5b)
+    #   daa_user / DeanAA_Dev1!XZ       — DEAN_ACADEMIC_AFFAIRS unscoped (new at M5b)
     users_data = [
         {
             "email": "sys.admin@sssihl.edu.in",
@@ -541,6 +635,21 @@ def seed(session: Session) -> dict[str, int]:
             "full_name": "Dean of Student Welfare",
             "role_code": "DEAN_STUDENT_WELFARE",
             "plain_password": "DeanSW_Dev1!XZ",
+        },
+        # M5b demo users
+        {
+            "email": "finance.officer@sssihl.edu.in",
+            "username": "finance_user",
+            "full_name": "Finance Officer",
+            "role_code": "FINANCE_OFFICER",
+            "plain_password": "Finance_Dev1!XZ",
+        },
+        {
+            "email": "dean.aa@sssihl.edu.in",
+            "username": "daa_user",
+            "full_name": "Dean of Academic Affairs",
+            "role_code": "DEAN_ACADEMIC_AFFAIRS",
+            "plain_password": "DeanAA_Dev1!XZ",
         },
     ]
     user_inserted = 0
@@ -670,7 +779,7 @@ def seed(session: Session) -> dict[str, int]:
     ).first()
     _seed_actor_id = sys_admin_user.id if sys_admin_user else None
 
-    # ── Placeholder LetterheadAsset ──────────────────────────────────────────
+    # ── Placeholder DocumentTemplate (letterhead) ──────────────────────────
     # A minimal DOCX so the gate demo has a downloadable letterhead template.
     # DB row creation and file-byte writes are decoupled: uploaded_files/ is
     # gitignored and lost on fresh clone, but the DB persists. The seed must
@@ -687,10 +796,11 @@ def seed(session: Session) -> dict[str, int]:
     _DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
     existing_lh = session.exec(
-        select(LetterheadAsset).where(
-            LetterheadAsset.role_code == "REGISTRAR",
-            LetterheadAsset.scope_type.is_(None),  # type: ignore[union-attr]
-            LetterheadAsset.is_deleted == False,  # noqa: E712
+        select(DocumentTemplate).where(
+            DocumentTemplate.purpose == "letterhead",
+            DocumentTemplate.role_code == "REGISTRAR",
+            DocumentTemplate.scope_type.is_(None),  # type: ignore[union-attr]
+            DocumentTemplate.is_deleted == False,  # noqa: E712
         )
     ).first()
     lh_inserted = 0
@@ -712,7 +822,8 @@ def seed(session: Session) -> dict[str, int]:
         session.flush()
         session.refresh(fa)
 
-        lh = LetterheadAsset(
+        lh = DocumentTemplate(
+            purpose="letterhead",
             role_code="REGISTRAR",
             scope_type=None,
             scope_id=None,
@@ -728,9 +839,9 @@ def seed(session: Session) -> dict[str, int]:
         if fa and not backend.exists(fa.storage_key):
             backend.put(fa.storage_key, _PLACEHOLDER_DOCX, _DOCX_MIME)
             log.info("seed_file_restored", key=fa.storage_key, asset="letterhead_REGISTRAR")
-    counts["letterhead_assets"] = lh_inserted
+    counts["document_templates_letterhead"] = lh_inserted
 
-    # ── Placeholder TemplateAsset ────────────────────────────────────────────
+    # ── Placeholder DocumentTemplate (BoS template) ─────────────────────────
     # A minimal DOCX so the gate demo has a downloadable BoS template.
     # Same decoupled DB-row/file-byte pattern as letterhead above.
     from io import BytesIO as _BytesIO
@@ -746,9 +857,10 @@ def seed(session: Session) -> dict[str, int]:
     _TPL_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
     existing_tpl = session.exec(
-        select(TemplateAsset).where(
-            TemplateAsset.template_type == "bos",
-            TemplateAsset.is_deleted == False,  # noqa: E712
+        select(DocumentTemplate).where(
+            DocumentTemplate.purpose == "bos",
+            DocumentTemplate.role_code.is_(None),  # type: ignore[union-attr]
+            DocumentTemplate.is_deleted == False,  # noqa: E712
         )
     ).first()
     tpl_inserted = 0
@@ -771,8 +883,11 @@ def seed(session: Session) -> dict[str, int]:
         session.flush()
         session.refresh(tpl_fa)
 
-        tpl = TemplateAsset(
-            template_type="bos",
+        tpl = DocumentTemplate(
+            purpose="bos",
+            role_code=None,
+            scope_type=None,
+            scope_id=None,
             file_id=tpl_fa.id,
             created_by=_seed_actor_id,
             updated_by=_seed_actor_id,
@@ -785,7 +900,7 @@ def seed(session: Session) -> dict[str, int]:
         if tpl_fa and not backend.exists(tpl_fa.storage_key):
             backend.put(tpl_fa.storage_key, _TPL_DOCX, _TPL_MIME)
             log.info("seed_file_restored", key=tpl_fa.storage_key, asset="template_bos")
-    counts["template_assets"] = tpl_inserted
+    counts["document_templates_bos"] = tpl_inserted
 
     # ── StudentCategoryCount ──────────────────────────────────────────────────
     counts["student_category_counts"] = _exec_insert(

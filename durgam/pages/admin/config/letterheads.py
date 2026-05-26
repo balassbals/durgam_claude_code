@@ -16,7 +16,10 @@ from durgam.pages.components import (
 from durgam.pages.shared.confirmation_dialog import confirmation_dialog
 from durgam.pages.shared.data_table import TableColumn, data_table
 from durgam.pages.shared.file_upload import file_upload_zone
-from durgam.states.config_letterhead import LetterheadConfigState
+from durgam.scopes.registry import get_scope_type_dropdown_options
+from durgam.states.config_document_template import LetterheadConfigState
+
+_SCOPE_OPTIONS = get_scope_type_dropdown_options()
 
 
 def _kebab(row: dict) -> rx.Component:
@@ -82,36 +85,53 @@ def _inline_form() -> rx.Component:
                 ),
                 rx.vstack(
                     rx.text(
-                        "Scope Type (optional)",
+                        "Scope (optional)",
                         font_size="0.85rem",
                         color="var(--color-muted)",
                     ),
-                    rx.input(
-                        value=LetterheadConfigState.form_scope_type,
-                        on_change=LetterheadConfigState.set_form_scope_type,
-                        placeholder="e.g. department",
-                        max_length=32,
+                    rx.select.root(
+                        rx.select.trigger(placeholder="Global (no scope)"),
+                        rx.select.content(
+                            rx.select.item("Global (no scope)", value="global"),
+                            *[
+                                rx.select.item(opt["label"], value=opt["value"])
+                                for opt in _SCOPE_OPTIONS
+                            ],
+                        ),
+                        value=LetterheadConfigState.form_scope_type_ui,
+                        on_change=LetterheadConfigState.set_form_scope_type_ui,
                         width="100%",
                     ),
                     align="start",
                     gap="0.25rem",
                     width="100%",
                 ),
-                rx.vstack(
-                    rx.text(
-                        "Scope ID (optional)",
-                        font_size="0.85rem",
-                        color="var(--color-muted)",
-                    ),
-                    rx.input(
-                        value=LetterheadConfigState.form_scope_id,
-                        on_change=LetterheadConfigState.set_form_scope_id,
-                        placeholder="UUID of the scope entity",
+                rx.cond(
+                    LetterheadConfigState.form_scope_type != "",
+                    rx.vstack(
+                        rx.text(
+                            "Scope Object",
+                            font_size="0.85rem",
+                            color="var(--color-muted)",
+                        ),
+                        rx.select.root(
+                            rx.select.trigger(placeholder="Select scope object"),
+                            rx.select.content(
+                                rx.foreach(
+                                    LetterheadConfigState.scope_objects_dropdown,
+                                    lambda item: rx.select.item(
+                                        item["label"], value=item["id"],
+                                    ),
+                                ),
+                            ),
+                            value=LetterheadConfigState.form_scope_id,
+                            on_change=LetterheadConfigState.set_form_scope_id,
+                            width="100%",
+                        ),
+                        align="start",
+                        gap="0.25rem",
                         width="100%",
                     ),
-                    align="start",
-                    gap="0.25rem",
-                    width="100%",
                 ),
                 rx.cond(
                     LetterheadConfigState.form_role_code != "",

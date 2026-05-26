@@ -44,6 +44,7 @@ _NOT_FOUND = Response("Not found", status_code=404)
 _PURPOSE_PERMISSION_MAP: dict[str, str] = {
     "letterhead": "letterhead_asset",
     "template": "template_asset",
+    "counsellor_roster": "mental_health_counsellor",
 }
 
 

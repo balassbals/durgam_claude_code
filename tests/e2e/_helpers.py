@@ -246,9 +246,9 @@ def _latest_mailpit_email(
 
 
 def _hard_delete_letterhead_by_role(role_code: str) -> None:
-    """Hard-delete letterhead_assets (and their file_assets) for a given role_code.
+    """Hard-delete document_templates letterheads (and their file_assets) for a given role_code.
 
-    Removes letterhead rows first, then the associated file_asset rows
+    Removes document_template rows first, then the associated file_asset rows
     (referenced by file_id FK). Also removes the storage blob.
     """
     from sqlalchemy import create_engine, text
@@ -262,16 +262,16 @@ def _hard_delete_letterhead_by_role(role_code: str) -> None:
         with engine.connect() as conn:
             rows = conn.execute(
                 text(
-                    "SELECT la.id, fa.storage_key, la.file_id "
-                    "FROM letterhead_assets la "
-                    "JOIN file_assets fa ON fa.id = la.file_id "
-                    "WHERE la.role_code = :rc"
+                    "SELECT dt.id, fa.storage_key, dt.file_id "
+                    "FROM document_templates dt "
+                    "JOIN file_assets fa ON fa.id = dt.file_id "
+                    "WHERE dt.role_code = :rc AND dt.purpose = 'letterhead'"
                 ),
                 {"rc": role_code},
             ).fetchall()
             for row in rows:
                 conn.execute(
-                    text("DELETE FROM letterhead_assets WHERE id = :id"),
+                    text("DELETE FROM document_templates WHERE id = :id"),
                     {"id": row[0]},
                 )
                 conn.execute(
@@ -288,7 +288,7 @@ def _hard_delete_letterhead_by_role(role_code: str) -> None:
 
 
 def _hard_delete_template_by_type(template_type: str) -> None:
-    """Hard-delete template_assets (and their file_assets) for a given template_type."""
+    """Hard-delete document_templates (and their file_assets) for a given purpose/type."""
     from sqlalchemy import create_engine, text
 
     from durgam.config import settings
@@ -300,16 +300,16 @@ def _hard_delete_template_by_type(template_type: str) -> None:
         with engine.connect() as conn:
             rows = conn.execute(
                 text(
-                    "SELECT ta.id, fa.storage_key, ta.file_id "
-                    "FROM template_assets ta "
-                    "JOIN file_assets fa ON fa.id = ta.file_id "
-                    "WHERE ta.template_type = :tt"
+                    "SELECT dt.id, fa.storage_key, dt.file_id "
+                    "FROM document_templates dt "
+                    "JOIN file_assets fa ON fa.id = dt.file_id "
+                    "WHERE dt.purpose = :purpose AND dt.role_code IS NULL"
                 ),
-                {"tt": template_type},
+                {"purpose": template_type},
             ).fetchall()
             for row in rows:
                 conn.execute(
-                    text("DELETE FROM template_assets WHERE id = :id"),
+                    text("DELETE FROM document_templates WHERE id = :id"),
                     {"id": row[0]},
                 )
                 conn.execute(

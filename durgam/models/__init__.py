@@ -5,12 +5,18 @@ from .centre import CentreOfExcellence
 from .config_anchors import (
     AcademicYear,
     CalendarEntry,
+    ClassCoordinatorAssignment,
+    ClassTeacherAssignment,
     ClassTimingsConfig,
+    DocumentTemplate,
+    FacultyMentorAssignment,
     Holiday,
-    LetterheadAsset,
+    MentalHealthCounsellor,
+    NonOwnedCourse,
     RoleEmail,
     StudentCategoryCount,
-    TemplateAsset,
+    UGTimetable,
+    VisitingFaculty,
     WorkingDaysConfig,
 )
 from .course import Course
@@ -62,14 +68,21 @@ __all__ = [
     "AcademicYear",
     "Holiday",
     "RoleEmail",
-    "LetterheadAsset",
-    "TemplateAsset",
+    "DocumentTemplate",
     "StudentCategoryCount",
     # Config anchors (M3)
     "ClassTimingsConfig",
     "WorkingDaysConfig",
     # Config anchors (M4)
     "CalendarEntry",
+    # Config anchors (M5b)
+    "MentalHealthCounsellor",
+    "FacultyMentorAssignment",
+    "ClassTeacherAssignment",
+    "ClassCoordinatorAssignment",
+    "VisitingFaculty",
+    "NonOwnedCourse",
+    "UGTimetable",
     # Auth sessions
     "UserSession",
     "PasswordResetToken",

@@ -24,12 +24,12 @@ class TestSeed:
         db_session.commit()
 
         # Assert TOTAL row counts after seed (stable regardless of pre-existing data).
-        # M5a: 19 roles (unchanged from M4).
-        assert _count(db_session, Role) == 19, "Expected 19 seeded roles at M5a"
-        # M5a: 64 triples — 54 M4 + 3 role_email + 1 file_asset:read + 3 letterhead_asset + 3 template_asset.
-        assert _count(db_session, Permission) == 64, "Expected 64 seeded permission triples at M5a"
-        assert _count(db_session, User) >= 10, "Expected at least the 10 seeded users"
-        assert _count(db_session, RolePermission) >= 64, "Expected at least 64 role→permission rows"
+        # M5b: 26 roles (23 M5a + DEAN_STUDENT_WELFARE_OFFICE, DEAN_ACADEMIC_AFFAIRS, DEAN_ACADEMIC_AFFAIRS_OFFICE).
+        assert _count(db_session, Role) == 26, "Expected 26 seeded roles at M5b"
+        # M5b: 86 triples (80 prior + 3 non_owned_course + 3 ug_timetable).
+        assert _count(db_session, Permission) == 86, "Expected 86 seeded permission triples at M5b"
+        assert _count(db_session, User) >= 12, "Expected at least the 12 seeded users"
+        assert _count(db_session, RolePermission) >= 86, "Expected at least 86 role→permission rows"
         ay = db_session.exec(select(AcademicYear).where(AcademicYear.code == "2025-26")).first()
         assert ay is not None, "AcademicYear 2025-26 must exist after seeding"
         ay_prev = db_session.exec(select(AcademicYear).where(AcademicYear.code == "2024-25")).first()
@@ -69,11 +69,11 @@ class TestSeed:
         all_users = seeded_session.exec(
             select(User).where(User.is_deleted == False)  # noqa: E712
         ).all()
-        assert len(all_users) >= 10
+        assert len(all_users) >= 12
         active = [u for u in all_users if u.is_active]
         inactive = [u for u in all_users if not u.is_active]
         must_change = [u for u in all_users if u.must_change_password]
-        assert len(active) >= 9  # all except inactive_user
+        assert len(active) >= 11  # all except inactive_user
         assert len(inactive) >= 1  # inactive_user
         assert len(must_change) >= 1  # firstlogin_user
 

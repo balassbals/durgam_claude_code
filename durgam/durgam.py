@@ -154,16 +154,49 @@ app.add_page(admin_config_role_emails, route="/admin/config/role-emails",
              on_load=RoleEmailConfigState.load_role_emails)
 
 from durgam.pages.admin.config.letterheads import admin_config_letterheads
-from durgam.states.config_letterhead import LetterheadConfigState
+from durgam.pages.admin.config.templates import admin_config_templates
+from durgam.states.config_document_template import LetterheadConfigState, TemplateConfigState
 
 app.add_page(admin_config_letterheads, route="/admin/config/letterheads",
              on_load=LetterheadConfigState.load_letterheads)
 
-from durgam.pages.admin.config.templates import admin_config_templates
-from durgam.states.config_template import TemplateConfigState
-
 app.add_page(admin_config_templates, route="/admin/config/templates",
              on_load=TemplateConfigState.load_templates)
+
+# ── M5b routes ────────────────────────────────────────────────────────────────
+from durgam.pages.admin.config.counsellors import admin_config_counsellors
+from durgam.pages.admin.config.faculty_mentors import admin_config_faculty_mentors
+from durgam.states.config_counsellor import CounsellorConfigState
+from durgam.states.config_faculty_mentor import FacultyMentorConfigState
+
+app.add_page(admin_config_counsellors, route="/admin/config/counsellors",
+             on_load=CounsellorConfigState.load_counsellors)
+app.add_page(admin_config_faculty_mentors, route="/admin/config/faculty-mentors",
+             on_load=FacultyMentorConfigState.load_mentors)
+
+from durgam.pages.admin.config.class_teachers import admin_config_class_teachers
+from durgam.pages.admin.config.class_coordinators import admin_config_class_coordinators
+from durgam.pages.admin.config.visiting_faculty import admin_config_visiting_faculty
+from durgam.states.config_class_teacher import ClassTeacherConfigState
+from durgam.states.config_class_coordinator import ClassCoordinatorConfigState
+from durgam.states.config_visiting_faculty import VisitingFacultyConfigState
+
+app.add_page(admin_config_class_teachers, route="/admin/config/class-teachers",
+             on_load=ClassTeacherConfigState.load_teachers)
+app.add_page(admin_config_class_coordinators, route="/admin/config/class-coordinators",
+             on_load=ClassCoordinatorConfigState.load_coordinators)
+app.add_page(admin_config_visiting_faculty, route="/admin/config/visiting-faculty",
+             on_load=VisitingFacultyConfigState.load_visitors)
+
+from durgam.pages.admin.config.non_owned_courses import admin_config_non_owned_courses
+from durgam.pages.admin.config.ug_timetable import admin_config_ug_timetable
+from durgam.states.config_non_owned_course import NonOwnedCourseConfigState
+from durgam.states.config_ug_timetable import UGTimetableConfigState
+
+app.add_page(admin_config_non_owned_courses, route="/admin/config/non-owned-courses",
+             on_load=NonOwnedCourseConfigState.load_courses)
+app.add_page(admin_config_ug_timetable, route="/admin/config/ug-timetable",
+             on_load=UGTimetableConfigState.load_slots)
 
 # ── M5a authenticated file download API ──────────────────────────────────────
 from durgam.api.download import download_file

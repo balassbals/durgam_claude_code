@@ -1,4 +1,4 @@
-"""Property test: at most one active LetterheadAsset per (role_code, scope) pair.
+"""Property test: at most one active DocumentTemplate letterhead per (role_code, scope) pair.
 
 Uses Hypothesis to generate sequences of upload/delete operations and asserts
 the invariant holds after each operation.
@@ -10,8 +10,8 @@ from uuid import uuid4
 from hypothesis import given, settings as hyp_settings
 from hypothesis import strategies as st
 
-from durgam.models.config_anchors import LetterheadAsset
-from durgam.services.letterhead_asset import LetterheadAssetService
+from durgam.models.config_anchors import DocumentTemplate
+from durgam.services.document_template import DocumentTemplateService
 
 
 def _make_svc():
@@ -19,9 +19,9 @@ def _make_svc():
     repo = MagicMock()
     upload_svc = MagicMock()
 
-    active: dict[tuple[str, str | None, str | None], LetterheadAsset] = {}
+    active: dict[tuple[str, str | None, str | None], DocumentTemplate] = {}
 
-    def get_active(role_code, scope_type=None, scope_id=None):
+    def get_lh(role_code, scope_type=None, scope_id=None):
         return active.get((role_code, scope_type, str(scope_id) if scope_id else None))
 
     def save(row):
@@ -41,7 +41,7 @@ def _make_svc():
                 return v
         return None
 
-    repo.get_active_by_role_and_scope = get_active
+    repo.get_letterhead_by_role_and_scope = get_lh
     repo.save = save
     repo.soft_delete = soft_delete
     repo.get_by_id = get_by_id
@@ -50,7 +50,7 @@ def _make_svc():
     fa.id = uuid4()
     upload_svc.upload.return_value = fa
 
-    return LetterheadAssetService(repo=repo, upload_svc=upload_svc), active
+    return DocumentTemplateService(repo=repo, upload_svc=upload_svc), active
 
 
 _ROLE_CODES = st.sampled_from(["REGISTRAR", "DIRECTOR", "HOD", "DEAN"])

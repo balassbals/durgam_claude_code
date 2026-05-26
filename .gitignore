@@ -44,3 +44,6 @@ celerybeat-schedule.db
 
 # macOS
 .DS_Store
+
+# WSL Zone.Identifier files
+*:Zone.Identifier

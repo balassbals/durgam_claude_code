@@ -16,7 +16,7 @@ from durgam.pages.components import (
 from durgam.pages.shared.confirmation_dialog import confirmation_dialog
 from durgam.pages.shared.data_table import TableColumn, data_table
 from durgam.pages.shared.file_upload import file_upload_zone
-from durgam.states.config_template import TemplateConfigState
+from durgam.states.config_document_template import TemplateConfigState
 
 _TYPE_OPTIONS = ["bos", "mom", "vac"]
 

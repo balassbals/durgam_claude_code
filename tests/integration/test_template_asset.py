@@ -1,6 +1,7 @@
-"""Integration tests for TemplateAsset — upload pipeline, partial unique, replace.
+"""Integration tests for DocumentTemplate (type-based) — upload pipeline, partial unique, replace.
 
 Uses db_session (transactional rollback) for isolation.
+Replaces TemplateAsset tests per E-005 unification.
 """
 
 import hashlib
@@ -8,13 +9,14 @@ from uuid import uuid4
 
 import pytest
 import sqlalchemy as sa
+from sqlmodel import select
 
-from durgam.models.config_anchors import TemplateAsset
+from durgam.models.config_anchors import DocumentTemplate
 from durgam.models.crosscutting import FileAsset
 from durgam.models.identity import User
+from durgam.repositories.document_template import DocumentTemplateRepository
 from durgam.repositories.file_asset import FileAssetRepository
-from durgam.repositories.template_asset import TemplateAssetRepository
-from durgam.services.template_asset import TemplateAssetService
+from durgam.services.document_template import DocumentTemplateService
 from durgam.services.upload import UploadService
 from durgam.storage import get_storage_backend
 
@@ -34,10 +36,10 @@ def _user(session) -> User:
     return u
 
 
-def _svc(session) -> TemplateAssetService:
+def _svc(session) -> DocumentTemplateService:
     backend = get_storage_backend()
-    return TemplateAssetService(
-        repo=TemplateAssetRepository(session),
+    return DocumentTemplateService(
+        repo=DocumentTemplateRepository(session),
         upload_svc=UploadService(
             file_repo=FileAssetRepository(session),
             backend=backend,
@@ -53,7 +55,8 @@ class TestUploadPipeline:
         user = _user(db_session)
         svc = _svc(db_session)
         tpl = svc.upload_template("bos", _DOCX_BYTES, "bos.docx", _DOCX_MIME, user.id)
-        assert tpl.template_type == "bos"
+        assert tpl.purpose == "bos"
+        assert tpl.role_code is None
         assert tpl.file_id is not None
         fa = db_session.get(FileAsset, tpl.file_id)
         assert fa is not None
@@ -72,17 +75,15 @@ class TestUploadPipeline:
 
 class TestPartialUniqueIndex:
     def test_duplicate_active_type_prevented(self, db_session):
-        """Two active rows with the same template_type must be rejected."""
+        """Two active rows with the same purpose (non-letterhead) must be rejected."""
         user = _user(db_session)
         sha = hashlib.sha256(_DOCX_BYTES).hexdigest()
 
-        # Soft-delete any existing active row for this type (e.g. from seed)
-        from sqlmodel import select
-
         existing = db_session.exec(
-            select(TemplateAsset).where(
-                TemplateAsset.template_type == "mom",
-                TemplateAsset.is_deleted == False,  # noqa: E712
+            select(DocumentTemplate).where(
+                DocumentTemplate.purpose == "mom",
+                DocumentTemplate.role_code.is_(None),  # type: ignore[union-attr]
+                DocumentTemplate.is_deleted == False,  # noqa: E712
             )
         ).first()
         if existing:
@@ -106,21 +107,24 @@ class TestPartialUniqueIndex:
             return fa
 
         fa1 = _make_fa()
-        t1 = TemplateAsset(template_type="mom", file_id=fa1.id)
+        t1 = DocumentTemplate(purpose="mom", role_code=None, file_id=fa1.id)
         db_session.add(t1)
         db_session.flush()
 
         fa2 = _make_fa()
-        t2 = TemplateAsset(template_type="mom", file_id=fa2.id)
+        t2 = DocumentTemplate(purpose="mom", role_code=None, file_id=fa2.id)
         db_session.add(t2)
-        with pytest.raises(sa.exc.IntegrityError, match="uq_template_assets_type"):
+        with pytest.raises(
+            sa.exc.IntegrityError,
+            match="uq_document_templates_type",
+        ):
             db_session.flush()
 
     def test_soft_deleted_excluded_from_unique(self, db_session):
         user = _user(db_session)
         svc = _svc(db_session)
         old = svc.upload_template("bos", _DOCX_BYTES, "old.docx", _DOCX_MIME, user.id)
-        repo = TemplateAssetRepository(db_session)
+        repo = DocumentTemplateRepository(db_session)
         repo.soft_delete(old, user.id)
         db_session.flush()
         new = svc.upload_template("bos", _DOCX_BYTES, "new.docx", _DOCX_MIME, user.id)

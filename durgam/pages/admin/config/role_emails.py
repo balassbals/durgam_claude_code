@@ -13,7 +13,10 @@ from durgam.pages.components import (
 )
 from durgam.pages.shared.confirmation_dialog import confirmation_dialog
 from durgam.pages.shared.data_table import TableColumn, data_table
+from durgam.scopes.registry import get_scope_type_dropdown_options
 from durgam.states.config_role_email import RoleEmailConfigState
+
+_SCOPE_OPTIONS = get_scope_type_dropdown_options()
 
 
 def _kebab(row: dict) -> rx.Component:
@@ -130,9 +133,10 @@ def _inline_form() -> rx.Component:
                             rx.select.trigger(placeholder="Global (no scope)"),
                             rx.select.content(
                                 rx.select.item("Global (no scope)", value="global"),
-                                rx.select.item("Campus", value="campus"),
-                                rx.select.item("Department", value="department"),
-                                rx.select.item("School", value="school"),
+                                *[
+                                    rx.select.item(opt["label"], value=opt["value"])
+                                    for opt in _SCOPE_OPTIONS
+                                ],
                             ),
                             value=RoleEmailConfigState.form_scope_type_ui,
                             on_change=RoleEmailConfigState.set_form_scope_type_ui,

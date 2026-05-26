@@ -1,41 +1,51 @@
-"""Integration test for docgen merge — letterhead + content → valid DOCX."""
+"""Integration test for docgen — DOCX template-fill produces valid DOCX (E-005)."""
 
 import io
+from pathlib import Path
 
 from docx import Document
 
-from durgam.docgen.merge import merge_letterhead_and_content
+from durgam.docgen.merge import render_docx_template
 
-_2x2_PNG = (
-    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x02"
-    b"\x00\x00\x00\x02\x08\x02\x00\x00\x00\xfd\xd4\x9as"
-    b"\x00\x00\x00\x10IDATx\x9cc\xf8\xcf\xc0\x00D\x0c\x10"
-    b"\n\x00\x1f\xee\x03\xfd\x8b_\x14\xd4"
-    b"\x00\x00\x00\x00IEND\xaeB`\x82"
-)
+
+def _make_template_docx() -> bytes:
+    doc = Document()
+    doc.add_heading("{{ title }}", level=1)
+    doc.add_paragraph("Date: {{ date }}")
+    doc.add_paragraph("{{ body }}")
+    buf = io.BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
 
 
 class TestDocgenIntegration:
-    def test_full_merge_produces_valid_docx(self):
-        blocks = [
-            {"type": "heading", "text": "Board of Studies Meeting", "level": 1},
-            {"type": "paragraph", "text": "Minutes of the meeting held on 2025-10-15."},
-            {"type": "table", "rows": [
-                ["Item", "Description", "Action"],
-                ["1", "Curriculum revision", "Approved"],
-                ["2", "New elective proposal", "Deferred"],
-            ]},
-            {"type": "paragraph", "text": "Meeting adjourned at 4:00 PM."},
-        ]
-        result = merge_letterhead_and_content(_2x2_PNG, blocks)
+    def test_full_render_produces_valid_docx(self):
+        tpl_bytes = _make_template_docx()
+        context = {
+            "title": "Board of Studies Meeting",
+            "date": "2025-10-15",
+            "body": "Minutes of the meeting held on 2025-10-15.",
+        }
+        result = render_docx_template(tpl_bytes, context)
         assert len(result) > 0
 
         doc = Document(io.BytesIO(result))
-        assert any("Board of Studies Meeting" in p.text for p in doc.paragraphs)
-        assert any("Minutes of the meeting" in p.text for p in doc.paragraphs)
-        assert len(doc.tables) == 1
-        assert doc.tables[0].rows[0].cells[0].text == "Item"
-        assert doc.tables[0].rows[1].cells[2].text == "Approved"
+        all_text = " ".join(p.text for p in doc.paragraphs)
+        assert "Board of Studies Meeting" in all_text
+        assert "2025-10-15" in all_text
+        assert "Minutes of the meeting" in all_text
 
-        header = doc.sections[0].header
-        assert len(header.paragraphs[0].runs) == 1
+    def test_fixture_template_render(self):
+        fixture_path = Path(__file__).resolve().parent.parent / "fixtures" / "sample_template.docx"
+        if not fixture_path.exists():
+            return
+        tpl_bytes = fixture_path.read_bytes()
+        result = render_docx_template(tpl_bytes, {
+            "title": "Integration Test",
+            "name": "Test User",
+            "date": "2026-01-01",
+        })
+        doc = Document(io.BytesIO(result))
+        all_text = " ".join(p.text for p in doc.paragraphs)
+        assert "Integration Test" in all_text
+        assert "Test User" in all_text
