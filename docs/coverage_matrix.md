@@ -66,7 +66,10 @@ E-004 (RoleEmail) bind to this split.
 | Student (basic info in config module) | §9.3 | M12 | Planned for M12 | Student profile module |
 | RoleEmail (email bound to role/scope) | §9.3 | M2/M5a | Shipped at M5a | M2 seeded; M4 reads for calendar phase-transition emails; E-004 remediation at M5a (re-key to UUID PK + TimestampedSoftDelete + partial unique indexes); management UI at `/admin/config/role-emails` (Registrar family + SysAdmin) |
 | LetterheadAsset (file per role/scope) | §9.3 | M5a | Shipped at M5a | Upload/replace/deactivate/download; partial unique indexes (global + scoped); MIME filter (PDF/PNG/JPG); max 5 MB; `/admin/config/letterheads` |
-| ApprovalProcess (workflow config) | §9.3 | M7 | Planned for M7 | Approval Engine |
+| ApprovalProcess (workflow config — schema + CPC config) | §9.3, §8.4 | M5b | In flight at M5b | Schema exists in crosscutting.py; M5b adds config UI + service + seeds CPC_FUND_RELEASE process. Runtime execution stays M7. |
+| ApprovalProcess (runtime execution) | §9.5 | M7 | Planned for M7 | Generic approval engine consumes M5b config; CPC fund-release fully wired. |
+| PurchaseProcedureRule (spend-tier config, Finance-owned) | Purchase Procedures doc, §9.5, E-007 | M5b | In flight at M5b | 5 tiers × 2 fund sources (institute_budgeted / projects-ugc); floor/ceiling, min-quotes, comparative-statement, committee_level per tier. committee_level implies topology (none→sequential, committee→concurrent per E-007). Owned by Finance Officer/Office; editable config. |
+| PurchaseCommitteeTemplate (committee composition policy, Finance-owned) | E-007 | M5b | In flight at M5b | Per committee type: member-role set, escalation designate, external_expert_mode, no-committee route options. Editable so procedure changes need no code change. Per-purchase assembly is M7 runtime. |
 | StudentCategoryCount (SC/ST/OBC/EWS/General per AY) | §9.3 | M4 | Shipped at M4 | AY-scoped singleton edit; Registrar-managed; blocked when AY locked |
 | MentalHealthCounsellor (AY-scoped roster, Director's letterhead) | §9.3 | M5b | Planned for M5b | Configuration — Identity Attachments |
 | FacultyMentorAssignment | §9.3 | M5b | Planned for M5b | Requires Faculty (M10) model — see M5 inheritance note; Option A confirmed (model + thin UI at M5b, rich UI at M14) |
