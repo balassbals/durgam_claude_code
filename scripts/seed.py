@@ -113,8 +113,9 @@ def seed(session: Session) -> dict[str, int]:
 
     # ── Roles ─────────────────────────────────────────────────────────────────
     # Role levels reflect organisational hierarchy (OQ-M4-4):
-    # SYSTEM_ADMIN=100 · REGISTRAR family=80-73 · DIRECTOR family=75-69
-    # · IQAC_COORDINATOR=71 · DEAN_*=70 · HOD family=50-42 · STUDENT=10 · BASIC_USER=1
+    # SYSTEM_ADMIN=100 · VC family=90-85 · REGISTRAR/FINANCE=80 · DIRECTOR/CPC_CHAIR=75
+    # · REGISTRAR sub=77-73 · DEPUTY_DIRECTOR=72 · IQAC=71 · DEAN_*=70
+    # · DIRECTOR_OFFICE=69 · HOD family=50-42 · STUDENT=10 · BASIC_USER=1
     # on_conflict_do_update so re-seeding repairs any level drift (e.g. DEAN 50→70).
     roles_data = [
         # Technical admin (cross-cutting; not in org hierarchy)
@@ -140,6 +141,13 @@ def seed(session: Session) -> dict[str, int]:
         {"code": "HOD",                  "name": "Head of Department",                 "level": 50},
         {"code": "AHOD",                 "name": "Associate Head of Department",       "level": 45},
         {"code": "HOD_OFFICE",           "name": "Head of Department Office",          "level": 42},
+        # Vice-Chancellor family (M5b — approver/channel roles for purchase config)
+        {"code": "VC",                   "name": "Vice-Chancellor",                    "level": 90},
+        {"code": "VC_OFFICE",            "name": "Vice-Chancellor's Office",           "level": 85},
+        # Finance (M5b — owns purchase procedure rules + committee templates)
+        {"code": "FINANCE_OFFICER",      "name": "Finance Officer",                    "level": 80},
+        # CPC (M5b — Central Purchase Committee)
+        {"code": "CPC_CHAIRPERSON",      "name": "Central Purchase Committee Chairperson", "level": 75},
         # Students and base
         {"code": "STUDENT",              "name": "Student",                            "level": 10},
         {"code": "BASIC_USER",           "name": "Basic User",                         "level": 1},
@@ -402,6 +410,11 @@ def seed(session: Session) -> dict[str, int]:
             ("calendar_entry",             "write",     "*"),
             ("student_category_count",     "read",      "*"),
         ],
+        # M5b — approver/channel roles; no config-write permissions yet (runtime → M7)
+        "VC":                   _PUBLIC_READ,
+        "VC_OFFICE":            _PUBLIC_READ,
+        "FINANCE_OFFICER":      _PUBLIC_READ,
+        "CPC_CHAIRPERSON":      _PUBLIC_READ,
         "STUDENT":              _PUBLIC_READ,
         "BASIC_USER":           _PUBLIC_READ,
     }
