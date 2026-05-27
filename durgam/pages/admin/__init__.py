@@ -38,7 +38,7 @@ register(NavEntry(
     permission_resource="permission",
 ))
 register(NavEntry(
-    label="Import Users",
+    label="Bulk Import",
     href="/admin/import",
     icon="upload",
     group="Admin",
