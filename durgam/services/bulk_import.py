@@ -1,9 +1,10 @@
-"""BulkImportService — two-stage CSV import for users (§9.2(d), §16).
+"""BulkImportService — two-stage CSV import for users, courses, programs (§9.2(d), §16).
 
-Stage 1: validate_user_csv — parse bytes, check schema, validate each row.
-Stage 2: commit_user_import — insert valid rows, return (success_count, errors).
+Stage 1: validate_*_csv — parse bytes, check schema, validate each row.
+Stage 2: commit_*_import — insert valid rows, return (success_count, errors).
 
 Errors do not commit the row (per §16 risk note). Valid rows commit individually.
+Faculty and student bulk import deferred to M10/M12 (models don't exist yet).
 """
 
 from __future__ import annotations
@@ -177,3 +178,310 @@ def commit_user_import(
             ))
 
     return ImportResult(success_count=success, errors=late_errors)
+
+
+# ── Course CSV import ────────────────────────────────────────────────────────
+
+_COURSE_REQUIRED_COLS = {"code", "name", "program_code", "department_code", "credits", "evaluation"}
+_COURSE_OPTIONAL_COLS = {"lecture", "tutorial", "practical"}
+
+
+@dataclass
+class ValidCourseRow:
+    row_number: int
+    code: str
+    name: str
+    program_id: UUID
+    program_code: str
+    department_id: UUID
+    department_code: str
+    credits: int
+    lecture: int
+    tutorial: int
+    practical: int
+    evaluation: str
+
+
+def validate_course_csv(
+    file_bytes: bytes,
+    *,
+    program_repo: "ProgramRepository",
+    department_repo: "DepartmentRepository",
+    course_repo: "CourseRepository",
+    max_preview_rows: int = 100,
+) -> tuple[list[ValidCourseRow], list[InvalidRow]]:
+    from durgam.repositories.course import CourseRepository as _CR
+    from durgam.repositories.department import DepartmentRepository as _DR
+    from durgam.repositories.program import ProgramRepository as _PR
+
+    try:
+        text = file_bytes.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text = file_bytes.decode("latin-1")
+
+    reader = csv.DictReader(io.StringIO(text))
+    if reader.fieldnames is None:
+        return [], [InvalidRow(row_number=0, raw={}, error="File appears to be empty.")]
+
+    headers = {h.strip().lower() for h in reader.fieldnames if h}
+    missing = _COURSE_REQUIRED_COLS - headers
+    if missing:
+        return [], [
+            InvalidRow(row_number=0, raw={}, error=f"Missing required columns: {', '.join(sorted(missing))}.")
+        ]
+
+    valid: list[ValidCourseRow] = []
+    invalid: list[InvalidRow] = []
+    seen_codes: set[str] = set()
+
+    for i, raw_row in enumerate(reader, start=2):
+        if i - 1 > max_preview_rows:
+            break
+        row = {k.strip().lower(): (v or "").strip() for k, v in raw_row.items() if k}
+        errors_for_row: list[str] = []
+
+        code = row.get("code", "").upper()
+        name = row.get("name", "")
+        program_code = row.get("program_code", "").upper()
+        department_code = row.get("department_code", "").upper()
+        credits_str = row.get("credits", "")
+        evaluation = row.get("evaluation", "").upper()
+        lecture_str = row.get("lecture", "0")
+        tutorial_str = row.get("tutorial", "0")
+        practical_str = row.get("practical", "0")
+
+        if not code:
+            errors_for_row.append("code is required")
+        if not name:
+            errors_for_row.append("name is required")
+        if not program_code:
+            errors_for_row.append("program_code is required")
+        if not department_code:
+            errors_for_row.append("department_code is required")
+        if evaluation not in ("I", "E", "IE"):
+            errors_for_row.append("evaluation must be one of: I, E, IE")
+
+        credits = _parse_int(credits_str, "credits", errors_for_row, min_val=0)
+        lecture = _parse_int(lecture_str, "lecture", errors_for_row, min_val=0)
+        tutorial = _parse_int(tutorial_str, "tutorial", errors_for_row, min_val=0)
+        practical = _parse_int(practical_str, "practical", errors_for_row, min_val=0)
+
+        program_id: UUID | None = None
+        department_id: UUID | None = None
+
+        if not errors_for_row and program_code:
+            prog = program_repo.get_by_code(program_code)
+            if prog is None:
+                errors_for_row.append(f"program_code '{program_code}' not found")
+            else:
+                program_id = prog.id
+
+        if not errors_for_row and department_code:
+            dept = department_repo.get_by_code(department_code)
+            if dept is None:
+                errors_for_row.append(f"department_code '{department_code}' not found")
+            else:
+                department_id = dept.id
+
+        if code and code in seen_codes:
+            errors_for_row.append(f"duplicate code '{code}' within this file")
+
+        if not errors_for_row and code and course_repo.get_by_code(code) is not None:
+            errors_for_row.append(f"code '{code}' already exists in the system")
+
+        if errors_for_row:
+            invalid.append(InvalidRow(row_number=i, raw=dict(row), error="; ".join(errors_for_row)))
+        else:
+            seen_codes.add(code)
+            valid.append(ValidCourseRow(
+                row_number=i, code=code, name=name,
+                program_id=program_id,  # type: ignore[arg-type]
+                program_code=program_code,
+                department_id=department_id,  # type: ignore[arg-type]
+                department_code=department_code,
+                credits=credits, lecture=lecture, tutorial=tutorial,
+                practical=practical, evaluation=evaluation,
+            ))
+
+    return valid, invalid
+
+
+def commit_course_import(
+    valid_rows: list[ValidCourseRow],
+    actor_id: UUID,
+    *,
+    course_repo: "CourseRepository",
+    program_repo: "ProgramRepository",
+    department_repo: "DepartmentRepository",
+) -> ImportResult:
+    from durgam.services.course import CourseService
+
+    svc = CourseService(course_repo=course_repo)
+    success = 0
+    late_errors: list[InvalidRow] = []
+
+    for vrow in valid_rows:
+        try:
+            svc.create(
+                code=vrow.code, name=vrow.name,
+                program_id=vrow.program_id, department_id=vrow.department_id,
+                credits=vrow.credits, lecture=vrow.lecture,
+                tutorial=vrow.tutorial, practical=vrow.practical,
+                evaluation=vrow.evaluation, actor_id=actor_id,
+            )
+            success += 1
+            log.info("bulk_import_course_created", code=vrow.code, actor=str(actor_id))
+        except Exception as exc:
+            log.warning("bulk_import_course_failed", row=vrow.row_number, error=str(exc))
+            late_errors.append(InvalidRow(
+                row_number=vrow.row_number,
+                raw={"code": vrow.code, "name": vrow.name},
+                error=str(exc),
+            ))
+
+    return ImportResult(success_count=success, errors=late_errors)
+
+
+# ── Program CSV import ───────────────────────────────────────────────────────
+
+_PROGRAM_REQUIRED_COLS = {"code", "name", "department_code", "degree_type", "duration_years"}
+
+
+@dataclass
+class ValidProgramRow:
+    row_number: int
+    code: str
+    name: str
+    department_id: UUID
+    department_code: str
+    degree_type: str
+    duration_years: int
+
+
+def validate_program_csv(
+    file_bytes: bytes,
+    *,
+    program_repo: "ProgramRepository",
+    department_repo: "DepartmentRepository",
+    max_preview_rows: int = 100,
+) -> tuple[list[ValidProgramRow], list[InvalidRow]]:
+    try:
+        text = file_bytes.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text = file_bytes.decode("latin-1")
+
+    reader = csv.DictReader(io.StringIO(text))
+    if reader.fieldnames is None:
+        return [], [InvalidRow(row_number=0, raw={}, error="File appears to be empty.")]
+
+    headers = {h.strip().lower() for h in reader.fieldnames if h}
+    missing = _PROGRAM_REQUIRED_COLS - headers
+    if missing:
+        return [], [
+            InvalidRow(row_number=0, raw={}, error=f"Missing required columns: {', '.join(sorted(missing))}.")
+        ]
+
+    valid: list[ValidProgramRow] = []
+    invalid: list[InvalidRow] = []
+    seen_codes: set[str] = set()
+
+    for i, raw_row in enumerate(reader, start=2):
+        if i - 1 > max_preview_rows:
+            break
+        row = {k.strip().lower(): (v or "").strip() for k, v in raw_row.items() if k}
+        errors_for_row: list[str] = []
+
+        code = row.get("code", "").upper()
+        name = row.get("name", "")
+        department_code = row.get("department_code", "").upper()
+        degree_type = row.get("degree_type", "").strip()
+        duration_str = row.get("duration_years", "")
+
+        if not code:
+            errors_for_row.append("code is required")
+        if not name:
+            errors_for_row.append("name is required")
+        if not department_code:
+            errors_for_row.append("department_code is required")
+        if not degree_type:
+            errors_for_row.append("degree_type is required")
+
+        duration_years = _parse_int(duration_str, "duration_years", errors_for_row, min_val=1)
+
+        department_id: UUID | None = None
+
+        if not errors_for_row and department_code:
+            dept = department_repo.get_by_code(department_code)
+            if dept is None:
+                errors_for_row.append(f"department_code '{department_code}' not found")
+            else:
+                department_id = dept.id
+
+        if code and code in seen_codes:
+            errors_for_row.append(f"duplicate code '{code}' within this file")
+
+        if not errors_for_row and code and program_repo.get_by_code(code) is not None:
+            errors_for_row.append(f"code '{code}' already exists in the system")
+
+        if errors_for_row:
+            invalid.append(InvalidRow(row_number=i, raw=dict(row), error="; ".join(errors_for_row)))
+        else:
+            seen_codes.add(code)
+            valid.append(ValidProgramRow(
+                row_number=i, code=code, name=name,
+                department_id=department_id,  # type: ignore[arg-type]
+                department_code=department_code,
+                degree_type=degree_type, duration_years=duration_years,
+            ))
+
+    return valid, invalid
+
+
+def commit_program_import(
+    valid_rows: list[ValidProgramRow],
+    actor_id: UUID,
+    *,
+    program_repo: "ProgramRepository",
+) -> ImportResult:
+    from durgam.services.program import ProgramService
+
+    svc = ProgramService(program_repo=program_repo)
+    success = 0
+    late_errors: list[InvalidRow] = []
+
+    for vrow in valid_rows:
+        try:
+            svc.create(
+                code=vrow.code, name=vrow.name,
+                department_id=vrow.department_id,
+                degree_type=vrow.degree_type,
+                duration_years=vrow.duration_years,
+                actor_id=actor_id,
+            )
+            success += 1
+            log.info("bulk_import_program_created", code=vrow.code, actor=str(actor_id))
+        except Exception as exc:
+            log.warning("bulk_import_program_failed", row=vrow.row_number, error=str(exc))
+            late_errors.append(InvalidRow(
+                row_number=vrow.row_number,
+                raw={"code": vrow.code, "name": vrow.name},
+                error=str(exc),
+            ))
+
+    return ImportResult(success_count=success, errors=late_errors)
+
+
+# ── Shared helpers ───────────────────────────────────────────────────────────
+
+def _parse_int(value: str, field_name: str, errors: list[str], *, min_val: int = 0) -> int:
+    if not value:
+        errors.append(f"{field_name} is required")
+        return 0
+    try:
+        n = int(value)
+    except ValueError:
+        errors.append(f"{field_name} must be an integer")
+        return 0
+    if n < min_val:
+        errors.append(f"{field_name} must be at least {min_val}")
+    return n

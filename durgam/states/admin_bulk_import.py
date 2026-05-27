@@ -1,4 +1,10 @@
-"""BulkImportState — two-stage CSV import for users (§9.2(d), §16)."""
+"""BulkImportState — two-stage CSV import for users, courses, programs (§9.2(d), §16).
+
+Bulk import is SysAdmin-only. The @require_role decorator gates on user:write
+(the original resource). For course/program imports, the handler body performs
+a fine-grained can() check against course:write / program:write so the
+permission named matches the resource being imported.
+"""
 
 from __future__ import annotations
 
@@ -9,47 +15,100 @@ from uuid import UUID
 import reflex as rx
 
 from durgam.auth.decorators import audit_action, require_role
+from durgam.auth.permissions import can
 from durgam.db import open_session
+from durgam.repositories.course import CourseRepository
+from durgam.repositories.department import DepartmentRepository
+from durgam.repositories.program import ProgramRepository
 from durgam.repositories.role import RoleRepository
 from durgam.repositories.user import UserRepository
 from durgam.repositories.user_role import UserRoleRepository
 from durgam.services.bulk_import import (
     InvalidRow,
+    ValidCourseRow,
+    ValidProgramRow,
     ValidRow,
+    commit_course_import,
+    commit_program_import,
     commit_user_import,
+    validate_course_csv,
+    validate_program_csv,
     validate_user_csv,
 )
 from durgam.states.base import BaseState
 
 
+_IMPORT_TYPES = ("users", "courses", "programs")
+
+_RESOURCE_FOR_TYPE = {
+    "users": "user",
+    "courses": "course",
+    "programs": "program",
+}
+
+_COLUMN_HEADERS = {
+    "users": ("Username", "Email", "Role"),
+    "courses": ("Code", "Name", "Program/Dept"),
+    "programs": ("Code", "Name", "Dept/Degree"),
+}
+
+
 class BulkImportState(BaseState):
-    # Preview state (non-trivial: multiple state vars, conditional rendering)
+    import_type: str = "users"
+
     preview_valid: list[dict[str, str]] = []
     preview_invalid: list[dict[str, str]] = []
     preview_ready: bool = False
     total_rows: int = 0
 
-    # Commit state
+    # Stashed validated data for commit stage (JSON-serializable dicts).
+    _stashed_valid: list[dict[str, str]] = []
+
     import_complete: bool = False
     import_success_count: int = 0
     late_errors: list[dict[str, str]] = []
 
-    # Error report CSV (base64-encoded for download)
     error_report_csv: str = ""
 
-    @require_role(action="write", resource="user")
-    @audit_action(action="upload_csv", resource="user")
-    async def upload_csv(self, files: list[rx.UploadFile]) -> None:
-        """Non-trivial handler: parses CSV, validates rows, sets preview state.
+    col1_header: str = "Username"
+    col2_header: str = "Email"
+    col3_header: str = "Role"
 
-        Reflex 0.9.2 on_drop passes list[rx.UploadFile]; read bytes via
-        file.file.read() (BinaryIO sync read) or await file.read() (async).
-        """
-        self.flash = ""
+    def set_import_type(self, value: str) -> None:
+        if value not in _IMPORT_TYPES:
+            return
+        self.import_type = value
+        self._reset_state()
+        h = _COLUMN_HEADERS.get(value, _COLUMN_HEADERS["users"])
+        self.col1_header, self.col2_header, self.col3_header = h
+
+    def _reset_state(self) -> None:
         self.preview_valid = []
         self.preview_invalid = []
         self.preview_ready = False
         self.import_complete = False
+        self.import_success_count = 0
+        self.late_errors = []
+        self.error_report_csv = ""
+        self.flash = ""
+        self._stashed_valid = []
+
+    def _check_import_permission(self, session) -> bool:
+        resource = _RESOURCE_FOR_TYPE.get(self.import_type, "user")
+        if resource == "user":
+            return True
+        return can(
+            UUID(self.current_user_id), "write", resource,
+            scope_type=None, scope_id=None, session=session,
+        )
+
+    @require_role(action="write", resource="user")
+    @audit_action(action="upload_csv", resource="user")
+    async def upload_csv(self, files: list[rx.UploadFile]) -> None:
+        self.flash = ""
+        self._reset_state()
+        h = _COLUMN_HEADERS.get(self.import_type, _COLUMN_HEADERS["users"])
+        self.col1_header, self.col2_header, self.col3_header = h
 
         if not files:
             self.flash = "No file selected."
@@ -59,24 +118,83 @@ class BulkImportState(BaseState):
         file_bytes: bytes = upload_file.file.read()
 
         with open_session() as session:
-            valid, invalid = validate_user_csv(
-                file_bytes,
-                role_repo=RoleRepository(session),
-                user_repo=UserRepository(session),
-            )
+            if not self._check_import_permission(session):
+                self.flash = f"You do not have write permission for {self.import_type}."
+                return
 
-        self.preview_valid = [
-            {"row": str(v.row_number), "username": v.username, "email": v.email,
-             "role_code": v.role_code, "status": "✓ Valid"}
-            for v in valid
-        ]
-        self.preview_invalid = [
-            {"row": str(i.row_number), "username": i.raw.get("username", ""),
-             "email": i.raw.get("email", ""), "role_code": i.raw.get("role_code", ""),
-             "status": f"✗ {i.error}"}
-            for i in invalid
-        ]
-        self.total_rows = len(valid) + len(invalid)
+            invalid: list[InvalidRow] = []
+
+            if self.import_type == "users":
+                valid_u, invalid = validate_user_csv(
+                    file_bytes,
+                    role_repo=RoleRepository(session),
+                    user_repo=UserRepository(session),
+                )
+                self._stashed_valid = [
+                    {"row": str(v.row_number), "username": v.username,
+                     "email": v.email, "role_code": v.role_code,
+                     "full_name": v.full_name}
+                    for v in valid_u
+                ]
+                self.preview_valid = [
+                    {"row": str(v.row_number), "col1": v.username,
+                     "col2": v.email, "col3": v.role_code,
+                     "status": "✓ Valid"}
+                    for v in valid_u
+                ]
+
+            elif self.import_type == "courses":
+                valid_c, invalid = validate_course_csv(
+                    file_bytes,
+                    program_repo=ProgramRepository(session),
+                    department_repo=DepartmentRepository(session),
+                    course_repo=CourseRepository(session),
+                )
+                self._stashed_valid = [
+                    {"row": str(v.row_number), "code": v.code, "name": v.name,
+                     "program_id": str(v.program_id), "department_id": str(v.department_id),
+                     "credits": str(v.credits), "lecture": str(v.lecture),
+                     "tutorial": str(v.tutorial), "practical": str(v.practical),
+                     "evaluation": v.evaluation}
+                    for v in valid_c
+                ]
+                self.preview_valid = [
+                    {"row": str(v.row_number), "col1": v.code, "col2": v.name,
+                     "col3": f"{v.program_code}/{v.department_code}",
+                     "status": "✓ Valid"}
+                    for v in valid_c
+                ]
+
+            elif self.import_type == "programs":
+                valid_p, invalid = validate_program_csv(
+                    file_bytes,
+                    program_repo=ProgramRepository(session),
+                    department_repo=DepartmentRepository(session),
+                )
+                self._stashed_valid = [
+                    {"row": str(v.row_number), "code": v.code, "name": v.name,
+                     "department_id": str(v.department_id),
+                     "degree_type": v.degree_type,
+                     "duration_years": str(v.duration_years)}
+                    for v in valid_p
+                ]
+                self.preview_valid = [
+                    {"row": str(v.row_number), "col1": v.code, "col2": v.name,
+                     "col3": f"{v.department_code}/{v.degree_type}",
+                     "status": "✓ Valid"}
+                    for v in valid_p
+                ]
+
+            self.preview_invalid = [
+                {"row": str(i.row_number),
+                 "col1": i.raw.get("username", i.raw.get("code", "")),
+                 "col2": i.raw.get("email", i.raw.get("name", "")),
+                 "col3": i.raw.get("role_code", i.raw.get("department_code", "")),
+                 "status": f"✗ {i.error}"}
+                for i in invalid
+            ]
+
+        self.total_rows = len(self.preview_valid) + len(self.preview_invalid)
         self.preview_ready = True
 
         if invalid:
@@ -85,28 +203,74 @@ class BulkImportState(BaseState):
     @require_role(action="write", resource="user")
     @audit_action(action="commit_import", resource="user")
     async def commit_import(self) -> None:
-        if not self.preview_valid:
+        if not self._stashed_valid:
             self.flash = "Nothing valid to import."
             return
 
-        valid_rows = [
-            ValidRow(
-                row_number=int(v["row"]),
-                username=v["username"],
-                email=v["email"],
-                role_code=v["role_code"],
-            )
-            for v in self.preview_valid
-        ]
-
         with open_session() as session:
-            result = commit_user_import(
-                valid_rows,
-                actor_id=UUID(self.current_user_id),
-                user_repo=UserRepository(session),
-                user_role_repo=UserRoleRepository(session),
-                role_repo=RoleRepository(session),
-            )
+            if not self._check_import_permission(session):
+                self.flash = f"You do not have write permission for {self.import_type}."
+                return
+
+            actor_id = UUID(self.current_user_id)
+
+            if self.import_type == "users":
+                rows = [
+                    ValidRow(
+                        row_number=int(v["row"]), username=v["username"],
+                        email=v["email"], role_code=v["role_code"],
+                        full_name=v.get("full_name", ""),
+                    )
+                    for v in self._stashed_valid
+                ]
+                result = commit_user_import(
+                    rows, actor_id,
+                    user_repo=UserRepository(session),
+                    user_role_repo=UserRoleRepository(session),
+                    role_repo=RoleRepository(session),
+                )
+
+            elif self.import_type == "courses":
+                rows_c = [
+                    ValidCourseRow(
+                        row_number=int(v["row"]), code=v["code"], name=v["name"],
+                        program_id=UUID(v["program_id"]),
+                        program_code="",
+                        department_id=UUID(v["department_id"]),
+                        department_code="",
+                        credits=int(v["credits"]), lecture=int(v["lecture"]),
+                        tutorial=int(v["tutorial"]), practical=int(v["practical"]),
+                        evaluation=v["evaluation"],
+                    )
+                    for v in self._stashed_valid
+                ]
+                result = commit_course_import(
+                    rows_c, actor_id,
+                    course_repo=CourseRepository(session),
+                    program_repo=ProgramRepository(session),
+                    department_repo=DepartmentRepository(session),
+                )
+
+            elif self.import_type == "programs":
+                rows_p = [
+                    ValidProgramRow(
+                        row_number=int(v["row"]), code=v["code"], name=v["name"],
+                        department_id=UUID(v["department_id"]),
+                        department_code="",
+                        degree_type=v["degree_type"],
+                        duration_years=int(v["duration_years"]),
+                    )
+                    for v in self._stashed_valid
+                ]
+                result = commit_program_import(
+                    rows_p, actor_id,
+                    program_repo=ProgramRepository(session),
+                )
+
+            else:
+                self.flash = "Unknown import type."
+                return
+
             session.commit()
 
         self.import_success_count = result.success_count
@@ -125,24 +289,23 @@ class BulkImportState(BaseState):
         preview_invalid: list[InvalidRow],
         late_errors: list[InvalidRow],
     ) -> None:
-        """Build a CSV error report and store as a string for download."""
         output = io.StringIO()
         writer = csv.writer(output)
-        writer.writerow(["row", "username", "email", "role_code", "_status", "_error"])
+        writer.writerow(["row", "field1", "field2", "field3", "_status", "_error"])
         for row in preview_invalid:
             writer.writerow([
                 row.row_number,
-                row.raw.get("username", ""),
-                row.raw.get("email", ""),
-                row.raw.get("role_code", ""),
+                row.raw.get("username", row.raw.get("code", "")),
+                row.raw.get("email", row.raw.get("name", "")),
+                row.raw.get("role_code", row.raw.get("department_code", "")),
                 "invalid",
                 row.error,
             ])
         for row in late_errors:
             writer.writerow([
                 row.row_number,
-                row.raw.get("username", ""),
-                row.raw.get("email", ""),
+                row.raw.get("username", row.raw.get("code", "")),
+                row.raw.get("email", row.raw.get("name", "")),
                 row.raw.get("role_code", ""),
                 "commit_failed",
                 row.error,
@@ -150,28 +313,28 @@ class BulkImportState(BaseState):
         self.error_report_csv = output.getvalue()
 
     def download_template(self):
-        """Serve the CSV import template as a client-side download (Bug 1).
-
-        Uses rx.download to push the file to the browser without a separate
-        HTTP route. The template content is the canonical source of truth for
-        the CSV schema expected by validate_user_csv().
-        """
-        content = (
-            "username,email,role_code,full_name\n"
-            "example_user,example.user@sssihl.edu.in,STUDENT,Example User\n"
-        )
-        return rx.download(data=content, filename="import_user_template.csv")
+        if self.import_type == "courses":
+            content = (
+                "code,name,program_code,department_code,credits,lecture,tutorial,practical,evaluation\n"
+                "MAT201,Linear Algebra,BSCMATH,DMACS,4,3,1,0,IE\n"
+            )
+            return rx.download(data=content, filename="import_course_template.csv")
+        elif self.import_type == "programs":
+            content = (
+                "code,name,department_code,degree_type,duration_years\n"
+                "BSCPHY,BSc Physics,DPHY,BSc,3\n"
+            )
+            return rx.download(data=content, filename="import_program_template.csv")
+        else:
+            content = (
+                "username,email,role_code,full_name\n"
+                "example_user,example.user@sssihl.edu.in,STUDENT,Example User\n"
+            )
+            return rx.download(data=content, filename="import_user_template.csv")
 
     def reset_import(self):
-        """on_load for /admin/import — guards session then resets import state."""
         guard = self._admin_guard()
         if guard is not None:
             return guard
-        self.preview_valid = []
-        self.preview_invalid = []
-        self.preview_ready = False
-        self.import_complete = False
-        self.import_success_count = 0
-        self.late_errors = []
-        self.error_report_csv = ""
-        self.flash = ""
+        self._reset_state()
+        self._load_nav_entries()
