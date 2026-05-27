@@ -67,7 +67,7 @@ E-004 (RoleEmail) bind to this split.
 | Faculty (basic info in config module) | §9.3 | M10 | Planned for M10 | Faculty profile module |
 | Student (basic info in config module) | §9.3 | M12 | Planned for M12 | Student profile module |
 | RoleEmail (email bound to role/scope) | §9.3 | M2/M5a | Shipped at M5a | M2 seeded; M4 reads for calendar phase-transition emails; E-004 remediation at M5a (re-key to UUID PK + TimestampedSoftDelete + partial unique indexes); management UI at `/admin/config/role-emails` (Registrar family + SysAdmin) |
-| LetterheadAsset (file per role/scope) | §9.3 | M5a | Shipped at M5a | Upload/replace/deactivate/download; partial unique indexes (global + scoped); MIME filter (PDF/PNG/JPG); max 5 MB; `/admin/config/letterheads` |
+| LetterheadAsset (file per role) | §9.3 | M5a | Shipped at M5a | Upload/replace/deactivate/download; partial unique index on `(purpose, role_code)`; MIME filter (DOCX); max 5 MB; scope columns removed at M5b gate (one letterhead per role is sufficient) |
 | ApprovalProcess (workflow config — schema + CPC config) | §9.3, §8.4 | M5b | Shipped at M5b | Config UI + service + seeds CPC_FUND_RELEASE process (is_finance=True). Runtime execution stays M7. |
 | ApprovalProcess (runtime execution) | §9.5 | M7 | Planned for M7 | Generic approval engine consumes M5b config; CPC fund-release fully wired. |
 | PurchaseProcedureRule (spend-tier config, Finance-owned) | Purchase Procedures doc, §9.5, E-007 | M5b | Shipped at M5b | 10 rows (5 tiers × 2 fund sources) seeded. Overlap validation with self-exclusion on update. Floor/ceiling normalization (Projects/UGC tier-2: 10,001). BOM as literal string in approving_authority_role_codes. Finance Officer only (NOT _PUBLIC_READ). |
@@ -120,6 +120,10 @@ E-004 (RoleEmail) bind to this split.
 | Purchase committee availability/fatigue check | E-007 | M7 | Runtime concern: reject faculty serving on too many concurrent committees; requires M10 Faculty model |
 | Purchase committee justification field | E-007 | M7 | Runtime concern: text justification when lower-ranked faculty selected; requires purchase-request artifact (M7) |
 | Project-fund link to PI | E-007 | M11 | Runtime concern: link project fund source to PI's faculty record; requires M10 Faculty + M11 Research |
+| ClassCoordinatorAssignment ownership transfer to class-teacher role | §9.3 | M14 | Requires M10 Faculty identity + M12 Student model for student-picker. Current HoD/SysAdmin write access is a placeholder |
+| Committee member selection (rank-preference, availability) | E-007 | M10/M14 | Requires M10 Faculty model for who-exists/who's-available lookup |
+| Rank-preference enforcement, availability/fatigue check, justification field | E-007 | M7/M10 | Requires M10 Faculty + M7 purchase-request artifact |
+| Retrofit older config pages (M3/M4) with live-sourced role picker | UI Polish | UI Polish | M5b established `role_multi_select()` and `_load_role_options()` patterns; older pages not yet retrofitted |
 
 ---
 

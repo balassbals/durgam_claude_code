@@ -25,8 +25,8 @@ class ApprovalProcessConfigState(BaseState):
     editing_id: str = ""
     form_code: str = ""
     form_title: str = ""
-    form_requestors: str = ""
-    form_channel: str = ""
+    form_requestors_selected: list[str] = []
+    form_channel_selected: list[str] = []
     form_is_finance: bool = False
 
     confirm_open: bool = False
@@ -44,6 +44,7 @@ class ApprovalProcessConfigState(BaseState):
 
         with open_session() as session:
             svc = _svc(session)
+            self._load_role_options(session)
             for p in svc.list_all():
                 self.processes.append({
                     "id": str(p.id),
@@ -52,9 +53,9 @@ class ApprovalProcessConfigState(BaseState):
                     "finance": "Yes" if p.is_finance else "No",
                     "requestors": ", ".join(p.requestor_role_codes or []),
                     "channel": ", ".join(p.channel_role_codes or []),
-                    # raw for edit
-                    "raw_requestors": ", ".join(p.requestor_role_codes or []),
-                    "raw_channel": ", ".join(p.channel_role_codes or []),
+                    # raw for edit (JSON-encoded list for state)
+                    "raw_requestors": ",".join(p.requestor_role_codes or []),
+                    "raw_channel": ",".join(p.channel_role_codes or []),
                     "raw_finance": "1" if p.is_finance else "0",
                 })
 
@@ -67,11 +68,17 @@ class ApprovalProcessConfigState(BaseState):
     def set_form_title(self, v: str) -> None:
         self.form_title = v
 
-    def set_form_requestors(self, v: str) -> None:
-        self.form_requestors = v
+    def toggle_requestor(self, code: str) -> None:
+        if code in self.form_requestors_selected:
+            self.form_requestors_selected = [c for c in self.form_requestors_selected if c != code]
+        else:
+            self.form_requestors_selected = [*self.form_requestors_selected, code]
 
-    def set_form_channel(self, v: str) -> None:
-        self.form_channel = v
+    def toggle_channel(self, code: str) -> None:
+        if code in self.form_channel_selected:
+            self.form_channel_selected = [c for c in self.form_channel_selected if c != code]
+        else:
+            self.form_channel_selected = [*self.form_channel_selected, code]
 
     def set_form_is_finance(self, v: bool) -> None:
         self.form_is_finance = v
@@ -82,8 +89,8 @@ class ApprovalProcessConfigState(BaseState):
         self.editing_id = ""
         self.form_code = ""
         self.form_title = ""
-        self.form_requestors = ""
-        self.form_channel = ""
+        self.form_requestors_selected = []
+        self.form_channel_selected = []
         self.form_is_finance = False
         self.show_form = True
 
@@ -96,8 +103,8 @@ class ApprovalProcessConfigState(BaseState):
         self.editing_id = pid
         self.form_code = code
         self.form_title = title
-        self.form_requestors = requestors
-        self.form_channel = channel
+        self.form_requestors_selected = [r for r in requestors.split(",") if r]
+        self.form_channel_selected = [c for c in channel.split(",") if c]
         self.form_is_finance = finance == "1"
         self.show_form = True
 
@@ -112,12 +119,10 @@ class ApprovalProcessConfigState(BaseState):
     async def save_process(self, form_data: dict) -> None:
         code = form_data.get("form_code", "").strip()
         title = form_data.get("form_title", "").strip()
-        requestors_raw = form_data.get("form_requestors", "").strip()
-        channel_raw = form_data.get("form_channel", "").strip()
         editing_id = form_data.get("editing_id", "").strip()
 
-        requestors = [r.strip() for r in requestors_raw.split(",") if r.strip()] or None
-        channel = [c.strip() for c in channel_raw.split(",") if c.strip()] or None
+        requestors = self.form_requestors_selected or None
+        channel = self.form_channel_selected or None
 
         try:
             with open_session() as session:

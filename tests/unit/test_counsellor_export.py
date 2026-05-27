@@ -42,7 +42,7 @@ class TestDirectorLetterheadLookup:
         session = MagicMock()
         session.exec.return_value.first.return_value = None
         repo = DocumentTemplateRepository(session)
-        result = repo.get_letterhead_by_role_and_scope("DIRECTOR", None, None)
+        result = repo.get_letterhead_by_role("DIRECTOR")
         assert result is None
 
     def test_get_letterhead_returns_record_when_present(self):
@@ -51,7 +51,7 @@ class TestDirectorLetterheadLookup:
         session = MagicMock()
         session.exec.return_value.first.return_value = mock_record
         repo = DocumentTemplateRepository(session)
-        result = repo.get_letterhead_by_role_and_scope("DIRECTOR", None, None)
+        result = repo.get_letterhead_by_role("DIRECTOR")
         assert result is mock_record
 
 

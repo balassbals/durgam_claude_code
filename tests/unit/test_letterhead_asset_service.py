@@ -39,18 +39,10 @@ class TestUploadLetterhead:
         with pytest.raises(DocumentTemplateError, match="5 MB"):
             svc.upload_letterhead("REGISTRAR", big, "f.docx", _DOCX_MIME, uuid4())
 
-    def test_scope_type_without_scope_id_raises(self):
-        svc = _make_svc()
-        with pytest.raises(DocumentTemplateError, match="scope_type and scope_id"):
-            svc.upload_letterhead(
-                "HOD", b"data", "f.docx", _DOCX_MIME, uuid4(),
-                scope_type="department",
-            )
-
     def test_replaces_existing(self):
         repo = MagicMock()
         old = MagicMock()
-        repo.get_letterhead_by_role_and_scope.return_value = old
+        repo.get_letterhead_by_role.return_value = old
         upload_svc = MagicMock()
         file_asset = MagicMock()
         file_asset.id = uuid4()
@@ -63,7 +55,7 @@ class TestUploadLetterhead:
 
     def test_success_saves_and_returns(self):
         repo = MagicMock()
-        repo.get_letterhead_by_role_and_scope.return_value = None
+        repo.get_letterhead_by_role.return_value = None
         upload_svc = MagicMock()
         file_asset = MagicMock()
         file_asset.id = uuid4()

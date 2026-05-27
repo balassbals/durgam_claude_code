@@ -46,6 +46,10 @@ class BaseState(rx.State):
     # (e.g. student_001) see a blank screen before redirect, not admin chrome.
     admin_authorized: bool = False
 
+    # Live-sourced role/designation options for pickers (populated by _load_role_options).
+    role_options: list[dict[str, str]] = []
+    designation_options: list[dict[str, str]] = []
+
     # One-time temp-password display (set by create_user and reset_user_password).
     # Lives on BaseState so _admin_guard() can clear it on navigation away from
     # /admin/users — the only page where it should be visible.
@@ -188,6 +192,47 @@ class BaseState(rx.State):
     def _dismiss_generated_password(self) -> None:
         """Clear the one-time temp-password display. Call from Dismiss button."""
         self.generated_password = ""
+
+    def _resolve_user_dept_scope(self, session) -> UUID | None:
+        """Return the department scope_id if the user has a dept-scoped role, else None."""
+        from sqlmodel import select
+
+        from durgam.models.identity import Role, UserRole
+
+        stmt = (
+            select(UserRole.scope_id)
+            .join(Role, UserRole.role_id == Role.id)
+            .where(
+                UserRole.user_id == UUID(self.current_user_id),
+                UserRole.scope_type == "department",
+                UserRole.is_deleted == False,  # noqa: E712
+            )
+            .limit(1)
+        )
+        result = session.exec(stmt).first()
+        return result if result else None
+
+    def _load_role_options(self, session) -> None:
+        """Populate role_options from live roles table for role pickers."""
+        from durgam.repositories.role import RoleRepository
+
+        repo = RoleRepository(session)
+        roles = repo.list_active()
+        self.role_options = [
+            {"code": r.code, "label": f"{r.name} ({r.code})"}
+            for r in roles
+        ]
+
+    def _load_designation_options(self, session) -> None:
+        """Populate designation_options from live designations table."""
+        from durgam.repositories.designation import DesignationRepository
+
+        repo = DesignationRepository(session)
+        designations = repo.list_active()
+        self.designation_options = [
+            {"code": d.code, "label": f"{d.name} ({d.code})"}
+            for d in designations
+        ]
 
     def _load_nav_entries(self) -> None:
         """Populate visible_nav_entries for the current user.

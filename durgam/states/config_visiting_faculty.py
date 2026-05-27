@@ -22,6 +22,8 @@ def _svc(session) -> VisitingFacultyService:
 class VisitingFacultyConfigState(BaseState):
     dept_options: list[dict[str, str]] = []
     selected_dept_id: str = ""
+    dept_locked: bool = False
+    dept_name_display: str = ""
 
     visitors: list[dict[str, str]] = []
     loading: bool = True
@@ -53,13 +55,23 @@ class VisitingFacultyConfigState(BaseState):
 
         with open_session() as session:
             dept_repo = DepartmentRepository(session)
-            for d in dept_repo.list_active():
-                self.dept_options.append({
-                    "value": str(d.id),
-                    "label": f"{d.code} — {d.name}",
-                })
-            if self.dept_options and not self.selected_dept_id:
-                self.selected_dept_id = self.dept_options[0]["value"]
+            all_depts = dept_repo.list_active()
+            user_dept_id = self._resolve_user_dept_scope(session)
+            if user_dept_id:
+                self.dept_locked = True
+                self.selected_dept_id = str(user_dept_id)
+                matched = [d for d in all_depts if d.id == user_dept_id]
+                self.dept_name_display = f"{matched[0].code} — {matched[0].name}" if matched else ""
+                self.dept_options = [{"value": str(user_dept_id), "label": self.dept_name_display}]
+            else:
+                self.dept_locked = False
+                for d in all_depts:
+                    self.dept_options.append({
+                        "value": str(d.id),
+                        "label": f"{d.code} — {d.name}",
+                    })
+                if self.dept_options and not self.selected_dept_id:
+                    self.selected_dept_id = self.dept_options[0]["value"]
 
             self._load_data(session)
 

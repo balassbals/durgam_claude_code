@@ -79,17 +79,22 @@ def _ay_selector() -> rx.Component:
 def _dept_selector() -> rx.Component:
     return rx.hstack(
         rx.text("Department:", font_size="0.85rem", color="var(--color-muted)"),
-        rx.select.root(
-            rx.select.trigger(placeholder="Select department"),
-            rx.select.content(
-                rx.foreach(
-                    ClassTeacherConfigState.dept_options,
-                    lambda o: rx.select.item(o["label"], value=o["value"]),
+        rx.cond(
+            ClassTeacherConfigState.dept_locked,
+            rx.text(ClassTeacherConfigState.dept_name_display,
+                    font_weight="600", font_size="0.9rem"),
+            rx.select.root(
+                rx.select.trigger(placeholder="Select department"),
+                rx.select.content(
+                    rx.foreach(
+                        ClassTeacherConfigState.dept_options,
+                        lambda o: rx.select.item(o["label"], value=o["value"]),
+                    ),
                 ),
+                value=ClassTeacherConfigState.selected_dept_id,
+                on_change=ClassTeacherConfigState.on_dept_change,
+                width="320px",
             ),
-            value=ClassTeacherConfigState.selected_dept_id,
-            on_change=ClassTeacherConfigState.on_dept_change,
-            width="320px",
         ),
         align="center",
         gap="0.75rem",

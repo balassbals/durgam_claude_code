@@ -65,25 +65,17 @@ class RoleEmail(TimestampedSoftDelete, table=True):
 
 
 class DocumentTemplate(TimestampedSoftDelete, table=True):
-    """Unified document template — letterheads + type-based templates (E-005)."""
+    """Unified document template — letterheads + type-based templates (E-005).
+
+    Scope columns removed at M5b gate: one letterhead per role is sufficient.
+    """
 
     __tablename__ = "document_templates"
     __table_args__ = (
         sa.Index(
-            "uq_document_templates_letterhead_global",
+            "uq_document_templates_letterhead_role",
             "purpose",
             "role_code",
-            unique=True,
-            postgresql_where=sa.text(
-                "scope_type IS NULL AND is_deleted = false AND role_code IS NOT NULL"
-            ),
-        ),
-        sa.Index(
-            "uq_document_templates_letterhead_scoped",
-            "purpose",
-            "role_code",
-            "scope_type",
-            "scope_id",
             unique=True,
             postgresql_where=sa.text(
                 "is_deleted = false AND role_code IS NOT NULL"
@@ -101,8 +93,6 @@ class DocumentTemplate(TimestampedSoftDelete, table=True):
 
     purpose: str = Field(max_length=16, nullable=False)
     role_code: str | None = Field(default=None, max_length=64)
-    scope_type: str | None = Field(default=None, max_length=32)
-    scope_id: UUID | None = Field(default=None)
     file_id: UUID = Field(foreign_key="file_assets.id", nullable=False)
 
 
@@ -229,7 +219,13 @@ class ClassTeacherAssignment(TimestampedSoftDelete, table=True):
 
 
 class ClassCoordinatorAssignment(TimestampedSoftDelete, table=True):
-    """Class coordinator assignment — max 2 per class per AY (§9.3, line 150)."""
+    """Student serving as class coordinator, assigned by class teacher (faculty).
+
+    Max 2 per class per AY (§9.3, line 150). Student picker deferred to M12.
+    Write-access correctly gated on class-teacher assignment once M10/M12 exist;
+    current HoD/SysAdmin write access is a placeholder until the class-teacher
+    role can be identity-verified.
+    """
 
     __tablename__ = "class_coordinator_assignments"
     __table_args__ = (

@@ -20,6 +20,12 @@ def _svc(session) -> PurchaseProcedureRuleService:
     )
 
 
+FUND_SOURCE_LABELS = {
+    "institute": "Institute (Budgeted)",
+    "projects_ugc": "Project / UGC Funds",
+}
+
+
 class PurchaseRuleConfigState(BaseState):
     rules: list[dict[str, str]] = []
     loading: bool = True
@@ -34,8 +40,8 @@ class PurchaseRuleConfigState(BaseState):
     form_quote_count: str = "3"
     form_discretion: bool = False
     form_comparative: bool = False
-    form_approvers: str = ""
-    form_committee: str = ""
+    form_approvers_selected: list[str] = []
+    form_committee: str = "__none__"
     form_notes: str = ""
 
     confirm_open: bool = False
@@ -52,11 +58,12 @@ class PurchaseRuleConfigState(BaseState):
         self.show_form = False
 
         with open_session() as session:
+            self._load_role_options(session)
             svc = _svc(session)
             for r in svc.list_all():
                 self.rules.append({
                     "id": str(r.id),
-                    "fund_source": r.fund_source,
+                    "fund_source": FUND_SOURCE_LABELS.get(r.fund_source, r.fund_source),
                     "tier": str(r.tier),
                     "floor": str(r.floor_amount),
                     "ceiling": str(r.ceiling_amount) if r.ceiling_amount is not None else "No limit",
@@ -72,7 +79,7 @@ class PurchaseRuleConfigState(BaseState):
                     "raw_quote_count": str(r.min_quote_count),
                     "raw_discretion": "1" if r.quote_at_discretion else "0",
                     "raw_comparative": "1" if r.comparative_statement_required else "0",
-                    "raw_approvers": ", ".join(r.approving_authority_role_codes),
+                    "raw_approvers": ",".join(r.approving_authority_role_codes),
                     "raw_committee": r.committee_level or "",
                 })
 
@@ -103,8 +110,11 @@ class PurchaseRuleConfigState(BaseState):
     def set_form_comparative(self, v: bool) -> None:
         self.form_comparative = v
 
-    def set_form_approvers(self, v: str) -> None:
-        self.form_approvers = v
+    def toggle_approver(self, code: str) -> None:
+        if code in self.form_approvers_selected:
+            self.form_approvers_selected = [c for c in self.form_approvers_selected if c != code]
+        else:
+            self.form_approvers_selected = [*self.form_approvers_selected, code]
 
     def set_form_committee(self, v: str) -> None:
         self.form_committee = v
@@ -124,8 +134,8 @@ class PurchaseRuleConfigState(BaseState):
         self.form_quote_count = "3"
         self.form_discretion = False
         self.form_comparative = False
-        self.form_approvers = ""
-        self.form_committee = ""
+        self.form_approvers_selected = []
+        self.form_committee = "__none__"
         self.form_notes = ""
         self.show_form = True
 
@@ -145,8 +155,8 @@ class PurchaseRuleConfigState(BaseState):
         self.form_quote_count = quote_count
         self.form_discretion = discretion == "1"
         self.form_comparative = comparative == "1"
-        self.form_approvers = approvers
-        self.form_committee = committee
+        self.form_approvers_selected = [a for a in approvers.split(",") if a]
+        self.form_committee = committee if committee else "__none__"
         self.form_notes = notes
         self.show_form = True
 
@@ -164,8 +174,9 @@ class PurchaseRuleConfigState(BaseState):
         floor_str = form_data.get("form_floor", "0").strip()
         ceiling_str = form_data.get("form_ceiling", "").strip()
         quote_count_str = form_data.get("form_quote_count", "3").strip()
-        approvers_raw = form_data.get("form_approvers", "").strip()
-        committee = form_data.get("form_committee", "").strip() or None
+        approvers = self.form_approvers_selected
+        committee_raw = form_data.get("form_committee", "").strip()
+        committee = None if committee_raw in ("", "__none__") else committee_raw
         notes = form_data.get("form_notes", "").strip() or None
         editing_id = form_data.get("editing_id", "").strip()
 
@@ -178,8 +189,6 @@ class PurchaseRuleConfigState(BaseState):
             self.flash = "Numeric fields must contain valid numbers."
             self.flash_type = "error"
             return
-
-        approvers = [a.strip() for a in approvers_raw.split(",") if a.strip()]
 
         try:
             with open_session() as session:

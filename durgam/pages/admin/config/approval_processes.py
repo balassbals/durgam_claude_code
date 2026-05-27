@@ -9,6 +9,7 @@ from durgam.pages.components import (
     nav_shell,
     page_footer,
     primary_btn,
+    role_multi_select,
     secondary_btn,
 )
 from durgam.pages.shared.confirmation_dialog import confirmation_dialog
@@ -86,20 +87,20 @@ def _inline_form() -> rx.Component:
                     ),
                     rx.vstack(
                         rx.text("Requestor Roles", font_size="0.85rem", color="var(--color-muted)"),
-                        rx.input(name="form_requestors",
-                                 value=ApprovalProcessConfigState.form_requestors,
-                                 on_change=ApprovalProcessConfigState.set_form_requestors,
-                                 placeholder="Comma-separated role codes",
-                                 width="100%"),
+                        role_multi_select(
+                            options=ApprovalProcessConfigState.role_options,
+                            selected_codes=ApprovalProcessConfigState.form_requestors_selected,
+                            toggle_handler=ApprovalProcessConfigState.toggle_requestor,
+                        ),
                         align="start", gap="0.25rem", width="100%",
                     ),
                     rx.vstack(
                         rx.text("Channel Roles", font_size="0.85rem", color="var(--color-muted)"),
-                        rx.input(name="form_channel",
-                                 value=ApprovalProcessConfigState.form_channel,
-                                 on_change=ApprovalProcessConfigState.set_form_channel,
-                                 placeholder="Comma-separated role codes",
-                                 width="100%"),
+                        role_multi_select(
+                            options=ApprovalProcessConfigState.role_options,
+                            selected_codes=ApprovalProcessConfigState.form_channel_selected,
+                            toggle_handler=ApprovalProcessConfigState.toggle_channel,
+                        ),
                         align="start", gap="0.25rem", width="100%",
                     ),
                     rx.checkbox(
@@ -152,7 +153,7 @@ def admin_config_approval_processes() -> rx.Component:
                         columns=[
                             TableColumn(key="code", label="Code"),
                             TableColumn(key="title", label="Title"),
-                            TableColumn(key="finance", label="Finance"),
+                            TableColumn(key="finance", label="Finance request?"),
                             TableColumn(key="requestors", label="Requestors"),
                             TableColumn(key="channel", label="Channel"),
                         ],

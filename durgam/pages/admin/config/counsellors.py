@@ -248,6 +248,7 @@ def _inline_form() -> rx.Component:
                             on_change=CounsellorConfigState.set_form_display_order,
                             width="100px",
                         ),
+                        rx.text("Lower numbers appear first", font_size="0.75rem", color="var(--color-muted)"),
                         align="start", gap="0.25rem", width="100%",
                     ),
                     # File upload zones — only visible when editing an existing record

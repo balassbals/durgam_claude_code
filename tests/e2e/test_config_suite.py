@@ -84,7 +84,7 @@ _SCHOOL_CODE = "TSC"
 _CENTRE_CODE = "TCE"
 _DEPT_CODE = "TDE"
 _COURSE_CODE = "TST101"
-_LH_TEST_ROLE = "E2E_LH_TEST"
+_LH_TEST_ROLE = "DEPUTY_REGISTRAR"
 _TPL_TEST_TYPE = "bos"
 
 
@@ -766,10 +766,11 @@ class TestLetterheadConfig:
                 page.get_by_role("heading", name="Upload Letterhead")
             ).to_be_visible(timeout=5_000)
 
-            # Fill role code
-            role_input = page.get_by_placeholder("e.g. REGISTRAR")
-            role_input.fill(_LH_TEST_ROLE)
-            expect(role_input).to_have_value(_LH_TEST_ROLE, timeout=5_000)
+            # Select role from dropdown (live-sourced from roles table)
+            role_trigger = page.locator(".rt-SelectTrigger").first
+            expect(role_trigger).to_be_visible(timeout=10_000)
+            role_trigger.click()
+            page.get_by_role("option", name=_LH_TEST_ROLE).click()
             page.wait_for_timeout(500)
 
             # Stage file via hidden <input type="file"> rendered by react-dropzone.

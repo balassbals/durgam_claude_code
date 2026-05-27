@@ -409,7 +409,7 @@ class TestBulkImport:
         page.goto(f"{BASE_URL}/admin/import")
         page.wait_for_load_state("networkidle")
         _wait_for_admin_page(page, "Step 1: Upload CSV", timeout=15_000)
-        expect(page.get_by_text("Bulk Import")).to_be_visible(timeout=5_000)
+        expect(page.get_by_role("heading", name="Bulk Import")).to_be_visible(timeout=5_000)
         expect(page.get_by_text("import_user_template.csv")).to_be_visible(timeout=5_000)
 
 

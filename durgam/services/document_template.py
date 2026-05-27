@@ -68,9 +68,6 @@ class DocumentTemplateService:
         original_name: str,
         mime_type: str,
         actor_id: UUID,
-        *,
-        scope_type: str | None = None,
-        scope_id: UUID | None = None,
     ) -> DocumentTemplate:
         role_code = role_code.strip().upper()
         if not role_code:
@@ -84,11 +81,8 @@ class DocumentTemplateService:
             raise DocumentTemplateError(
                 f"File exceeds the {_LETTERHEAD_MAX_MB} MB size limit."
             )
-        self._check_scope_consistency(scope_type, scope_id)
 
-        existing = self._repo.get_letterhead_by_role_and_scope(
-            role_code, scope_type, scope_id
-        )
+        existing = self._repo.get_letterhead_by_role(role_code)
         if existing is not None:
             self._repo.soft_delete(existing, actor_id)
             log.info("letterhead_replaced", old_id=str(existing.id), role=role_code)
@@ -101,8 +95,6 @@ class DocumentTemplateService:
         row = DocumentTemplate(
             purpose="letterhead",
             role_code=role_code,
-            scope_type=scope_type,
-            scope_id=scope_id,
             file_id=file_asset.id,
             created_by=actor_id,
             updated_by=actor_id,
@@ -151,8 +143,6 @@ class DocumentTemplateService:
         row = DocumentTemplate(
             purpose=template_type,
             role_code=None,
-            scope_type=None,
-            scope_id=None,
             file_id=file_asset.id,
             created_by=actor_id,
             updated_by=actor_id,
@@ -169,9 +159,3 @@ class DocumentTemplateService:
         log.info("document_template_soft_deleted", id=str(record_id), actor=str(actor_id))
         return row
 
-    @staticmethod
-    def _check_scope_consistency(scope_type: str | None, scope_id: UUID | None) -> None:
-        if (scope_type is None) != (scope_id is None):
-            raise DocumentTemplateError(
-                "scope_type and scope_id must both be set or both be empty."
-            )

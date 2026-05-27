@@ -218,7 +218,7 @@ register(NavEntry(
     href="/admin/config/class-coordinators",
     icon="user-cog",
     group="Config",
-    permission_action="write",
+    permission_action="read",
     permission_resource="class_coordinator_assignment",
 ))
 register(NavEntry(

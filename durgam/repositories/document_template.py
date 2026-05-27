@@ -1,7 +1,5 @@
 """Repository for DocumentTemplate — unified letterheads + type-based templates (E-005)."""
 
-from uuid import UUID
-
 from sqlmodel import select
 
 from durgam.models.config_anchors import DocumentTemplate
@@ -19,7 +17,7 @@ class DocumentTemplateRepository(BaseRepository[DocumentTemplate]):
                 DocumentTemplate.is_deleted == False,  # noqa: E712
                 DocumentTemplate.purpose == purpose,
             )
-            .order_by(DocumentTemplate.role_code, DocumentTemplate.scope_type)
+            .order_by(DocumentTemplate.role_code)
         )
         return list(self._session.exec(stmt).all())
 
@@ -37,24 +35,12 @@ class DocumentTemplateRepository(BaseRepository[DocumentTemplate]):
         )
         return list(self._session.exec(stmt).all())
 
-    def get_letterhead_by_role_and_scope(
-        self,
-        role_code: str,
-        scope_type: str | None = None,
-        scope_id: UUID | None = None,
-    ) -> DocumentTemplate | None:
+    def get_letterhead_by_role(self, role_code: str) -> DocumentTemplate | None:
         stmt = select(DocumentTemplate).where(
             DocumentTemplate.purpose == "letterhead",
             DocumentTemplate.role_code == role_code,
             DocumentTemplate.is_deleted == False,  # noqa: E712
         )
-        if scope_type is None:
-            stmt = stmt.where(DocumentTemplate.scope_type.is_(None))  # type: ignore[union-attr]
-        else:
-            stmt = stmt.where(
-                DocumentTemplate.scope_type == scope_type,
-                DocumentTemplate.scope_id == scope_id,
-            )
         return self._session.exec(stmt).first()
 
     def get_template_by_type(self, template_type: str) -> DocumentTemplate | None:

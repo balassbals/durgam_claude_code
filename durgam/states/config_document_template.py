@@ -17,7 +17,6 @@ from durgam.auth.decorators import audit_action, require_role
 from durgam.db import open_session
 from durgam.repositories.document_template import DocumentTemplateRepository
 from durgam.repositories.file_asset import FileAssetRepository
-from durgam.scopes.registry import load_scope_objects
 from durgam.services.document_template import DocumentTemplateError, DocumentTemplateService
 from durgam.services.upload import UploadService
 from durgam.states.base import BaseState
@@ -40,10 +39,6 @@ class LetterheadConfigState(BaseState):
 
     show_form: bool = False
     form_role_code: str = ""
-    form_scope_type: str = ""
-    form_scope_type_ui: str = "global"
-    form_scope_id: str = ""
-    scope_objects_dropdown: list[dict] = []
 
     confirm_open: bool = False
     confirm_id: str = ""
@@ -58,49 +53,23 @@ class LetterheadConfigState(BaseState):
         self.letterheads = []
         self.show_form = False
         with open_session() as session:
+            self._load_role_options(session)
             for r in _svc(session).list_letterheads():
-                scope_label = "Global"
-                if r.scope_type:
-                    scope_label = f"{r.scope_type}: {r.scope_id}"
                 self.letterheads.append({
                     "id": str(r.id),
                     "role_code": r.role_code or "",
-                    "scope": scope_label,
                     "file_id": str(r.file_id),
                 })
         self._load_nav_entries()
         self.loading = False
 
-    def _load_scope_objects(self) -> None:
-        if not self.form_scope_type or self.form_scope_type == "":
-            self.scope_objects_dropdown = []
-            return
-        with open_session() as session:
-            self.scope_objects_dropdown = load_scope_objects(
-                self.form_scope_type, session,
-            )
-
     def set_form_role_code(self, value: str) -> None:
         self.form_role_code = value
-
-    def set_form_scope_type_ui(self, value: str) -> None:
-        real = "" if value == "global" else value
-        self.form_scope_type_ui = value
-        self.form_scope_type = real
-        self.form_scope_id = ""
-        self._load_scope_objects()
-
-    def set_form_scope_id(self, value: str) -> None:
-        self.form_scope_id = value
 
     def open_upload(self):
         self.flash = ""
         self.flash_type = "info"
         self.form_role_code = ""
-        self.form_scope_type = ""
-        self.form_scope_type_ui = "global"
-        self.form_scope_id = ""
-        self.scope_objects_dropdown = []
         self.show_form = True
 
     def cancel_form(self):
@@ -121,9 +90,6 @@ class LetterheadConfigState(BaseState):
         original_name = upload_file.filename or "letterhead"
         content_type = upload_file.content_type or "application/octet-stream"
         role_code = self.form_role_code.strip()
-        scope_type = self.form_scope_type.strip() or None
-        scope_id_str = self.form_scope_id.strip()
-        scope_id = UUID(scope_id_str) if scope_id_str else None
 
         try:
             with open_session() as session:
@@ -133,8 +99,6 @@ class LetterheadConfigState(BaseState):
                     original_name,
                     content_type,
                     UUID(self.current_user_id),
-                    scope_type=scope_type,
-                    scope_id=scope_id,
                 )
                 session.commit()
             self.show_form = False

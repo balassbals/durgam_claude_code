@@ -9,6 +9,7 @@ from durgam.pages.components import (
     nav_shell,
     page_footer,
     primary_btn,
+    role_multi_select,
     secondary_btn,
 )
 from durgam.pages.shared.confirmation_dialog import confirmation_dialog
@@ -85,11 +86,12 @@ def _inline_form() -> rx.Component:
                     ),
                     rx.vstack(
                         rx.text("Eligible Designations *", font_size="0.85rem", color="var(--color-muted)"),
-                        rx.input(name="form_eligible_designations",
-                                 value=PurchaseCommitteeConfigState.form_eligible_designations,
-                                 on_change=PurchaseCommitteeConfigState.set_form_eligible_designations,
-                                 placeholder="Comma-separated, rank order (highest first)",
-                                 width="100%"),
+                        rx.text("Select in rank order (highest first)", font_size="0.75rem", color="var(--color-muted)"),
+                        role_multi_select(
+                            options=PurchaseCommitteeConfigState.designation_options,
+                            selected_codes=PurchaseCommitteeConfigState.form_eligible_designations_selected,
+                            toggle_handler=PurchaseCommitteeConfigState.toggle_designation,
+                        ),
                         align="start", gap="0.25rem", width="100%",
                     ),
                     rx.hstack(
@@ -103,22 +105,31 @@ def _inline_form() -> rx.Component:
                         ),
                         rx.vstack(
                             rx.text("Escalation Designate", font_size="0.85rem", color="var(--color-muted)"),
-                            rx.input(name="form_escalation",
-                                     value=PurchaseCommitteeConfigState.form_escalation,
-                                     on_change=PurchaseCommitteeConfigState.set_form_escalation,
-                                     placeholder="e.g. REGISTRAR",
-                                     width="100%"),
+                            rx.select.root(
+                                rx.select.trigger(placeholder="Select role"),
+                                rx.select.content(
+                                    rx.select.item("None", value="__none__"),
+                                    rx.foreach(
+                                        PurchaseCommitteeConfigState.role_options,
+                                        lambda o: rx.select.item(o["label"], value=o["code"]),
+                                    ),
+                                ),
+                                name="form_escalation",
+                                value=PurchaseCommitteeConfigState.form_escalation,
+                                on_change=PurchaseCommitteeConfigState.set_form_escalation,
+                                width="100%",
+                            ),
                             align="start", gap="0.25rem", width="50%",
                         ),
                         width="100%", gap="1rem",
                     ),
                     rx.vstack(
                         rx.text("Fixed Role Members", font_size="0.85rem", color="var(--color-muted)"),
-                        rx.input(name="form_fixed_role_members",
-                                 value=PurchaseCommitteeConfigState.form_fixed_role_members,
-                                 on_change=PurchaseCommitteeConfigState.set_form_fixed_role_members,
-                                 placeholder="Comma-separated role codes",
-                                 width="100%"),
+                        role_multi_select(
+                            options=PurchaseCommitteeConfigState.role_options,
+                            selected_codes=PurchaseCommitteeConfigState.form_fixed_members_selected,
+                            toggle_handler=PurchaseCommitteeConfigState.toggle_fixed_member,
+                        ),
                         align="start", gap="0.25rem", width="100%",
                     ),
                     rx.hstack(

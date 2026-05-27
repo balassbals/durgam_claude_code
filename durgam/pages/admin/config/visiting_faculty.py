@@ -91,17 +91,22 @@ def _kebab(row: dict) -> rx.Component:
 def _dept_selector() -> rx.Component:
     return rx.hstack(
         rx.text("Department:", font_size="0.85rem", color="var(--color-muted)"),
-        rx.select.root(
-            rx.select.trigger(placeholder="Select department"),
-            rx.select.content(
-                rx.foreach(
-                    VisitingFacultyConfigState.dept_options,
-                    lambda o: rx.select.item(o["label"], value=o["value"]),
+        rx.cond(
+            VisitingFacultyConfigState.dept_locked,
+            rx.text(VisitingFacultyConfigState.dept_name_display,
+                    font_weight="600", font_size="0.9rem"),
+            rx.select.root(
+                rx.select.trigger(placeholder="Select department"),
+                rx.select.content(
+                    rx.foreach(
+                        VisitingFacultyConfigState.dept_options,
+                        lambda o: rx.select.item(o["label"], value=o["value"]),
+                    ),
                 ),
+                value=VisitingFacultyConfigState.selected_dept_id,
+                on_change=VisitingFacultyConfigState.on_dept_change,
+                width="320px",
             ),
-            value=VisitingFacultyConfigState.selected_dept_id,
-            on_change=VisitingFacultyConfigState.on_dept_change,
-            width="320px",
         ),
         align="center",
         gap="0.75rem",

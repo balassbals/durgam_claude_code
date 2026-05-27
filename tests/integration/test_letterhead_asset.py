@@ -77,8 +77,8 @@ class TestUploadPipeline:
 
 
 class TestPartialUniqueIndexes:
-    def test_global_duplicate_prevented(self, db_session):
-        """Two active NULL-scope letterheads for same role_code must be rejected."""
+    def test_duplicate_role_prevented(self, db_session):
+        """Two active letterheads for same role_code must be rejected."""
         user = _user(db_session)
         sha = hashlib.sha256(_TEST_BYTES).hexdigest()
 
@@ -111,7 +111,7 @@ class TestPartialUniqueIndexes:
         db_session.add(lh2)
         with pytest.raises(
             sa.exc.IntegrityError,
-            match="uq_document_templates_letterhead_global",
+            match="uq_document_templates_letterhead_role",
         ):
             db_session.flush()
 
@@ -129,55 +129,12 @@ class TestPartialUniqueIndexes:
         )
         assert new.id != old.id
 
-    def test_scoped_duplicate_prevented(self, db_session):
-        user = _user(db_session)
-        sha = hashlib.sha256(_TEST_BYTES).hexdigest()
-        dept_id = uuid4()
-
-        def _make_fa():
-            fa = FileAsset(
-                storage_key=uuid4().hex,
-                original_name="lh.docx",
-                mime_type=_DOCX_MIME,
-                size_bytes=len(_TEST_BYTES),
-                sha256=sha,
-                owner_user_id=user.id,
-            )
-            db_session.add(fa)
-            db_session.flush()
-            db_session.refresh(fa)
-            return fa
-
-        fa1 = _make_fa()
-        lh1 = DocumentTemplate(
-            purpose="letterhead", role_code="HOD",
-            scope_type="department", scope_id=dept_id,
-            file_id=fa1.id,
-        )
-        db_session.add(lh1)
-        db_session.flush()
-
-        fa2 = _make_fa()
-        lh2 = DocumentTemplate(
-            purpose="letterhead", role_code="HOD",
-            scope_type="department", scope_id=dept_id,
-            file_id=fa2.id,
-        )
-        db_session.add(lh2)
-        with pytest.raises(
-            sa.exc.IntegrityError,
-            match="uq_document_templates_letterhead_scoped",
-        ):
-            db_session.flush()
-
-    def test_different_scopes_ok(self, db_session):
+    def test_different_role_codes_ok(self, db_session):
         user = _user(db_session)
         svc = _svc(db_session)
         svc.upload_letterhead(
-            "HOD", _TEST_BYTES, "lh1.docx", _DOCX_MIME, user.id,
-            scope_type="department", scope_id=uuid4(),
+            "REGISTRAR", _TEST_BYTES, "lh1.docx", _DOCX_MIME, user.id,
         )
         svc.upload_letterhead(
-            "HOD", _TEST_BYTES, "lh2.docx", _DOCX_MIME, user.id,
-            scope_type="department", scope_id=uuid4(),
+            "DIRECTOR", _TEST_BYTES, "lh2.docx", _DOCX_MIME, user.id,
         )

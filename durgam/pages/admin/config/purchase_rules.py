@@ -9,6 +9,7 @@ from durgam.pages.components import (
     nav_shell,
     page_footer,
     primary_btn,
+    role_multi_select,
     secondary_btn,
 )
 from durgam.pages.shared.confirmation_dialog import confirmation_dialog
@@ -143,11 +144,11 @@ def _inline_form() -> rx.Component:
                     ),
                     rx.vstack(
                         rx.text("Approving Authorities *", font_size="0.85rem", color="var(--color-muted)"),
-                        rx.input(name="form_approvers",
-                                 value=PurchaseRuleConfigState.form_approvers,
-                                 on_change=PurchaseRuleConfigState.set_form_approvers,
-                                 placeholder="Comma-separated role codes",
-                                 width="100%"),
+                        role_multi_select(
+                            options=PurchaseRuleConfigState.role_options,
+                            selected_codes=PurchaseRuleConfigState.form_approvers_selected,
+                            toggle_handler=PurchaseRuleConfigState.toggle_approver,
+                        ),
                         align="start", gap="0.25rem", width="100%",
                     ),
                     rx.vstack(
@@ -155,7 +156,7 @@ def _inline_form() -> rx.Component:
                         rx.select.root(
                             rx.select.trigger(placeholder="None"),
                             rx.select.content(
-                                rx.select.item("None", value=""),
+                                rx.select.item("None", value="__none__"),
                                 rx.select.item("Campus Purchase Committee", value="campus_purchase_committee"),
                                 rx.select.item("Central Purchase Committee", value="central_purchase_committee"),
                             ),

@@ -415,9 +415,7 @@ class CounsellorConfigState(BaseState):
         try:
             with open_session() as session:
                 dt_repo = DocumentTemplateRepository(session)
-                letterhead = dt_repo.get_letterhead_by_role_and_scope(
-                    "DIRECTOR", None, None,
-                )
+                letterhead = dt_repo.get_letterhead_by_role("DIRECTOR")
                 if letterhead is None:
                     self.flash = (
                         "No Director letterhead configured — upload one "

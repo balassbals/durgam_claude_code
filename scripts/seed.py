@@ -373,6 +373,8 @@ def seed(session: Session) -> dict[str, int]:
         # M5b — non-owned courses + UG timetable (scheduling info all users see)
         ("non_owned_course",          "read", "*"),
         ("ug_timetable",              "read", "*"),
+        # M5b — class coordinator list viewable by all (B1: coordinator is a student)
+        ("class_coordinator_assignment", "read", "*"),
     ]
 
     _REGISTRAR_SPECIFIC = [
@@ -425,12 +427,17 @@ def seed(session: Session) -> dict[str, int]:
     ]
 
     # M4 — Director family can read/write calendar, read student category
-    # M5b — Director family can read counsellor roster (download gated by purpose map)
+    # M5b — Director family owns counsellor roster + faculty mentor assignments
     _DIRECTOR_SPECIFIC = [
         ("calendar_entry",             "read",      "*"),
         ("calendar_entry",             "write",     "*"),
         ("student_category_count",     "read",      "*"),
         ("mental_health_counsellor",   "read",      "*"),
+        ("mental_health_counsellor",   "write",     "*"),
+        ("mental_health_counsellor",   "delete",    "*"),
+        ("faculty_mentor_assignment",  "read",      "*"),
+        ("faculty_mentor_assignment",  "write",     "*"),
+        ("faculty_mentor_assignment",  "delete",    "*"),
         # M5b — non-owned courses (Director + DAA) + UG timetable (Director only)
         ("non_owned_course",           "read",      "*"),
         ("non_owned_course",           "write",     "*"),
@@ -465,17 +472,14 @@ def seed(session: Session) -> dict[str, int]:
         ("faculty_mentor_assignment",  "delete",    "*"),
     ]
 
-    # M5b — Dean Academic Affairs owns class teacher + coordinator assignments
+    # M5b — Dean Academic Affairs: calendar, student categories, non-owned courses
+    # Class teacher/coordinator read-only (write is HoD-managed, not DAA)
     _DEAN_AA_SPECIFIC = [
         ("calendar_entry",             "read",      "*"),
         ("calendar_entry",             "write",     "*"),
         ("student_category_count",     "read",      "*"),
         ("class_teacher_assignment",   "read",      "*"),
-        ("class_teacher_assignment",   "write",     "*"),
-        ("class_teacher_assignment",   "delete",    "*"),
         ("class_coordinator_assignment", "read",    "*"),
-        ("class_coordinator_assignment", "write",   "*"),
-        ("class_coordinator_assignment", "delete",  "*"),
         # M5b — non-owned courses (DAA family; NOT ug_timetable — Director only)
         ("non_owned_course",           "read",      "*"),
         ("non_owned_course",           "write",     "*"),
@@ -833,7 +837,6 @@ def seed(session: Session) -> dict[str, int]:
         select(DocumentTemplate).where(
             DocumentTemplate.purpose == "letterhead",
             DocumentTemplate.role_code == "REGISTRAR",
-            DocumentTemplate.scope_type.is_(None),  # type: ignore[union-attr]
             DocumentTemplate.is_deleted == False,  # noqa: E712
         )
     ).first()
@@ -859,8 +862,6 @@ def seed(session: Session) -> dict[str, int]:
         lh = DocumentTemplate(
             purpose="letterhead",
             role_code="REGISTRAR",
-            scope_type=None,
-            scope_id=None,
             file_id=fa.id,
             created_by=_seed_actor_id,
             updated_by=_seed_actor_id,
@@ -920,8 +921,6 @@ def seed(session: Session) -> dict[str, int]:
         tpl = DocumentTemplate(
             purpose="bos",
             role_code=None,
-            scope_type=None,
-            scope_id=None,
             file_id=tpl_fa.id,
             created_by=_seed_actor_id,
             updated_by=_seed_actor_id,

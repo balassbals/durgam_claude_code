@@ -50,7 +50,7 @@ The Configuration module manages the organisational core of SSSIHL: campuses, sc
 | FileAsset | `file_assets` | Cross-cutting; `storage_key` + `purpose` field for permission escalation |
 | LetterheadAsset | `letterhead_assets` | Partial unique indexes: global `(role_code)` + scoped `(role_code, scope_type, scope_id)` WHERE `is_deleted=false` |
 | TemplateAsset | `template_assets` | Partial unique index on `template_type` WHERE `is_deleted=false`; types: `bos`, `mom`, `vac` |
-| DocumentTemplate | `document_templates` | E-005 unification of LetterheadAsset + TemplateAsset; `template_type` + `scope_type` + `scope_id` |
+| DocumentTemplate | `document_templates` | E-005 unification of LetterheadAsset + TemplateAsset; one letterhead per `(purpose, role_code)` |
 | MentalHealthCounsellor | `mental_health_counsellors` | AY-scoped; unique `(academic_year_id, name)` WHERE `is_deleted=false` |
 | FacultyMentorAssignment | `faculty_mentor_assignments` | AY-scoped; FK `department_id`; thin UI at M5b, rich UI at M14 |
 | ClassTeacherAssignment | `class_teacher_assignments` | AY-scoped; FK `department_id`; unique `(academic_year_id, department_id, year_of_study, section)` |
@@ -186,6 +186,14 @@ These patterns are canonical (see CLAUDE.md for full examples):
 14. **`from __future__ import annotations`** — required in all service files to avoid `list` builtin shadowing (see `list` method naming note below).
 
 15. **Never name a service method `list`** — shadows the Python builtin; use `list_all`, `list_campuses`, etc.
+
+---
+
+## UI Principles (from M5b)
+
+1. **All role-code fields must be sourced from the live roles table** via `BaseState._load_role_options()`. Single-role fields use `rx.select`. Multi-role fields use the `role_multi_select()` checkbox component from `durgam/pages/components.py`. Free-text role code entry is prohibited.
+
+2. **Designation fields use `BaseState._load_designation_options()`** and the same `role_multi_select()` component (it accepts any `options` list with `code`/`label` dicts).
 
 ---
 

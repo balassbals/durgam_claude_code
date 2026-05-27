@@ -99,14 +99,15 @@ class TestMigrations:
             assert "template_assets" not in inspector.get_table_names()
 
             cols = {c["name"] for c in inspector.get_columns("document_templates")}
-            for expected in ("id", "purpose", "role_code", "scope_type", "scope_id", "file_id", "is_deleted", "created_at"):
+            for expected in ("id", "purpose", "role_code", "file_id", "is_deleted", "created_at"):
                 assert expected in cols, f"Missing column: {expected}"
+            assert "scope_type" not in cols, "scope_type should be removed after D1 migration"
+            assert "scope_id" not in cols, "scope_id should be removed after D1 migration"
 
             indexes = inspector.get_indexes("document_templates")
             idx_names = {idx["name"] for idx in indexes}
             assert "uq_document_templates_type" in idx_names
-            assert "uq_document_templates_letterhead_global" in idx_names
-            assert "uq_document_templates_letterhead_scoped" in idx_names
+            assert "uq_document_templates_letterhead_role" in idx_names
 
             result = _alembic("downgrade", "c3d4e5f6a7b8")
             assert result.returncode == 0, f"downgrade to pre-E005 failed:\n{result.stderr}"

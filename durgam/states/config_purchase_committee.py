@@ -29,10 +29,10 @@ class PurchaseCommitteeConfigState(BaseState):
     show_form: bool = False
     editing_id: str = ""
     form_committee_type: str = "campus_purchase_committee"
-    form_eligible_designations: str = ""
+    form_eligible_designations_selected: list[str] = []
     form_faculty_count: str = "3"
     form_different_depts: bool = True
-    form_fixed_role_members: str = ""
+    form_fixed_members_selected: list[str] = []
     form_director_excluded: bool = False
     form_escalation: str = ""
     form_expert_mode: str = "proxied_with_proof"
@@ -53,6 +53,8 @@ class PurchaseCommitteeConfigState(BaseState):
         self.show_form = False
 
         with open_session() as session:
+            self._load_role_options(session)
+            self._load_designation_options(session)
             svc = _svc(session)
             for t in svc.list_all():
                 self.templates.append({
@@ -67,9 +69,9 @@ class PurchaseCommitteeConfigState(BaseState):
                     "expert_mode": t.external_expert_mode,
                     "topology": t.topology,
                     "notes": t.notes or "",
-                    # raw for edit
-                    "raw_designations": ", ".join(t.eligible_designations),
-                    "raw_fixed": ", ".join(t.fixed_role_members),
+                    # raw for edit (comma-separated for list parsing)
+                    "raw_designations": ",".join(t.eligible_designations),
+                    "raw_fixed": ",".join(t.fixed_role_members),
                     "raw_director_excluded": "1" if t.director_excluded else "0",
                     "raw_different_depts": "1" if t.members_from_different_departments else "0",
                     "raw_escalation": t.escalation_designate_role_code or "",
@@ -81,8 +83,11 @@ class PurchaseCommitteeConfigState(BaseState):
     def set_form_committee_type(self, v: str) -> None:
         self.form_committee_type = v
 
-    def set_form_eligible_designations(self, v: str) -> None:
-        self.form_eligible_designations = v
+    def toggle_designation(self, code: str) -> None:
+        if code in self.form_eligible_designations_selected:
+            self.form_eligible_designations_selected = [c for c in self.form_eligible_designations_selected if c != code]
+        else:
+            self.form_eligible_designations_selected = [*self.form_eligible_designations_selected, code]
 
     def set_form_faculty_count(self, v: str) -> None:
         self.form_faculty_count = v
@@ -90,8 +95,11 @@ class PurchaseCommitteeConfigState(BaseState):
     def set_form_different_depts(self, v: bool) -> None:
         self.form_different_depts = v
 
-    def set_form_fixed_role_members(self, v: str) -> None:
-        self.form_fixed_role_members = v
+    def toggle_fixed_member(self, code: str) -> None:
+        if code in self.form_fixed_members_selected:
+            self.form_fixed_members_selected = [c for c in self.form_fixed_members_selected if c != code]
+        else:
+            self.form_fixed_members_selected = [*self.form_fixed_members_selected, code]
 
     def set_form_director_excluded(self, v: bool) -> None:
         self.form_director_excluded = v
@@ -113,12 +121,12 @@ class PurchaseCommitteeConfigState(BaseState):
         self.flash_type = "info"
         self.editing_id = ""
         self.form_committee_type = "campus_purchase_committee"
-        self.form_eligible_designations = ""
+        self.form_eligible_designations_selected = []
         self.form_faculty_count = "3"
         self.form_different_depts = True
-        self.form_fixed_role_members = ""
+        self.form_fixed_members_selected = []
         self.form_director_excluded = False
-        self.form_escalation = ""
+        self.form_escalation = "__none__"
         self.form_expert_mode = "proxied_with_proof"
         self.form_topology = "concurrent"
         self.form_notes = ""
@@ -134,12 +142,12 @@ class PurchaseCommitteeConfigState(BaseState):
         self.flash_type = "info"
         self.editing_id = tid
         self.form_committee_type = committee_type
-        self.form_eligible_designations = designations
+        self.form_eligible_designations_selected = [d for d in designations.split(",") if d]
         self.form_faculty_count = faculty_count
         self.form_different_depts = different_depts == "1"
-        self.form_fixed_role_members = fixed
+        self.form_fixed_members_selected = [f for f in fixed.split(",") if f]
         self.form_director_excluded = director_excluded == "1"
-        self.form_escalation = escalation
+        self.form_escalation = escalation if escalation else "__none__"
         self.form_expert_mode = expert_mode
         self.form_topology = topology
         self.form_notes = notes
@@ -155,17 +163,16 @@ class PurchaseCommitteeConfigState(BaseState):
     @audit_action(action="write", resource="purchase_committee_template")
     async def save_template(self, form_data: dict) -> None:
         committee_type = form_data.get("form_committee_type", "").strip()
-        designations_raw = form_data.get("form_eligible_designations", "").strip()
         count_str = form_data.get("form_faculty_count", "3").strip()
-        fixed_raw = form_data.get("form_fixed_role_members", "").strip()
-        escalation = form_data.get("form_escalation", "").strip() or None
+        escalation_raw = form_data.get("form_escalation", "").strip()
+        escalation = None if escalation_raw in ("", "__none__") else escalation_raw
         expert_mode = form_data.get("form_expert_mode", "proxied_with_proof").strip()
         topology = form_data.get("form_topology", "concurrent").strip()
         notes = form_data.get("form_notes", "").strip() or None
         editing_id = form_data.get("editing_id", "").strip()
 
-        designations = [d.strip() for d in designations_raw.split(",") if d.strip()]
-        fixed_members = [f.strip() for f in fixed_raw.split(",") if f.strip()]
+        designations = self.form_eligible_designations_selected
+        fixed_members = self.form_fixed_members_selected
 
         try:
             faculty_count = int(count_str)

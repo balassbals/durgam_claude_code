@@ -16,10 +16,7 @@ from durgam.pages.components import (
 from durgam.pages.shared.confirmation_dialog import confirmation_dialog
 from durgam.pages.shared.data_table import TableColumn, data_table
 from durgam.pages.shared.file_upload import file_upload_zone
-from durgam.scopes.registry import get_scope_type_dropdown_options
 from durgam.states.config_document_template import LetterheadConfigState
-
-_SCOPE_OPTIONS = get_scope_type_dropdown_options()
 
 
 def _kebab(row: dict) -> rx.Component:
@@ -71,67 +68,22 @@ def _inline_form() -> rx.Component:
             ),
             rx.vstack(
                 rx.vstack(
-                    rx.text("Role Code", font_size="0.85rem", color="var(--color-muted)"),
-                    rx.input(
+                    rx.text("Role *", font_size="0.85rem", color="var(--color-muted)"),
+                    rx.select.root(
+                        rx.select.trigger(placeholder="Select role"),
+                        rx.select.content(
+                            rx.foreach(
+                                LetterheadConfigState.role_options,
+                                lambda o: rx.select.item(o["label"], value=o["code"]),
+                            ),
+                        ),
                         value=LetterheadConfigState.form_role_code,
                         on_change=LetterheadConfigState.set_form_role_code,
-                        placeholder="e.g. REGISTRAR",
-                        max_length=64,
                         width="100%",
                     ),
                     align="start",
                     gap="0.25rem",
                     width="100%",
-                ),
-                rx.vstack(
-                    rx.text(
-                        "Scope (optional)",
-                        font_size="0.85rem",
-                        color="var(--color-muted)",
-                    ),
-                    rx.select.root(
-                        rx.select.trigger(placeholder="Global (no scope)"),
-                        rx.select.content(
-                            rx.select.item("Global (no scope)", value="global"),
-                            *[
-                                rx.select.item(opt["label"], value=opt["value"])
-                                for opt in _SCOPE_OPTIONS
-                            ],
-                        ),
-                        value=LetterheadConfigState.form_scope_type_ui,
-                        on_change=LetterheadConfigState.set_form_scope_type_ui,
-                        width="100%",
-                    ),
-                    align="start",
-                    gap="0.25rem",
-                    width="100%",
-                ),
-                rx.cond(
-                    LetterheadConfigState.form_scope_type != "",
-                    rx.vstack(
-                        rx.text(
-                            "Scope Object",
-                            font_size="0.85rem",
-                            color="var(--color-muted)",
-                        ),
-                        rx.select.root(
-                            rx.select.trigger(placeholder="Select scope object"),
-                            rx.select.content(
-                                rx.foreach(
-                                    LetterheadConfigState.scope_objects_dropdown,
-                                    lambda item: rx.select.item(
-                                        item["label"], value=item["id"],
-                                    ),
-                                ),
-                            ),
-                            value=LetterheadConfigState.form_scope_id,
-                            on_change=LetterheadConfigState.set_form_scope_id,
-                            width="100%",
-                        ),
-                        align="start",
-                        gap="0.25rem",
-                        width="100%",
-                    ),
                 ),
                 rx.cond(
                     LetterheadConfigState.form_role_code != "",
@@ -243,8 +195,7 @@ def admin_config_letterheads() -> rx.Component:
                     data_table(
                         rows=LetterheadConfigState.letterheads,
                         columns=[
-                            TableColumn(key="role_code", label="Role Code"),
-                            TableColumn(key="scope", label="Scope"),
+                            TableColumn(key="role_code", label="Role"),
                         ],
                         card_primary_key="role_code",
                         is_mobile=False,

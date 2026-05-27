@@ -79,17 +79,22 @@ def _ay_selector() -> rx.Component:
 def _dept_selector() -> rx.Component:
     return rx.hstack(
         rx.text("Department:", font_size="0.85rem", color="var(--color-muted)"),
-        rx.select.root(
-            rx.select.trigger(placeholder="Select department"),
-            rx.select.content(
-                rx.foreach(
-                    ClassCoordinatorConfigState.dept_options,
-                    lambda o: rx.select.item(o["label"], value=o["value"]),
+        rx.cond(
+            ClassCoordinatorConfigState.dept_locked,
+            rx.text(ClassCoordinatorConfigState.dept_name_display,
+                    font_weight="600", font_size="0.9rem"),
+            rx.select.root(
+                rx.select.trigger(placeholder="Select department"),
+                rx.select.content(
+                    rx.foreach(
+                        ClassCoordinatorConfigState.dept_options,
+                        lambda o: rx.select.item(o["label"], value=o["value"]),
+                    ),
                 ),
+                value=ClassCoordinatorConfigState.selected_dept_id,
+                on_change=ClassCoordinatorConfigState.on_dept_change,
+                width="320px",
             ),
-            value=ClassCoordinatorConfigState.selected_dept_id,
-            on_change=ClassCoordinatorConfigState.on_dept_change,
-            width="320px",
         ),
         align="center",
         gap="0.75rem",
@@ -117,12 +122,12 @@ def _inline_form() -> rx.Component:
                         value=ClassCoordinatorConfigState.editing_id,
                     ),
                     rx.vstack(
-                        rx.text("Faculty *", font_size="0.85rem", color="var(--color-muted)"),
+                        rx.text("Student (placeholder) *", font_size="0.85rem", color="var(--color-muted)"),
                         rx.input(
                             name="form_faculty",
                             value=ClassCoordinatorConfigState.form_faculty,
                             on_change=ClassCoordinatorConfigState.set_form_faculty,
-                            placeholder="Faculty identifier",
+                            placeholder="Student identifier",
                             width="100%",
                         ),
                         align="start", gap="0.25rem", width="100%",
@@ -217,7 +222,7 @@ def admin_config_class_coordinators() -> rx.Component:
                     data_table(
                         rows=ClassCoordinatorConfigState.coordinators,
                         columns=[
-                            TableColumn(key="faculty", label="Faculty"),
+                            TableColumn(key="faculty", label="Student"),
                             TableColumn(key="class", label="Class"),
                             TableColumn(key="notes", label="Notes"),
                         ],
