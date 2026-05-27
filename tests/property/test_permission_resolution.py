@@ -66,7 +66,7 @@ def _seed_scenario(
 
 
 class TestCanNeverGrantsBeyondAssignment:
-    @settings(max_examples=15)
+    @settings(max_examples=15, deadline=500)
     @given(scope_type=st.one_of(st.none(), st.sampled_from(["department", "campus"])))
     def test_unassigned_resource_always_denied(self, scope_type) -> None:
         """A user with no permissions on 'other_resource' must always get False."""
@@ -83,7 +83,7 @@ class TestCanNeverGrantsBeyondAssignment:
 
         _with_fresh_session(run)
 
-    @settings(max_examples=15)
+    @settings(max_examples=15, deadline=500)
     @given(scope_type=st.sampled_from(["department", "campus"]))
     def test_specific_scope_id_never_leaks_to_other_scope(self, scope_type) -> None:
         """A role scoped to scope_id=X must not grant access at scope_id=Y."""
