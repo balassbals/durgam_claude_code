@@ -5,7 +5,8 @@ from typing import Any, cast
 from uuid import UUID
 
 import sqlalchemy as sa
-from sqlmodel import Field, SQLModel
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlmodel import Column, Field, SQLModel
 
 from .base import TimestampedSoftDelete
 
@@ -311,4 +312,92 @@ class UGTimetable(TimestampedSoftDelete, table=True):
     course_name: str = Field(max_length=200, nullable=False)
     faculty_id_placeholder: str = Field(max_length=128, nullable=False)
     room: str | None = Field(default=None, max_length=64)
+    notes: str | None = Field(default=None)
+
+
+# ── M5b Session 7: Purchase Policy & Approval Config ────────────────────────
+
+
+class Designation(TimestampedSoftDelete, table=True):
+    """Extensible faculty designation vocabulary (§8.3).
+
+    Standing config the institution can extend via admin UI.
+    Committee templates reference these codes in eligible_designations.
+    Not tied to the Faculty model (M10).
+    """
+
+    __tablename__ = "designations"
+    __table_args__ = (
+        sa.UniqueConstraint("code", name="uq_designations_code"),
+    )
+
+    code: str = Field(max_length=64, nullable=False)
+    name: str = Field(max_length=128, nullable=False)
+    rank: int = Field(nullable=False)
+    notes: str | None = Field(default=None)
+
+
+class PurchaseProcedureRule(TimestampedSoftDelete, table=True):
+    """One row per tier per fund source — institutional purchase policy (E-007).
+
+    Standing policy, NOT AY-scoped. AY-lock machinery does not apply.
+    """
+
+    __tablename__ = "purchase_procedure_rules"
+    __table_args__ = (
+        sa.UniqueConstraint("fund_source", "tier", name="uq_ppr_fund_source_tier"),
+        sa.Index("ix_ppr_fund_source", "fund_source"),
+    )
+
+    fund_source: str = Field(max_length=32, nullable=False)
+    tier: int = Field(nullable=False)
+    floor_amount: int = Field(nullable=False)
+    ceiling_amount: int | None = Field(default=None)
+    min_quotes_required: bool = Field(default=True)
+    min_quote_count: int = Field(default=3)
+    quote_at_discretion: bool = Field(default=False)
+    comparative_statement_required: bool = Field(default=False)
+    approving_authority_role_codes: list[str] = Field(
+        sa_column=Column(JSONB, nullable=False)
+    )
+    committee_level: str | None = Field(default=None, max_length=64)
+    notes: str | None = Field(default=None)
+
+
+class PurchaseCommitteeTemplate(TimestampedSoftDelete, table=True):
+    """Standing committee composition template — campus or central (E-007).
+
+    eligible_designations is an ORDERED list encoding rank preference
+    (prefer highest rank first). faculty_member_count is how many faculty
+    members are selected from those designations.
+    fixed_role_members holds genuine role-code seats (e.g. FINANCE_OFFICER).
+
+    M7/M10 forward-concern: rank-preference enforcement ("if enough Senior
+    Professors are available, faculty cannot pick lower ranks"), availability/
+    fatigue checks ("can't repeatedly pick the same people"), and the
+    justification field ("faculty must justify the committee composition") are
+    all M7 RUNTIME — they require the Faculty model (M10) for who-exists/
+    who's-available and a purchase-request artifact (M7) for the justification.
+    M5b stores the ranked policy ONLY; it enforces nothing and captures no
+    justification.
+    """
+
+    __tablename__ = "purchase_committee_templates"
+    __table_args__ = (
+        sa.UniqueConstraint("committee_type", name="uq_pct_committee_type"),
+    )
+
+    committee_type: str = Field(max_length=64, nullable=False)
+    eligible_designations: list[str] = Field(
+        sa_column=Column(JSONB, nullable=False)
+    )
+    faculty_member_count: int = Field(nullable=False)
+    members_from_different_departments: bool = Field(default=True, nullable=False)
+    fixed_role_members: list[str] = Field(
+        sa_column=Column(JSONB, nullable=False)
+    )
+    director_excluded: bool = Field(default=False)
+    escalation_designate_role_code: str | None = Field(default=None, max_length=64)
+    external_expert_mode: str = Field(default="proxied_with_proof", max_length=32)
+    topology: str = Field(default="concurrent", max_length=32)
     notes: str | None = Field(default=None)

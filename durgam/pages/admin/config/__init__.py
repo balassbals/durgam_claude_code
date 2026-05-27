@@ -48,6 +48,10 @@ register(NavEntry(
         ("write",     "visiting_faculty",               None),
         ("write",     "non_owned_course",                None),
         ("write",     "ug_timetable",                    None),
+        ("write",     "purchase_procedure_rule",         None),
+        ("write",     "purchase_committee_template",     None),
+        ("write",     "approval_process",                None),
+        ("write",     "designation",                     None),
     ),
 ))
 register(NavEntry(
@@ -241,4 +245,37 @@ register(NavEntry(
     group="Config",
     permission_action="write",
     permission_resource="ug_timetable",
+))
+# ── M5b Session 7: Purchase Policy & Approval Config ──────────────────────────
+register(NavEntry(
+    label="Designations",
+    href="/admin/config/designations",
+    icon="badge-check",
+    group="Config",
+    permission_action="write",
+    permission_resource="designation",
+))
+register(NavEntry(
+    label="Purchase Rules",
+    href="/admin/config/purchase-rules",
+    icon="receipt",
+    group="Config",
+    permission_action="write",
+    permission_resource="purchase_procedure_rule",
+))
+register(NavEntry(
+    label="Purchase Committees",
+    href="/admin/config/purchase-committees",
+    icon="users-round",
+    group="Config",
+    permission_action="write",
+    permission_resource="purchase_committee_template",
+))
+register(NavEntry(
+    label="Approval Processes",
+    href="/admin/config/approval-processes",
+    icon="workflow",
+    group="Config",
+    permission_action="write",
+    permission_resource="approval_process",
 ))

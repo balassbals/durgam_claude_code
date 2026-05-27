@@ -198,6 +198,25 @@ app.add_page(admin_config_non_owned_courses, route="/admin/config/non-owned-cour
 app.add_page(admin_config_ug_timetable, route="/admin/config/ug-timetable",
              on_load=UGTimetableConfigState.load_slots)
 
+# ── M5b Session 7: Purchase Policy & Approval Config ────────────────────────
+from durgam.pages.admin.config.designations import admin_config_designations
+from durgam.pages.admin.config.purchase_rules import admin_config_purchase_rules
+from durgam.pages.admin.config.purchase_committees import admin_config_purchase_committees
+from durgam.pages.admin.config.approval_processes import admin_config_approval_processes
+from durgam.states.config_designation import DesignationConfigState
+from durgam.states.config_purchase_rule import PurchaseRuleConfigState
+from durgam.states.config_purchase_committee import PurchaseCommitteeConfigState
+from durgam.states.config_approval_process import ApprovalProcessConfigState
+
+app.add_page(admin_config_designations, route="/admin/config/designations",
+             on_load=DesignationConfigState.load_designations)
+app.add_page(admin_config_purchase_rules, route="/admin/config/purchase-rules",
+             on_load=PurchaseRuleConfigState.load_rules)
+app.add_page(admin_config_purchase_committees, route="/admin/config/purchase-committees",
+             on_load=PurchaseCommitteeConfigState.load_templates)
+app.add_page(admin_config_approval_processes, route="/admin/config/approval-processes",
+             on_load=ApprovalProcessConfigState.load_processes)
+
 # ── M5a authenticated file download API ──────────────────────────────────────
 from durgam.api.download import download_file
 

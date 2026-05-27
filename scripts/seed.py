@@ -28,13 +28,16 @@ from durgam.models.config_anchors import (
     AcademicYear,
     CalendarEntry,
     ClassTimingsConfig,
+    Designation,
     DocumentTemplate,
     Holiday,
+    PurchaseCommitteeTemplate,
+    PurchaseProcedureRule,
     RoleEmail,
     StudentCategoryCount,
     WorkingDaysConfig,
 )
-from durgam.models.crosscutting import FileAsset
+from durgam.models.crosscutting import ApprovalProcess, FileAsset
 from durgam.models.course import Course
 from durgam.models.department import (
     Department,
@@ -301,6 +304,23 @@ def seed(session: Session) -> dict[str, int]:
         {"resource": "ug_timetable",                 "action": "read",    "scope": "*"},
         {"resource": "ug_timetable",                 "action": "write",   "scope": "*"},
         {"resource": "ug_timetable",                 "action": "delete",  "scope": "*"},
+        # ── M5b Session 7: Purchase policy & approval config ──────────────────
+        # Purchase procedure rule (Finance Officer only — NOT in _PUBLIC_READ; E-007)
+        {"resource": "purchase_procedure_rule",      "action": "read",    "scope": "*"},
+        {"resource": "purchase_procedure_rule",      "action": "write",   "scope": "*"},
+        {"resource": "purchase_procedure_rule",      "action": "delete",  "scope": "*"},
+        # Purchase committee template (Finance Officer only — NOT in _PUBLIC_READ; E-007)
+        {"resource": "purchase_committee_template",  "action": "read",    "scope": "*"},
+        {"resource": "purchase_committee_template",  "action": "write",   "scope": "*"},
+        {"resource": "purchase_committee_template",  "action": "delete",  "scope": "*"},
+        # Approval process (SysAdmin only via global — NOT in _PUBLIC_READ)
+        {"resource": "approval_process",             "action": "read",    "scope": "*"},
+        {"resource": "approval_process",             "action": "write",   "scope": "*"},
+        {"resource": "approval_process",             "action": "delete",  "scope": "*"},
+        # Designation vocabulary (Finance Officer + SysAdmin)
+        {"resource": "designation",                  "action": "read",    "scope": "*"},
+        {"resource": "designation",                  "action": "write",   "scope": "*"},
+        {"resource": "designation",                  "action": "delete",  "scope": "*"},
     ]
     perm_inserted = 0
     for p in perms_data:
@@ -462,6 +482,20 @@ def seed(session: Session) -> dict[str, int]:
         ("non_owned_course",           "delete",    "*"),
     ]
 
+    # M5b — Finance Officer owns purchase procedure rules + committee templates +
+    # designation vocabulary (E-007: "not viewable by others" → NOT in _PUBLIC_READ)
+    _FINANCE_SPECIFIC = [
+        ("purchase_procedure_rule",     "read",   "*"),
+        ("purchase_procedure_rule",     "write",  "*"),
+        ("purchase_procedure_rule",     "delete", "*"),
+        ("purchase_committee_template", "read",   "*"),
+        ("purchase_committee_template", "write",  "*"),
+        ("purchase_committee_template", "delete", "*"),
+        ("designation",                 "read",   "*"),
+        ("designation",                 "write",  "*"),
+        ("designation",                 "delete", "*"),
+    ]
+
     role_perm_map: dict[str, list[tuple[str, str, str]]] = {
         "REGISTRAR":            _PUBLIC_READ + _REGISTRAR_SPECIFIC,
         "DEPUTY_REGISTRAR":     _PUBLIC_READ + _REGISTRAR_SPECIFIC,
@@ -505,7 +539,7 @@ def seed(session: Session) -> dict[str, int]:
         # M5b — approver/channel roles; no config-write permissions yet (runtime → M7)
         "VC":                   _PUBLIC_READ,
         "VC_OFFICE":            _PUBLIC_READ,
-        "FINANCE_OFFICER":      _PUBLIC_READ,
+        "FINANCE_OFFICER":      _PUBLIC_READ + _FINANCE_SPECIFIC,
         "CPC_CHAIRPERSON":      _PUBLIC_READ,
         "STUDENT":              _PUBLIC_READ,
         "BASIC_USER":           _PUBLIC_READ,
@@ -1569,6 +1603,219 @@ def seed(session: Session) -> dict[str, int]:
         counts["calendar_entries"] = 3
     else:
         counts["calendar_entries"] = 0
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # M5b Session 7: Purchase Policy & Approval Config (E-007)
+    # ─────────────────────────────────────────────────────────────────────────
+
+    # ── Designation vocabulary (§8.3 — extensible, editable via admin UI) ────
+    designations_raw = [
+        ("senior_professor",    "Senior Professor",    1),
+        ("professor",           "Professor",           2),
+        ("associate_professor", "Associate Professor", 3),
+        ("assistant_professor", "Assistant Professor", 4),
+    ]
+    desig_inserted = 0
+    for code, name, rank in designations_raw:
+        desig_inserted += _exec_insert(
+            session,
+            pg_insert(Designation)
+            .values(code=code, name=name, rank=rank)
+            .on_conflict_do_nothing(constraint="uq_designations_code"),
+        )
+    counts["designations"] = desig_inserted
+
+    # ── PurchaseProcedureRule (10 rows: 5 tiers × 2 fund sources) ────────────
+    # Source: docs/4384-Purchase Procedures of the Institute.PDF
+    # Institute Budgeted Funds tiers:
+    ppr_institute = [
+        {
+            "fund_source": "institute", "tier": 1,
+            "floor_amount": 0, "ceiling_amount": 10_000,
+            "min_quotes_required": False, "min_quote_count": 0,
+            "quote_at_discretion": True,
+            "comparative_statement_required": False,
+            "approving_authority_role_codes": ["DIRECTOR"],
+            "committee_level": None,
+        },
+        {
+            "fund_source": "institute", "tier": 2,
+            "floor_amount": 10_001, "ceiling_amount": 50_000,
+            "min_quotes_required": True, "min_quote_count": 3,
+            "quote_at_discretion": False,
+            "comparative_statement_required": True,
+            "approving_authority_role_codes": ["DIRECTOR"],
+            "committee_level": None,
+        },
+        {
+            "fund_source": "institute", "tier": 3,
+            "floor_amount": 50_001, "ceiling_amount": 499_999,
+            "min_quotes_required": True, "min_quote_count": 3,
+            "quote_at_discretion": False,
+            "comparative_statement_required": True,
+            "approving_authority_role_codes": ["REGISTRAR"],
+            "committee_level": "campus_purchase_committee",
+        },
+        {
+            "fund_source": "institute", "tier": 4,
+            "floor_amount": 500_000, "ceiling_amount": 999_999,
+            "min_quotes_required": True, "min_quote_count": 3,
+            "quote_at_discretion": False,
+            "comparative_statement_required": True,
+            "approving_authority_role_codes": ["VC"],
+            "committee_level": "central_purchase_committee",
+        },
+        {
+            "fund_source": "institute", "tier": 5,
+            "floor_amount": 1_000_000, "ceiling_amount": None,
+            "min_quotes_required": True, "min_quote_count": 3,
+            "quote_at_discretion": False,
+            "comparative_statement_required": True,
+            # BOM (Board of Management) is an offline statutory body;
+            # M7 handles this as offline approval. Stored as literal string,
+            # no FK/join to the roles table.
+            "approving_authority_role_codes": ["BOM"],
+            "committee_level": "central_purchase_committee",
+        },
+    ]
+    # Projects / UGC Funds tiers:
+    ppr_projects = [
+        {
+            "fund_source": "projects_ugc", "tier": 1,
+            "floor_amount": 0, "ceiling_amount": 10_000,
+            "min_quotes_required": False, "min_quote_count": 0,
+            "quote_at_discretion": True,
+            "comparative_statement_required": False,
+            "approving_authority_role_codes": ["HOD", "DIRECTOR"],
+            "committee_level": None,
+        },
+        {
+            # PDF states tier-2 floor as 10,000 (overlapping with tier-1 ceiling).
+            # Normalized to 10,001 to avoid range overlap.
+            "fund_source": "projects_ugc", "tier": 2,
+            "floor_amount": 10_001, "ceiling_amount": 50_000,
+            "min_quotes_required": True, "min_quote_count": 3,
+            "quote_at_discretion": False,
+            "comparative_statement_required": True,
+            "approving_authority_role_codes": ["HOD", "DIRECTOR"],
+            "committee_level": None,
+        },
+        {
+            # PDF states tier-3 floor as 50,000; normalized to 50,001.
+            "fund_source": "projects_ugc", "tier": 3,
+            "floor_amount": 50_001, "ceiling_amount": 499_999,
+            "min_quotes_required": True, "min_quote_count": 3,
+            "quote_at_discretion": False,
+            "comparative_statement_required": True,
+            "approving_authority_role_codes": ["REGISTRAR"],
+            "committee_level": "campus_purchase_committee",
+        },
+        {
+            "fund_source": "projects_ugc", "tier": 4,
+            "floor_amount": 500_000, "ceiling_amount": 999_999,
+            "min_quotes_required": True, "min_quote_count": 3,
+            "quote_at_discretion": False,
+            "comparative_statement_required": True,
+            "approving_authority_role_codes": ["VC"],
+            "committee_level": "central_purchase_committee",
+        },
+        {
+            "fund_source": "projects_ugc", "tier": 5,
+            "floor_amount": 1_000_000, "ceiling_amount": None,
+            "min_quotes_required": True, "min_quote_count": 3,
+            "quote_at_discretion": False,
+            "comparative_statement_required": True,
+            "approving_authority_role_codes": ["VC"],
+            "committee_level": "central_purchase_committee",
+        },
+    ]
+    ppr_inserted = 0
+    for rule in ppr_institute + ppr_projects:
+        ppr_inserted += _exec_insert(
+            session,
+            pg_insert(PurchaseProcedureRule)
+            .values(**rule)
+            .on_conflict_do_nothing(constraint="uq_ppr_fund_source_tier"),
+        )
+    counts["purchase_procedure_rules"] = ppr_inserted
+
+    # ── PurchaseCommitteeTemplate (2 rows) ───────────────────────────────────
+    # Campus purchase committee (E-007):
+    # - Director is NOT a member (director_excluded=True) — Director gives
+    #   comments and forwards. Per PDF: "Director should not be a member of the
+    #   committee as he/she would be giving comments/recommendation and
+    #   forwarding the proposal to Ad-block for approval."
+    #   Forwarding topology: Director → Registrar → VC (captured in notes;
+    #   M7 runtime enforces the actual routing).
+    # - Three faculty members from different departments + HoD of concerned dept.
+    # - eligible_designations is rank-ordered (highest rank first).
+    pct_campus_inserted = _exec_insert(
+        session,
+        pg_insert(PurchaseCommitteeTemplate)
+        .values(
+            committee_type="campus_purchase_committee",
+            eligible_designations=[
+                "senior_professor", "professor", "associate_professor",
+            ],
+            faculty_member_count=3,
+            members_from_different_departments=True,
+            fixed_role_members=["HOD"],
+            director_excluded=True,
+            escalation_designate_role_code=None,
+            external_expert_mode="proxied_with_proof",
+            topology="concurrent",
+            notes=(
+                "Director is NOT a member. Director gives comments/recommendation "
+                "and forwards to Registrar → VC. Three faculty members from "
+                "departments other than the initiating department."
+            ),
+        )
+        .on_conflict_do_nothing(constraint="uq_pct_committee_type"),
+    )
+    # Central purchase committee (E-007):
+    # - Registrar is escalation designate (takes proposal to VC).
+    # - Three faculty from different depts + HoD + Finance Officer + Registrar.
+    pct_central_inserted = _exec_insert(
+        session,
+        pg_insert(PurchaseCommitteeTemplate)
+        .values(
+            committee_type="central_purchase_committee",
+            eligible_designations=[
+                "senior_professor", "professor", "associate_professor",
+            ],
+            faculty_member_count=3,
+            members_from_different_departments=True,
+            fixed_role_members=["HOD", "FINANCE_OFFICER", "REGISTRAR"],
+            director_excluded=False,
+            escalation_designate_role_code="REGISTRAR",
+            external_expert_mode="proxied_with_proof",
+            topology="concurrent",
+            notes=(
+                "Registrar takes proposal to VC. Three faculty members from "
+                "departments other than the initiating department, plus HoD of "
+                "concerned dept, Finance Officer, and Registrar."
+            ),
+        )
+        .on_conflict_do_nothing(constraint="uq_pct_committee_type"),
+    )
+    counts["purchase_committee_templates"] = pct_campus_inserted + pct_central_inserted
+
+    # ── ApprovalProcess — CPC_FUND_RELEASE ───────────────────────────────────
+    cpc_inserted = _exec_insert(
+        session,
+        pg_insert(ApprovalProcess)
+        .values(
+            code="CPC_FUND_RELEASE",
+            title="Central Purchase Committee Fund Release",
+            requestor_role_codes=["HOD", "AHOD"],
+            channel_role_codes=[
+                "REGISTRAR", "FINANCE_OFFICER", "CPC_CHAIRPERSON", "VC",
+            ],
+            is_finance=True,
+        )
+        .on_conflict_do_nothing(constraint="uq_approval_processes_code"),
+    )
+    counts["approval_processes"] = cpc_inserted
 
     session.commit()
     return counts

@@ -383,6 +383,26 @@ it is not silently dropped between M5b, M7 and M11.
 - Resolution of the §8.4 `ApprovalStep` schema insufficiency.
 - The project-fund → PI-project link (depends on M11).
 
-**Read by**: M5b planning (config), M7 planning (runtime), M11 planning
-(project-fund link). Supersedes the sequential channel phrasing of §9.5 for the
-CPC/purchase case.
+### M7/M10 forward-concern: rank-preference enforcement, availability, justification
+
+The following are M7 RUNTIME concerns that depend on the Faculty model (M10).
+M5b stores the ranked designation policy via `PurchaseCommitteeTemplate.
+eligible_designations` (ordered list) and `faculty_member_count`; it enforces
+nothing.
+
+1. **Rank-preference enforcement**: "if enough Senior Professors are available
+   across different departments, faculty cannot pick lower-ranked designations."
+   Requires M10 `Faculty` to know who holds which designation and is available.
+2. **Availability/fatigue check**: "can't repeatedly pick the same people for
+   consecutive committees." Requires M7 purchase-request history + M10 Faculty.
+3. **Justification field**: "faculty must justify the committee composition"
+   (why these specific people, why a lower rank was chosen if higher-ranked
+   faculty exist). This is captured on the purchase-request artifact (M7), not
+   on the committee template (M5b).
+
+M7 must implement all three. The `eligible_designations` order (highest rank
+first) is the policy input; M7's committee-assembly UI enforces it.
+
+**Read by**: M5b planning (config), M7 planning (runtime), M10 planning
+(Faculty model), M11 planning (project-fund link). Supersedes the sequential
+channel phrasing of §9.5 for the CPC/purchase case.
