@@ -83,3 +83,12 @@ def load_scope_objects(scope_type: str, session: "Session") -> list[dict[str, st
     if cfg is None:
         return []
     return cfg.list_options(session)
+
+
+def resolve_scope_label(scope_type: str, scope_id_str: str, session: "Session") -> str:
+    """Resolve a scope_type + scope_id UUID to a human-readable label."""
+    objects = load_scope_objects(scope_type, session)
+    for obj in objects:
+        if obj["id"] == scope_id_str:
+            return obj["label"]
+    return scope_id_str

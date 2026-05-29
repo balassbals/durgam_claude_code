@@ -19,6 +19,7 @@ from durgam.pages.shared.file_upload import file_upload_zone
 from durgam.states.config_document_template import TemplateConfigState
 
 _TYPE_OPTIONS = ["bos", "mom", "vac"]
+_TYPE_DISPLAY = {"bos": "BOS", "mom": "MOM", "vac": "VAC Certificate"}
 
 _ACCEPT_MAP = {
     "bos": {
@@ -58,9 +59,15 @@ def _kebab(row: dict) -> rx.Component:
                 ),
             ),
             rx.menu.item(
+                "Replace File",
+                on_click=TemplateConfigState.open_replace(  # type: ignore[call-arg, func-returns-value]
+                    row["raw_type"]
+                ),
+            ),
+            rx.menu.item(
                 "Deactivate",
                 on_click=TemplateConfigState.open_deactivate_confirm(  # type: ignore[call-arg, func-returns-value]
-                    row["id"], row["template_type"]
+                    row["id"], row["raw_type"]
                 ),
                 color="var(--color-danger, #c0392b)",
             ),
@@ -108,7 +115,7 @@ def _inline_form() -> rx.Component:
                         rx.select.trigger(placeholder="Select type"),
                         rx.select.content(
                             *[
-                                rx.select.item(t.upper(), value=t)
+                                rx.select.item(_TYPE_DISPLAY.get(t, t.upper()), value=t)
                                 for t in _TYPE_OPTIONS
                             ],
                         ),

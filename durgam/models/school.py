@@ -12,5 +12,3 @@ class School(TimestampedSoftDelete, table=True):
 
     code: str = Field(max_length=10, nullable=False)  # SCI | HSS | LL | MC
     name: str = Field(max_length=200, nullable=False)
-    # Plain string reference — no FK to roles table (avoids cross-module FK; OQ-M3-6)
-    dean_role_code: str = Field(max_length=64, nullable=False)

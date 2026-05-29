@@ -44,6 +44,12 @@ def _kebab(row: dict) -> rx.Component:
                 ),
             ),
             rx.menu.item(
+                "Replace File",
+                on_click=LetterheadConfigState.open_replace(  # type: ignore[call-arg, func-returns-value]
+                    row["role_code"]
+                ),
+            ),
+            rx.menu.item(
                 "Deactivate",
                 on_click=LetterheadConfigState.open_deactivate_confirm(  # type: ignore[call-arg, func-returns-value]
                     row["id"], row["role_code"]

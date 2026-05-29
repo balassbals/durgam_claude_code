@@ -50,21 +50,6 @@ def _kebab(row: dict) -> rx.Component:
                     ),
                 ),
                 rx.menu.item(
-                    "Upload Appointment Letter",
-                    on_click=CounsellorConfigState.open_edit(  # type: ignore[call-arg, func-returns-value]
-                        row["id"],
-                        row["name"],
-                        row["qualification"],
-                        row["specialisation"],
-                        row["mode"],
-                        row["start"],
-                        row["end"],
-                        row["phone"],
-                        row["email"],
-                        row["display_order"],
-                    ),
-                ),
-                rx.menu.item(
                     "Deactivate",
                     on_click=CounsellorConfigState.open_deactivate_confirm(  # type: ignore[call-arg, func-returns-value]
                         row["id"], row["name"]
@@ -251,34 +236,47 @@ def _inline_form() -> rx.Component:
                         rx.text("Lower numbers appear first", font_size="0.75rem", color="var(--color-muted)"),
                         align="start", gap="0.25rem", width="100%",
                     ),
-                    # File upload zones — only visible when editing an existing record
-                    rx.cond(
-                        CounsellorConfigState.editing_id != "",
-                        rx.vstack(
-                            rx.text(
-                                "Appointment Letter (PDF, ≤2 MB)",
-                                font_size="0.85rem",
-                                color="var(--color-muted)",
-                            ),
-                            file_upload_zone(
-                                on_drop=CounsellorConfigState.upload_appt_letter,  # type: ignore[arg-type]
-                                accept={"application/pdf": [".pdf"]},
-                                label="Drag & drop appointment letter PDF, or click to browse",
-                            ),
-                            rx.text(
-                                "Qualification Proof (PDF, ≤2 MB)",
-                                font_size="0.85rem",
-                                color="var(--color-muted)",
-                                margin_top="0.5rem",
-                            ),
-                            file_upload_zone(
-                                on_drop=CounsellorConfigState.upload_qual_proof,  # type: ignore[arg-type]
-                                accept={"application/pdf": [".pdf"]},
-                                label="Drag & drop qualification proof PDF, or click to browse",
-                            ),
-                            align="start", gap="0.25rem", width="100%",
+                    rx.vstack(
+                        rx.text(
+                            "Appointment Letter (PDF, ≤2 MB)",
+                            font_size="0.85rem",
+                            color="var(--color-muted)",
                         ),
-                        rx.fragment(),
+                        file_upload_zone(
+                            on_drop=CounsellorConfigState.stage_appt_letter,  # type: ignore[arg-type]
+                            accept={"application/pdf": [".pdf"]},
+                            label="Drag & drop appointment letter PDF, or click to browse",
+                        ),
+                        rx.cond(
+                            CounsellorConfigState.staged_appt_letter_name != "",
+                            rx.text(
+                                CounsellorConfigState.staged_appt_letter_name,
+                                font_size="0.8rem",
+                                color="var(--color-success)",
+                            ),
+                            rx.fragment(),
+                        ),
+                        rx.text(
+                            "Qualification Proof (PDF, ≤2 MB)",
+                            font_size="0.85rem",
+                            color="var(--color-muted)",
+                            margin_top="0.5rem",
+                        ),
+                        file_upload_zone(
+                            on_drop=CounsellorConfigState.stage_qual_proof,  # type: ignore[arg-type]
+                            accept={"application/pdf": [".pdf"]},
+                            label="Drag & drop qualification proof PDF, or click to browse",
+                        ),
+                        rx.cond(
+                            CounsellorConfigState.staged_qual_proof_name != "",
+                            rx.text(
+                                CounsellorConfigState.staged_qual_proof_name,
+                                font_size="0.8rem",
+                                color="var(--color-success)",
+                            ),
+                            rx.fragment(),
+                        ),
+                        align="start", gap="0.25rem", width="100%",
                     ),
                     rx.hstack(
                         primary_btn("Save", type="submit"),

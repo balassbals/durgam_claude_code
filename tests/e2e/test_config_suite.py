@@ -194,8 +194,6 @@ class TestSchoolCRUD:
             page.get_by_placeholder("e.g. SCI").fill(_SCHOOL_CODE)
             # RC-1: actual placeholder is "Full school name", not "School name"
             page.get_by_placeholder("Full school name").fill("Test School E2E")
-            # Failure B: dean_role_code is required by SchoolService.create()
-            page.get_by_placeholder("e.g. DEAN_SCI").fill("DEAN_TSC")
             page.get_by_role("button", name="Save").click()
             expect(page.get_by_text("Test School E2E", exact=True)).to_be_visible(timeout=15_000)
 

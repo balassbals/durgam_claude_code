@@ -35,25 +35,20 @@ class SchoolService:
         self,
         code: str,
         name: str,
-        dean_role_code: str,
         actor_id: UUID,
     ) -> School:
         code = code.strip().upper()
         name = name.strip()
-        dean_role_code = dean_role_code.strip().upper()
         if not code:
             raise SchoolError("School code is required.")
         if not name:
             raise SchoolError("School name is required.")
-        if not dean_role_code:
-            raise SchoolError("Dean role code is required.")
         if self._schools.get_by_code(code) is not None:
             raise SchoolError(f"School code '{code}' is already in use.")
         now = datetime.now(UTC)
         school = School(
             code=code,
             name=name,
-            dean_role_code=dean_role_code,
             created_by=actor_id,
             updated_by=actor_id,
             created_at=now,

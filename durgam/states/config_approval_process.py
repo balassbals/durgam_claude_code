@@ -28,6 +28,7 @@ class ApprovalProcessConfigState(BaseState):
     form_requestors_selected: list[str] = []
     form_channel_selected: list[str] = []
     form_is_finance: bool = False
+    form_cc_selected: list[str] = []
 
     confirm_open: bool = False
     confirm_id: str = ""
@@ -54,8 +55,10 @@ class ApprovalProcessConfigState(BaseState):
                     "requestors": ", ".join(p.requestor_role_codes or []),
                     "channel": ", ".join(p.channel_role_codes or []),
                     # raw for edit (JSON-encoded list for state)
+                    "cc": ", ".join(p.informational_cc_role_codes or []),
                     "raw_requestors": ",".join(p.requestor_role_codes or []),
                     "raw_channel": ",".join(p.channel_role_codes or []),
+                    "raw_cc": ",".join(p.informational_cc_role_codes or []),
                     "raw_finance": "1" if p.is_finance else "0",
                 })
 
@@ -80,6 +83,12 @@ class ApprovalProcessConfigState(BaseState):
         else:
             self.form_channel_selected = [*self.form_channel_selected, code]
 
+    def toggle_cc(self, code: str) -> None:
+        if code in self.form_cc_selected:
+            self.form_cc_selected = [c for c in self.form_cc_selected if c != code]
+        else:
+            self.form_cc_selected = [*self.form_cc_selected, code]
+
     def set_form_is_finance(self, v: bool) -> None:
         self.form_is_finance = v
 
@@ -91,12 +100,13 @@ class ApprovalProcessConfigState(BaseState):
         self.form_title = ""
         self.form_requestors_selected = []
         self.form_channel_selected = []
+        self.form_cc_selected = []
         self.form_is_finance = False
         self.show_form = True
 
     def open_edit(
         self, pid: str, code: str, title: str, requestors: str,
-        channel: str, finance: str,
+        channel: str, finance: str, cc: str,
     ):
         self.flash = ""
         self.flash_type = "info"
@@ -105,6 +115,7 @@ class ApprovalProcessConfigState(BaseState):
         self.form_title = title
         self.form_requestors_selected = [r for r in requestors.split(",") if r]
         self.form_channel_selected = [c for c in channel.split(",") if c]
+        self.form_cc_selected = [c for c in cc.split(",") if c]
         self.form_is_finance = finance == "1"
         self.show_form = True
 
@@ -123,6 +134,7 @@ class ApprovalProcessConfigState(BaseState):
 
         requestors = self.form_requestors_selected or None
         channel = self.form_channel_selected or None
+        cc = self.form_cc_selected or None
 
         try:
             with open_session() as session:
@@ -135,6 +147,7 @@ class ApprovalProcessConfigState(BaseState):
                         requestor_role_codes=requestors,
                         channel_role_codes=channel,
                         is_finance=self.form_is_finance,
+                        informational_cc_role_codes=cc,
                         actor_id=actor_id,
                     )
                 else:
@@ -146,6 +159,7 @@ class ApprovalProcessConfigState(BaseState):
                             "requestor_role_codes": requestors,
                             "channel_role_codes": channel,
                             "is_finance": self.form_is_finance,
+                            "informational_cc_role_codes": cc,
                         },
                         actor_id,
                     )

@@ -33,7 +33,7 @@ def _kebab(row: dict) -> rx.Component:
             rx.menu.item(
                 "Edit",
                 on_click=SchoolConfigState.open_edit(  # type: ignore[call-arg, func-returns-value]
-                    row["id"], row["code"], row["name"], row["dean_role_code"]
+                    row["id"], row["code"], row["name"]
                 ),
             ),
             rx.menu.item(
@@ -91,23 +91,6 @@ def _inline_form() -> rx.Component:
                         gap="0.25rem",
                         width="100%",
                     ),
-                    rx.vstack(
-                        rx.text(
-                            "Dean Role Code",
-                            font_size="0.85rem",
-                            color="var(--color-muted)",
-                        ),
-                        rx.input(
-                            name="form_dean_role_code",
-                            value=SchoolConfigState.form_dean_role_code,
-                            on_change=SchoolConfigState.set_form_dean_role_code,
-                            placeholder="e.g. DEAN_SCI",
-                            width="100%",
-                        ),
-                        align="start",
-                        gap="0.25rem",
-                        width="100%",
-                    ),
                     rx.hstack(
                         primary_btn("Save", type="submit"),
                         secondary_btn("Cancel", on_click=SchoolConfigState.cancel_form, type="button"),
@@ -151,9 +134,6 @@ def admin_config_schools() -> rx.Component:
                         columns=[
                             TableColumn(key="code", label="Code"),
                             TableColumn(key="name", label="Name"),
-                            TableColumn(
-                                key="dean_role_code", label="Dean Role", hidden_on_card=True
-                            ),
                         ],
                         card_primary_key="name",
                         is_mobile=False,

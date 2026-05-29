@@ -174,6 +174,46 @@ Session 5 design decision for rationale.
 
 ---
 
+## M5b Forward-Concerns (from gate verification round 2)
+
+The following items were identified during M5b gate verification as requiring
+work in later milestones. They are not bugs or gaps — they are intentional
+deferred scope.
+
+1. **Committee member selection requires M10 Faculty model** — the purchase
+   committee assembly UI needs to know which faculty exist and their
+   designations. → M10/M14.
+2. **Rank-preference, availability/fatigue check, justification field** — M7
+   runtime purchase committee constraints that depend on M10 Faculty. → M7/M10.
+3. **Calendar email recipients: individual notification preferences** — currently
+   all users with the target role receive the email; per-user opt-out is a M9
+   concern. → M9.
+4. **Counsellor document generation with letterhead overlay** — the roster
+   export uses the Director letterhead as a DOCX template; generating formal
+   appointment letters with letterhead merge is M14 scope. → M14.
+5. **Purchase committee member identity verification** — verifying that the
+   named committee members actually hold the required designation at the time
+   of committee formation. → M10.
+6. **Approval process SLA enforcement** — tracking and enforcing time limits on
+   each step of an approval process. → M7.
+7. **Class coordinator student picker** — currently a text placeholder; needs
+   the Student model from M12 for a real student selector. → M12.
+8. **Visiting faculty contract term tracking** — tracking formal contract dates,
+   renewal, and integration with HR. → M10.
+9. **Role-based dashboard widgets** — per-role landing page with relevant
+   quick-access panels. → M15.
+10. **Calendar entry conflict detection** — warning when a new entry overlaps
+    with existing entries in the same scope. → M6.
+11. **Bulk assignment import (class teachers, coordinators)** — CSV/Excel upload
+    for batch assignment of class teachers and coordinators. → M14.
+12. **Designation-based committee eligibility verification** — verifying
+    designation rank at committee-formation time requires the Faculty model. → M10.
+13. **Full routing customization for approval processes** — the current
+    channel_role_codes + informational_cc_role_codes cover the common case;
+    conditional branching (if amount > X, route to Y) is M7 runtime. → M7.
+
+---
+
 ## M13 Inheritance Note
 
 Rich management UI for Program sub-entities (PEO/PO/PSO editing forms, regulation

@@ -10,6 +10,7 @@ from durgam.pages.components import (
     page_footer,
     primary_btn,
     role_multi_select,
+    role_multi_select_ordered,
     secondary_btn,
 )
 from durgam.pages.shared.confirmation_dialog import confirmation_dialog
@@ -36,7 +37,7 @@ def _kebab(row: dict) -> rx.Component:
                 on_click=ApprovalProcessConfigState.open_edit(  # type: ignore[call-arg, func-returns-value]
                     row["id"], row["code"], row["title"],
                     row["raw_requestors"], row["raw_channel"],
-                    row["raw_finance"],
+                    row["raw_finance"], row["raw_cc"],
                 ),
             ),
             rx.menu.item(
@@ -95,11 +96,20 @@ def _inline_form() -> rx.Component:
                         align="start", gap="0.25rem", width="100%",
                     ),
                     rx.vstack(
-                        rx.text("Channel Roles", font_size="0.85rem", color="var(--color-muted)"),
-                        role_multi_select(
+                        rx.text("Channel Roles (ordered)", font_size="0.85rem", color="var(--color-muted)"),
+                        role_multi_select_ordered(
                             options=ApprovalProcessConfigState.role_options,
                             selected_codes=ApprovalProcessConfigState.form_channel_selected,
                             toggle_handler=ApprovalProcessConfigState.toggle_channel,
+                        ),
+                        align="start", gap="0.25rem", width="100%",
+                    ),
+                    rx.vstack(
+                        rx.text("Informational CC Roles", font_size="0.85rem", color="var(--color-muted)"),
+                        role_multi_select(
+                            options=ApprovalProcessConfigState.role_options,
+                            selected_codes=ApprovalProcessConfigState.form_cc_selected,
+                            toggle_handler=ApprovalProcessConfigState.toggle_cc,
                         ),
                         align="start", gap="0.25rem", width="100%",
                     ),
@@ -156,6 +166,7 @@ def admin_config_approval_processes() -> rx.Component:
                             TableColumn(key="finance", label="Finance request?"),
                             TableColumn(key="requestors", label="Requestors"),
                             TableColumn(key="channel", label="Channel"),
+                            TableColumn(key="cc", label="CC"),
                         ],
                         card_primary_key="code",
                         is_mobile=False,

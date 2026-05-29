@@ -187,9 +187,8 @@ class TestRoleConstants:
         assert "AHOD" in _PHASE3_ROLES
         assert "HOD_OFFICE" in _PHASE3_ROLES
 
-    def test_phase3_roles_include_deans(self):
+    def test_phase3_roles_include_dean(self):
         assert "DEAN" in _PHASE3_ROLES
-        assert "DEAN_SCI" in _PHASE3_ROLES
 
     def test_phase3_excludes_registrar_and_iqac(self):
         assert "REGISTRAR" not in _PHASE3_ROLES

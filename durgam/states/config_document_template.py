@@ -109,6 +109,12 @@ class LetterheadConfigState(BaseState):
             self.flash = e.message
             self.flash_type = "error"
 
+    def open_replace(self, role_code: str) -> None:
+        self.flash = ""
+        self.flash_type = "info"
+        self.form_role_code = role_code
+        self.show_form = True
+
     def open_deactivate_confirm(self, record_id: str, role_code: str) -> None:
         self.confirm_id = record_id
         self.confirm_title = f"Deactivate letterhead for '{role_code}'?"
@@ -159,11 +165,13 @@ class TemplateConfigState(BaseState):
         self.loading = True
         self.templates = []
         self.show_form = False
+        _type_display = {"bos": "BOS", "mom": "MOM", "vac": "VAC Certificate"}
         with open_session() as session:
             for r in _svc(session).list_templates():
                 self.templates.append({
                     "id": str(r.id),
-                    "template_type": r.purpose.upper(),
+                    "template_type": _type_display.get(r.purpose, r.purpose.upper()),
+                    "raw_type": r.purpose,
                     "file_id": str(r.file_id),
                 })
         self._load_nav_entries()
@@ -214,6 +222,12 @@ class TemplateConfigState(BaseState):
         except DocumentTemplateError as e:
             self.flash = e.message
             self.flash_type = "error"
+
+    def open_replace(self, template_type: str) -> None:
+        self.flash = ""
+        self.flash_type = "info"
+        self.form_template_type = template_type
+        self.show_form = True
 
     def open_deactivate_confirm(self, record_id: str, template_type: str) -> None:
         self.confirm_id = record_id

@@ -289,6 +289,25 @@ the two topologies. Committee = none → sequential. Committee present →
 concurrent. These are not two ways of doing one thing; they are fundamentally
 different runtime shapes.
 
+### Candidate-set semantic for `approving_authority_role_codes`
+
+The `PurchaseProcedureRule.approving_authority_role_codes` JSONB list uses
+candidate-set semantics, NOT sequential-chain semantics:
+
+- **Position 0** is the immediate next-step approver. M7 routes the request
+  there automatically.
+- **Positions 1+** are the unordered candidate pool. The position-0 approver
+  picks ONE from this set at request time (M7 runtime prompts the choice).
+
+Example: `["HOD", "DIRECTOR", "DEAN"]` means HoD is the immediate next-step
+approver; HoD then chooses either Director or Dean as the onward approver.
+This is NOT a three-step sequential chain.
+
+For strictly-sequential tiers (only one approving authority), the list is a
+single-element list like `["REGISTRAR"]`.
+
+Resolved at M5b gate verification round 2.
+
 ### Ownership (who configures what)
 
 There are three distinct concerns with distinct owners:

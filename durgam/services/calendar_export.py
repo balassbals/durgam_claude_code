@@ -13,32 +13,42 @@ if TYPE_CHECKING:
 
 log = structlog.get_logger(__name__)
 
-_COLUMNS = ("Title", "Type", "Starts At", "Ends At", "Owner Role", "Scope", "Notes")
+_COLUMNS = ("Title", "Start", "End", "Scope")
 
 
-def _row(entry: CalendarEntry) -> tuple[str, ...]:
-    scope = entry.scope_type or ""
+def _row(
+    entry: CalendarEntry,
+    scope_labels: dict[str, str] | None = None,
+) -> tuple[str, ...]:
+    scope = ""
+    if entry.scope_type and entry.scope_id and scope_labels:
+        scope = scope_labels.get(f"{entry.scope_type}:{entry.scope_id}", entry.scope_type)
+    elif entry.scope_type:
+        scope = entry.scope_type
     return (
         entry.title,
-        entry.entry_type,
-        entry.starts_at.strftime("%Y-%m-%d %H:%M"),
-        entry.ends_at.strftime("%Y-%m-%d %H:%M"),
-        entry.owner_role_code,
+        entry.starts_at.strftime("%b %-d %I:%M %p"),
+        entry.ends_at.strftime("%b %-d %I:%M %p"),
         scope,
-        entry.notes or "",
     )
 
 
 class CalendarExportService:
-    def export_csv(self, entries: list[CalendarEntry], ay_code: str) -> bytes:
+    def export_csv(
+        self, entries: list[CalendarEntry], ay_code: str,
+        scope_labels: dict[str, str] | None = None,
+    ) -> bytes:
         buf = io.StringIO()
         writer = csv.writer(buf)
         writer.writerow(_COLUMNS)
         for entry in entries:
-            writer.writerow(_row(entry))
+            writer.writerow(_row(entry, scope_labels))
         return buf.getvalue().encode("utf-8")
 
-    def export_excel(self, entries: list[CalendarEntry], ay_code: str) -> bytes:
+    def export_excel(
+        self, entries: list[CalendarEntry], ay_code: str,
+        scope_labels: dict[str, str] | None = None,
+    ) -> bytes:
         from openpyxl import Workbook
         from openpyxl.styles import Font
 
@@ -50,13 +60,16 @@ class CalendarExportService:
             cell = ws.cell(row=1, column=col_idx, value=col_name)
             cell.font = bold
         for row_idx, entry in enumerate(entries, 2):
-            for col_idx, value in enumerate(_row(entry), 1):
+            for col_idx, value in enumerate(_row(entry, scope_labels), 1):
                 ws.cell(row=row_idx, column=col_idx, value=value)
         buf = io.BytesIO()
         wb.save(buf)
         return buf.getvalue()
 
-    def export_pdf(self, entries: list[CalendarEntry], ay_code: str) -> bytes:
+    def export_pdf(
+        self, entries: list[CalendarEntry], ay_code: str,
+        scope_labels: dict[str, str] | None = None,
+    ) -> bytes:
         from fpdf import FPDF
 
         pdf = FPDF(orientation="L", format="A4")
@@ -67,21 +80,24 @@ class CalendarExportService:
         pdf.ln(4)
 
         pdf.set_font("Helvetica", "B", 9)
-        col_widths = (60, 25, 40, 40, 35, 30, 47)
+        col_widths = (80, 50, 50, 57)
         for i, col_name in enumerate(_COLUMNS):
             pdf.cell(col_widths[i], 8, col_name, border=1)
         pdf.ln()
 
         pdf.set_font("Helvetica", "", 8)
         for entry in entries:
-            row = _row(entry)
+            row = _row(entry, scope_labels)
             for i, value in enumerate(row):
-                pdf.cell(col_widths[i], 7, value[:40], border=1)
+                pdf.cell(col_widths[i], 7, value[:50], border=1)
             pdf.ln()
 
         return bytes(pdf.output())
 
-    def export_docx(self, entries: list[CalendarEntry], ay_code: str) -> bytes:
+    def export_docx(
+        self, entries: list[CalendarEntry], ay_code: str,
+        scope_labels: dict[str, str] | None = None,
+    ) -> bytes:
         from docx import Document
         from docx.shared import Pt
 
@@ -100,7 +116,7 @@ class CalendarExportService:
 
         for entry in entries:
             row_cells = table.add_row().cells
-            for i, value in enumerate(_row(entry)):
+            for i, value in enumerate(_row(entry, scope_labels)):
                 row_cells[i].text = value
                 for paragraph in row_cells[i].paragraphs:
                     for run in paragraph.runs:

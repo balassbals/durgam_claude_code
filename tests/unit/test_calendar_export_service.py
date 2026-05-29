@@ -57,8 +57,7 @@ class TestExportCSV:
         assert len(rows) == 3
         assert rows[1][0] == "Semester 1 Begins"
         assert rows[2][0] == "Annual Sports Day"
-        assert rows[2][5] == "campus"
-        assert rows[2][6] == "All-day event"
+        assert rows[2][3] == "campus"
 
     def test_returns_bytes(self):
         svc = CalendarExportService()

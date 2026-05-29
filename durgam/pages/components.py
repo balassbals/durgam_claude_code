@@ -496,6 +496,43 @@ def role_multi_select(
     )
 
 
+def role_multi_select_ordered(
+    options: rx.Var,
+    selected_codes: rx.Var,
+    toggle_handler,
+) -> rx.Component:
+    """Scrollable checkbox list for ordered selection (append on check, remove on uncheck)."""
+    return rx.box(
+        rx.foreach(
+            options,
+            lambda o: rx.hstack(
+                rx.checkbox(
+                    checked=selected_codes.contains(o["code"]),
+                    on_change=toggle_handler(o["code"]),
+                ),
+                rx.text(o["label"], font_size="0.875rem"),
+                spacing="2",
+                align="center",
+            ),
+        ),
+        rx.cond(
+            selected_codes.length() > 0,
+            rx.text(
+                "Routing order: " + selected_codes.join(" → "),
+                font_size="0.75rem",
+                color="var(--color-muted)",
+                margin_top="0.5rem",
+            ),
+            rx.fragment(),
+        ),
+        max_height="200px",
+        overflow_y="auto",
+        border="1px solid var(--color-rule)",
+        border_radius="var(--radius-2)",
+        padding="0.5rem",
+    )
+
+
 def admin_page(content: rx.Component) -> rx.Component:
     """Wrap admin page content so it is invisible until auth check completes.
 

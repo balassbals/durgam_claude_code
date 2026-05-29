@@ -69,10 +69,13 @@ class RoleEmailConfigState(BaseState):
         self.role_emails = []
         self.show_form = False
         with open_session() as session:
+            from durgam.scopes.registry import resolve_scope_label
             for r in _svc(session).list_all():
                 scope_label = "Global"
-                if r.scope_type:
-                    scope_label = f"{r.scope_type}: {r.scope_id}"
+                if r.scope_type and r.scope_id:
+                    scope_label = resolve_scope_label(
+                        r.scope_type, str(r.scope_id), session,
+                    )
                 self.role_emails.append({
                     "id": str(r.id),
                     "role_code": r.role_code,

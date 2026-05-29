@@ -132,12 +132,8 @@ def seed(session: Session) -> dict[str, int]:
         {"code": "DIRECTOR_OFFICE",      "name": "Director Office",         "level": 69},
         # IQAC (M4)
         {"code": "IQAC_COORDINATOR",     "name": "IQAC Coordinator",        "level": 71},
-        # School deans (one per school; school.dean_role_code references these)
+        # Dean (school-scoped via UserRole.scope_type='school')
         {"code": "DEAN",                 "name": "Dean",                    "level": 70},
-        {"code": "DEAN_SCI",             "name": "Dean — School of Sciences",                        "level": 70},
-        {"code": "DEAN_HSS",             "name": "Dean — School of Humanities & Social Sciences",    "level": 70},
-        {"code": "DEAN_LL",              "name": "Dean — School of Languages & Literature",          "level": 70},
-        {"code": "DEAN_MC",              "name": "Dean — School of Management & Commerce",           "level": 70},
         {"code": "DEAN_STUDENT_WELFARE", "name": "Dean of Student Welfare",                          "level": 70},
         {"code": "DEAN_STUDENT_WELFARE_OFFICE", "name": "Dean of Student Welfare Office",              "level": 69},
         # Academic affairs (M5b — assignment config ownership)
@@ -154,6 +150,13 @@ def seed(session: Session) -> dict[str, int]:
         {"code": "FINANCE_OFFICER",      "name": "Finance Officer",                    "level": 80},
         # CPC (M5b — Central Purchase Committee)
         {"code": "CPC_CHAIRPERSON",      "name": "Central Purchase Committee Chairperson", "level": 75},
+        # Faculty (dept-scoped via UserRole; M10 Faculty model deferred)
+        {"code": "FACULTY",              "name": "Faculty",                            "level": 30},
+        # Library, placements, centres
+        {"code": "LIBRARIAN",            "name": "Librarian",                          "level": 40},
+        {"code": "PLACEMENT_OFFICER",    "name": "Placement Officer",                  "level": 40},
+        {"code": "CESRC_COORDINATOR",    "name": "CESRC Coordinator",                  "level": 40},
+        {"code": "CENTRE_COORDINATOR",   "name": "Centre of Excellence Coordinator",   "level": 40},
         # Students and base
         {"code": "STUDENT",              "name": "Student",                            "level": 10},
         {"code": "BASIC_USER",           "name": "Basic User",                         "level": 1},
@@ -509,10 +512,6 @@ def seed(session: Session) -> dict[str, int]:
         "DIRECTOR_OFFICE":      _PUBLIC_READ + _DIRECTOR_SPECIFIC,
         "IQAC_COORDINATOR":     _PUBLIC_READ + _IQAC_SPECIFIC,
         "DEAN":                 _PUBLIC_READ + _DEAN_SPECIFIC,
-        "DEAN_SCI":             _PUBLIC_READ + _DEAN_SPECIFIC,
-        "DEAN_HSS":             _PUBLIC_READ + _DEAN_SPECIFIC,
-        "DEAN_LL":              _PUBLIC_READ + _DEAN_SPECIFIC,
-        "DEAN_MC":              _PUBLIC_READ + _DEAN_SPECIFIC,
         "DEAN_STUDENT_WELFARE": _PUBLIC_READ + _DEAN_SW_SPECIFIC,
         "DEAN_STUDENT_WELFARE_OFFICE": _PUBLIC_READ + _DEAN_SW_SPECIFIC,
         "DEAN_ACADEMIC_AFFAIRS": _PUBLIC_READ + _DEAN_AA_SPECIFIC,
@@ -545,6 +544,11 @@ def seed(session: Session) -> dict[str, int]:
         "VC_OFFICE":            _PUBLIC_READ,
         "FINANCE_OFFICER":      _PUBLIC_READ + _FINANCE_SPECIFIC,
         "CPC_CHAIRPERSON":      _PUBLIC_READ,
+        "FACULTY":              _PUBLIC_READ,
+        "LIBRARIAN":            _PUBLIC_READ,
+        "PLACEMENT_OFFICER":    _PUBLIC_READ,
+        "CESRC_COORDINATOR":    _PUBLIC_READ,
+        "CENTRE_COORDINATOR":   _PUBLIC_READ,
         "STUDENT":              _PUBLIC_READ,
         "BASIC_USER":           _PUBLIC_READ,
     }
@@ -585,7 +589,7 @@ def seed(session: Session) -> dict[str, int]:
     # ── Users ─────────────────────────────────────────────────────────────────
     # Read-only seeded fixtures (CLAUDE.md Testing rules):
     #   sys_admin / SysAdmin_Dev1!XZ      — SYSTEM_ADMIN
-    #   dean_sci / DeanSci_Dev1!XZ        — DEAN (+ DEAN_SCI added below)
+    #   dean_sci / DeanSci_Dev1!XZ        — DEAN scoped to SCI school
     #   firstlogin_user / FirstLogin_Dev1!XZ — STUDENT, must_change_password=True
     #   inactive_user / Inactive_Dev1!XZ  — STUDENT, is_active=False
     #   student_001 / Student_Dev1!XZ     — STUDENT
@@ -596,6 +600,19 @@ def seed(session: Session) -> dict[str, int]:
     #   dean_sw / DeanSW_Dev1!XZ         — DEAN_STUDENT_WELFARE unscoped (new at M4)
     #   finance_user / Finance_Dev1!XZ  — FINANCE_OFFICER unscoped (new at M5b)
     #   daa_user / DeanAA_Dev1!XZ       — DEAN_ACADEMIC_AFFAIRS unscoped (new at M5b)
+    #   registrar_office_user / RegOffice_Dev1!XZ — REGISTRAR_OFFICE (M5b-R2)
+    #   deputy_registrar_user / DeputyReg_Dev1!XZ — DEPUTY_REGISTRAR (M5b-R2)
+    #   hod_office_dmacs / HodOffice_Dev1!XZ — HOD_OFFICE scoped to DMACS (M5b-R2)
+    #   ahod_dmacs / AhodDmacs_Dev1!XZ — AHOD scoped to DMACS (M5b-R2)
+    #   director_office_psn / DirOffice_Dev1!XZ — DIRECTOR_OFFICE scoped to PSN (M5b-R2)
+    #   deputy_director_psn / DeputyDir_Dev1!XZ — DEPUTY_DIRECTOR scoped to PSN (M5b-R2)
+    #   dsw_office_user / DSWOffice_Dev1!XZ — DEAN_STUDENT_WELFARE_OFFICE (M5b-R2)
+    #   daa_office_user / DaaOffice_Dev1!XZ — DEAN_ACADEMIC_AFFAIRS_OFFICE (M5b-R2)
+    #   faculty_user / Faculty_Dev1!XZ — FACULTY scoped to DMACS (M5b-R2)
+    #   librarian_user / Librarian_Dev1!XZ — LIBRARIAN (M5b-R2)
+    #   placement_officer_user / Placement_Dev1!XZ — PLACEMENT_OFFICER (M5b-R2)
+    #   cesrc_coord_user / Cesrc_Dev1!XZ — CESRC_COORDINATOR (M5b-R2)
+    #   center_coord_user / Center_Dev1!XZ — CENTRE_COORDINATOR (M5b-R2)
     users_data = [
         {
             "email": "sys.admin@sssihl.edu.in",
@@ -688,6 +705,98 @@ def seed(session: Session) -> dict[str, int]:
             "full_name": "Dean of Academic Affairs",
             "role_code": "DEAN_ACADEMIC_AFFAIRS",
             "plain_password": "DeanAA_Dev1!XZ",
+        },
+        # M5b-R2 demo users (13 new)
+        {
+            "email": "registrar.office@sssihl.edu.in",
+            "username": "registrar_office_user",
+            "full_name": "Registrar Office Staff",
+            "role_code": "REGISTRAR_OFFICE",
+            "plain_password": "RegOffice_Dev1!XZ",
+        },
+        {
+            "email": "deputy.registrar@sssihl.edu.in",
+            "username": "deputy_registrar_user",
+            "full_name": "Deputy Registrar",
+            "role_code": "DEPUTY_REGISTRAR",
+            "plain_password": "DeputyReg_Dev1!XZ",
+        },
+        {
+            "email": "hod.office.dmacs@sssihl.edu.in",
+            "username": "hod_office_dmacs",
+            "full_name": "HoD Office DMACS",
+            "role_code": "BASIC_USER",
+            "plain_password": "HodOffice_Dev1!XZ",
+        },
+        {
+            "email": "ahod.dmacs@sssihl.edu.in",
+            "username": "ahod_dmacs",
+            "full_name": "Associate HoD Mathematics and Computer Science",
+            "role_code": "BASIC_USER",
+            "plain_password": "AhodDmacs_Dev1!XZ",
+        },
+        {
+            "email": "director.office.psn@sssihl.edu.in",
+            "username": "director_office_psn",
+            "full_name": "Director Office Prasanthi Nilayam",
+            "role_code": "BASIC_USER",
+            "plain_password": "DirOffice_Dev1!XZ",
+        },
+        {
+            "email": "deputy.director.psn@sssihl.edu.in",
+            "username": "deputy_director_psn",
+            "full_name": "Deputy Director Prasanthi Nilayam",
+            "role_code": "BASIC_USER",
+            "plain_password": "DeputyDir_Dev1!XZ",
+        },
+        {
+            "email": "dsw.office@sssihl.edu.in",
+            "username": "dsw_office_user",
+            "full_name": "Dean Student Welfare Office Staff",
+            "role_code": "DEAN_STUDENT_WELFARE_OFFICE",
+            "plain_password": "DSWOffice_Dev1!XZ",
+        },
+        {
+            "email": "daa.office@sssihl.edu.in",
+            "username": "daa_office_user",
+            "full_name": "Dean Academic Affairs Office Staff",
+            "role_code": "DEAN_ACADEMIC_AFFAIRS_OFFICE",
+            "plain_password": "DaaOffice_Dev1!XZ",
+        },
+        {
+            "email": "faculty.dmacs@sssihl.edu.in",
+            "username": "faculty_user",
+            "full_name": "Faculty Member DMACS",
+            "role_code": "BASIC_USER",
+            "plain_password": "Faculty_Dev1!XZ",
+        },
+        {
+            "email": "librarian@sssihl.edu.in",
+            "username": "librarian_user",
+            "full_name": "University Librarian",
+            "role_code": "LIBRARIAN",
+            "plain_password": "Librarian_Dev1!XZ",
+        },
+        {
+            "email": "placement@sssihl.edu.in",
+            "username": "placement_officer_user",
+            "full_name": "Placement Officer",
+            "role_code": "PLACEMENT_OFFICER",
+            "plain_password": "Placement_Dev1!XZ",
+        },
+        {
+            "email": "cesrc@sssihl.edu.in",
+            "username": "cesrc_coord_user",
+            "full_name": "CESRC Coordinator",
+            "role_code": "CESRC_COORDINATOR",
+            "plain_password": "Cesrc_Dev1!XZ",
+        },
+        {
+            "email": "centre.coord@sssihl.edu.in",
+            "username": "center_coord_user",
+            "full_name": "Centre of Excellence Coordinator",
+            "role_code": "CENTRE_COORDINATOR",
+            "plain_password": "Center_Dev1!XZ",
         },
     ]
     user_inserted = 0
@@ -995,19 +1104,19 @@ def seed(session: Session) -> dict[str, int]:
     }
 
     # ── Schools ───────────────────────────────────────────────────────────────
-    # Gate: "four schools seeded"; dean_role_code is a plain string reference (OQ-M3-6)
+    # Gate: "four schools seeded"; Dean is scoped via UserRole, not per-school column.
     schools_raw = [
-        ("SCI", "School of Sciences",                        "DEAN_SCI"),
-        ("HSS", "School of Humanities and Social Sciences",  "DEAN_HSS"),
-        ("LL",  "School of Languages and Literature",        "DEAN_LL"),
-        ("MC",  "School of Management and Commerce",         "DEAN_MC"),
+        ("SCI", "School of Sciences"),
+        ("HSS", "School of Humanities and Social Sciences"),
+        ("LL",  "School of Languages and Literature"),
+        ("MC",  "School of Management and Commerce"),
     ]
     school_inserted = 0
-    for code, name, dean_code in schools_raw:
+    for code, name in schools_raw:
         school_inserted += _exec_insert(
             session,
             pg_insert(School)
-            .values(code=code, name=name, dean_role_code=dean_code)
+            .values(code=code, name=name)
             .on_conflict_do_nothing(constraint="uq_schools_code"),
         )
     counts["schools"] = school_inserted
@@ -1502,16 +1611,26 @@ def seed(session: Session) -> dict[str, int]:
         counts["working_days_configs"] = 0
 
     # ── Scoped role assignments (requires departments to be seeded first) ─────
-    # dean_sci → DEAN_SCI role (school-level, unscoped)
+    # dean_sci → DEAN role scoped to SCI school
     dean_sci_user = session.exec(
         select(User).where(User.username == "dean_sci")
     ).first()
-    if dean_sci_user:
-        _exec_insert(
-            session,
+    if dean_sci_user and "SCI" in schools:
+        session.execute(
             pg_insert(UserRole)
-            .values(user_id=dean_sci_user.id, role_id=roles["DEAN_SCI"].id)
-            .on_conflict_do_nothing(),
+            .values(
+                user_id=dean_sci_user.id,
+                role_id=roles["DEAN"].id,
+                scope_type="school",
+                scope_id=schools["SCI"].id,
+            )
+            .on_conflict_do_update(
+                index_elements=["user_id", "role_id"],
+                set_={
+                    "scope_type": "school",
+                    "scope_id": schools["SCI"].id,
+                },
+            )
         )
 
     # hod_dmacs → HOD role scoped to DMACS department
@@ -1555,6 +1674,101 @@ def seed(session: Session) -> dict[str, int]:
                     "scope_type": "campus",
                     "scope_id": campuses["PSN"].id,
                 },
+            )
+        )
+
+    # hod_office_dmacs → HOD_OFFICE role scoped to DMACS department (M5b-R2)
+    _hod_office_user = session.exec(
+        select(User).where(User.username == "hod_office_dmacs")
+    ).first()
+    if _hod_office_user and "DMACS" in departments:
+        session.execute(
+            pg_insert(UserRole)
+            .values(
+                user_id=_hod_office_user.id,
+                role_id=roles["HOD_OFFICE"].id,
+                scope_type="department",
+                scope_id=departments["DMACS"].id,
+            )
+            .on_conflict_do_update(
+                index_elements=["user_id", "role_id"],
+                set_={"scope_type": "department", "scope_id": departments["DMACS"].id},
+            )
+        )
+
+    # ahod_dmacs → AHOD role scoped to DMACS department (M5b-R2)
+    _ahod_user = session.exec(
+        select(User).where(User.username == "ahod_dmacs")
+    ).first()
+    if _ahod_user and "DMACS" in departments:
+        session.execute(
+            pg_insert(UserRole)
+            .values(
+                user_id=_ahod_user.id,
+                role_id=roles["AHOD"].id,
+                scope_type="department",
+                scope_id=departments["DMACS"].id,
+            )
+            .on_conflict_do_update(
+                index_elements=["user_id", "role_id"],
+                set_={"scope_type": "department", "scope_id": departments["DMACS"].id},
+            )
+        )
+
+    # director_office_psn → DIRECTOR_OFFICE role scoped to PSN campus (M5b-R2)
+    _dir_office_user = session.exec(
+        select(User).where(User.username == "director_office_psn")
+    ).first()
+    if _dir_office_user and "PSN" in campuses:
+        session.execute(
+            pg_insert(UserRole)
+            .values(
+                user_id=_dir_office_user.id,
+                role_id=roles["DIRECTOR_OFFICE"].id,
+                scope_type="campus",
+                scope_id=campuses["PSN"].id,
+            )
+            .on_conflict_do_update(
+                index_elements=["user_id", "role_id"],
+                set_={"scope_type": "campus", "scope_id": campuses["PSN"].id},
+            )
+        )
+
+    # deputy_director_psn → DEPUTY_DIRECTOR role scoped to PSN campus (M5b-R2)
+    _dep_dir_user = session.exec(
+        select(User).where(User.username == "deputy_director_psn")
+    ).first()
+    if _dep_dir_user and "PSN" in campuses:
+        session.execute(
+            pg_insert(UserRole)
+            .values(
+                user_id=_dep_dir_user.id,
+                role_id=roles["DEPUTY_DIRECTOR"].id,
+                scope_type="campus",
+                scope_id=campuses["PSN"].id,
+            )
+            .on_conflict_do_update(
+                index_elements=["user_id", "role_id"],
+                set_={"scope_type": "campus", "scope_id": campuses["PSN"].id},
+            )
+        )
+
+    # faculty_user → FACULTY role scoped to DMACS department (M5b-R2)
+    _faculty_user = session.exec(
+        select(User).where(User.username == "faculty_user")
+    ).first()
+    if _faculty_user and "DMACS" in departments:
+        session.execute(
+            pg_insert(UserRole)
+            .values(
+                user_id=_faculty_user.id,
+                role_id=roles["FACULTY"].id,
+                scope_type="department",
+                scope_id=departments["DMACS"].id,
+            )
+            .on_conflict_do_update(
+                index_elements=["user_id", "role_id"],
+                set_={"scope_type": "department", "scope_id": departments["DMACS"].id},
             )
         )
 
@@ -1685,7 +1899,7 @@ def seed(session: Session) -> dict[str, int]:
             "min_quotes_required": False, "min_quote_count": 0,
             "quote_at_discretion": True,
             "comparative_statement_required": False,
-            "approving_authority_role_codes": ["HOD", "DIRECTOR"],
+            "approving_authority_role_codes": ["HOD", "DIRECTOR", "DEAN"],
             "committee_level": None,
         },
         {
@@ -1696,7 +1910,7 @@ def seed(session: Session) -> dict[str, int]:
             "min_quotes_required": True, "min_quote_count": 3,
             "quote_at_discretion": False,
             "comparative_statement_required": True,
-            "approving_authority_role_codes": ["HOD", "DIRECTOR"],
+            "approving_authority_role_codes": ["HOD", "DIRECTOR", "DEAN"],
             "committee_level": None,
         },
         {

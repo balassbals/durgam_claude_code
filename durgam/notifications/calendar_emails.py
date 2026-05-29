@@ -7,7 +7,7 @@ from sqlmodel import select
 
 from durgam.config import settings
 from durgam.db import open_session
-from durgam.models.config_anchors import RoleEmail
+from durgam.models.identity import Role, User, UserRole
 from durgam.notifications.email import send_email
 
 log = structlog.get_logger(__name__)
@@ -18,19 +18,23 @@ _PHASE3_ROLES = frozenset({
     "DIRECTOR", "DEPUTY_DIRECTOR", "DIRECTOR_OFFICE",
     "DEAN_STUDENT_WELFARE",
     "HOD", "AHOD", "HOD_OFFICE",
-    "DEAN", "DEAN_SCI", "DEAN_HSS", "DEAN_LL", "DEAN_MC",
+    "DEAN",
 })
 
 
 def _get_role_emails(role_codes: frozenset[str]) -> list[str]:
     with open_session() as session:
         rows = session.exec(
-            select(RoleEmail).where(
-                RoleEmail.role_code.in_(role_codes),  # type: ignore[union-attr]
-                RoleEmail.is_deleted == False,  # noqa: E712
+            select(User.email)
+            .join(UserRole, UserRole.user_id == User.id)  # type: ignore[arg-type]
+            .join(Role, Role.id == UserRole.role_id)  # type: ignore[arg-type]
+            .where(
+                Role.code.in_(role_codes),  # type: ignore[union-attr]
+                User.is_active == True,  # noqa: E712
+                User.is_deleted == False,  # noqa: E712
             )
         ).all()
-        return list({r.email for r in rows})
+        return list(set(rows))
 
 
 async def send_registrar_confirmed_email(ay_code: str) -> None:

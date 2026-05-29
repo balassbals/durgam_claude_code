@@ -337,6 +337,14 @@ class PurchaseProcedureRule(TimestampedSoftDelete, table=True):
     """One row per tier per fund source — institutional purchase policy (E-007).
 
     Standing policy, NOT AY-scoped. AY-lock machinery does not apply.
+
+    approving_authority_role_codes: ordered JSONB list.
+    Position 0 is the immediate next-step approver (M7 routes the request
+    there). Positions 1+ are the CANDIDATE SET — the position-0 approver
+    picks ONE of these at request time (M7 runtime prompts the choice).
+    For strictly-sequential tiers, this is a one-element list. For
+    HoD-picks-Director-or-Dean, this is ['HOD', 'DIRECTOR', 'DEAN']
+    meaning HoD chooses Director or Dean.
     """
 
     __tablename__ = "purchase_procedure_rules"

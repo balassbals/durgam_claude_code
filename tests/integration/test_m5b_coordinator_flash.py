@@ -50,7 +50,7 @@ def _campus(session) -> Campus:
 
 
 def _school(session) -> School:
-    s = School(code=f"S{uuid4().hex[:4]}", name="Test School", dean_role_code="DEAN")
+    s = School(code=f"S{uuid4().hex[:4]}", name="Test School")
     session.add(s)
     session.flush()
     session.refresh(s)

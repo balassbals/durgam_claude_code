@@ -281,7 +281,7 @@ class CounsellorConfigState(BaseState):
                         display_order=display_order,
                     )
                 else:
-                    svc.update(
+                    record = svc.update(
                         UUID(editing_id),
                         {
                             "name": name,
@@ -296,7 +296,44 @@ class CounsellorConfigState(BaseState):
                         },
                         actor_id,
                     )
+
+                if self.staged_appt_letter:
+                    upload_svc = UploadService(
+                        file_repo=FileAssetRepository(session),
+                        backend=get_storage_backend(),
+                        allowed_mimes=frozenset({"application/pdf"}),
+                        max_size_mb=2,
+                    )
+                    asset = upload_svc.upload(
+                        self.staged_appt_letter,
+                        self.staged_appt_letter_name,
+                        "application/pdf",
+                        actor_id,
+                        purpose="counsellor_document",
+                    )
+                    if editing_id:
+                        svc.update(UUID(editing_id), {"appointment_letter_file_id": asset.id}, actor_id)
+                if self.staged_qual_proof:
+                    upload_svc = UploadService(
+                        file_repo=FileAssetRepository(session),
+                        backend=get_storage_backend(),
+                        allowed_mimes=frozenset({"application/pdf"}),
+                        max_size_mb=2,
+                    )
+                    asset = upload_svc.upload(
+                        self.staged_qual_proof,
+                        self.staged_qual_proof_name,
+                        "application/pdf",
+                        actor_id,
+                        purpose="counsellor_document",
+                    )
+                    if editing_id:
+                        svc.update(UUID(editing_id), {"qualification_proof_file_id": asset.id}, actor_id)
                 session.commit()
+                self.staged_appt_letter = b""
+                self.staged_appt_letter_name = ""
+                self.staged_qual_proof = b""
+                self.staged_qual_proof_name = ""
         except (CounsellorError, AcademicYearLockedError) as e:
             self.flash = e.message if hasattr(e, "message") else str(e)
             self.flash_type = "error"
@@ -309,63 +346,26 @@ class CounsellorConfigState(BaseState):
         self.flash = "Counsellor saved."
         self.flash_type = "success"
 
-    # ── File uploads (appointment letter + qualification proof) ────────────────
+    # ── Staged file uploads (M5a pattern — files staged in state, committed on Save)
 
-    @require_role(action="write", resource="mental_health_counsellor")
-    @audit_action(action="write", resource="mental_health_counsellor")
-    async def upload_appt_letter(self, files: list[rx.UploadFile]) -> None:
-        await self._upload_file(files, "appointment_letter_file_id")
+    staged_appt_letter: bytes = b""
+    staged_appt_letter_name: str = ""
+    staged_qual_proof: bytes = b""
+    staged_qual_proof_name: str = ""
 
-    @require_role(action="write", resource="mental_health_counsellor")
-    @audit_action(action="write", resource="mental_health_counsellor")
-    async def upload_qual_proof(self, files: list[rx.UploadFile]) -> None:
-        await self._upload_file(files, "qualification_proof_file_id")
-
-    async def _upload_file(self, files: list[rx.UploadFile], field: str) -> None:
+    async def stage_appt_letter(self, files: list[rx.UploadFile]) -> None:
         if not files:
-            self.flash = "No file selected."
-            self.flash_type = "error"
             return
-        if not self.editing_id:
-            self.flash = "Save the counsellor first, then attach files."
-            self.flash_type = "error"
+        f = files[0]
+        self.staged_appt_letter = await f.read()
+        self.staged_appt_letter_name = f.filename or "appointment_letter.pdf"
+
+    async def stage_qual_proof(self, files: list[rx.UploadFile]) -> None:
+        if not files:
             return
-
-        upload_file = files[0]
-        file_bytes: bytes = upload_file.file.read()
-        original_name = upload_file.filename or "document.pdf"
-        content_type = upload_file.content_type or "application/octet-stream"
-
-        try:
-            with open_session() as session:
-                upload_svc = UploadService(
-                    file_repo=FileAssetRepository(session),
-                    backend=get_storage_backend(),
-                    allowed_mimes=frozenset({"application/pdf"}),
-                    max_size_mb=2,
-                )
-                asset = upload_svc.upload(
-                    file_bytes, original_name, content_type,
-                    UUID(self.current_user_id),
-                    purpose="counsellor_document",
-                )
-                svc = _svc(session)
-                svc.update(
-                    UUID(self.editing_id),
-                    {field: asset.id},
-                    UUID(self.current_user_id),
-                )
-                session.commit()
-        except Exception as e:
-            msg = e.message if hasattr(e, "message") else str(e)
-            self.flash = msg
-            self.flash_type = "error"
-            return
-
-        await self.load_counsellors()
-        label = "Appointment letter" if "appt" in field else "Qualification proof"
-        self.flash = f"{label} uploaded."
-        self.flash_type = "success"
+        f = files[0]
+        self.staged_qual_proof = await f.read()
+        self.staged_qual_proof_name = f.filename or "qualification_proof.pdf"
 
     # ── Soft delete ───────────────────────────────────────────────────────────
 
@@ -479,16 +479,7 @@ class CounsellorConfigState(BaseState):
                     }),
                     max_size_mb=10,
                 )
-                result_asset = upload_svc.upload(
-                    rendered,
-                    f"counsellor_roster_{ay_label}_{campus_label}.docx",
-                    "application/vnd.openxmlformats-officedocument"
-                    ".wordprocessingml.document",
-                    UUID(self.current_user_id),
-                    purpose="counsellor_roster",
-                )
-                file_id = str(result_asset.id)
-                session.commit()
+                roster_filename = f"counsellor_roster_{ay_label}_{campus_label}.docx"
 
         except DocgenError as e:
             self.flash = f"Export failed: {e}"
@@ -499,5 +490,6 @@ class CounsellorConfigState(BaseState):
             self.flash_type = "error"
             return
 
-        self.flash = f"Roster exported — [download](/api/files/{file_id})."
+        self.flash = "Roster exported."
         self.flash_type = "success"
+        return rx.download(data=rendered, filename=roster_filename)
