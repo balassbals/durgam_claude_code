@@ -400,6 +400,15 @@ class CounsellorConfigState(BaseState):
         self.confirm_open = False
         self.confirm_id = ""
 
+    # ── Document downloads ────────────────────────────────────────────────────
+
+    @require_role(action="read", resource="mental_health_counsellor")
+    @audit_action(action="read", resource="mental_health_counsellor")
+    async def download_document(self, file_id: str, filename: str):
+        from durgam.api import DOWNLOAD_PREFIX
+
+        return rx.download(url=f"{DOWNLOAD_PREFIX}/files/{file_id}", filename=filename)
+
     # ── DOCX export ───────────────────────────────────────────────────────────
 
     @require_role(action="read", resource="mental_health_counsellor")

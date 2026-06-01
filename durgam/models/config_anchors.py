@@ -203,6 +203,28 @@ class FacultyMentorAssignment(TimestampedSoftDelete, table=True):
     notes: str | None = Field(default=None)
 
 
+class FacultyMentorConfirmation(TimestampedSoftDelete, table=True):
+    """AY+campus-scoped confirmation that the faculty mentor roster is finalized."""
+
+    __tablename__ = "faculty_mentor_confirmations"
+    __table_args__ = (
+        sa.UniqueConstraint(
+            "academic_year_id", "campus_id",
+            name="uq_fmc_ay_campus",
+        ),
+    )
+
+    academic_year_id: UUID = Field(foreign_key="academic_years.id", nullable=False)
+    campus_id: UUID = Field(foreign_key="campuses.id", nullable=False)
+    confirmed_at: datetime | None = Field(
+        default=None,
+        sa_type=_TIMESTAMPTZ,
+    )
+    confirmed_by_user_id: UUID | None = Field(
+        default=None, foreign_key="users.id",
+    )
+
+
 class ClassTeacherAssignment(TimestampedSoftDelete, table=True):
     """Class teacher assignment per department (§9.3, line 150)."""
 
@@ -239,16 +261,16 @@ class ClassCoordinatorAssignment(TimestampedSoftDelete, table=True):
     notes: str | None = Field(default=None)
 
 
-class VisitingFaculty(TimestampedSoftDelete, table=True):
-    """External visiting/adjunct/guest faculty (DQ-M5b-4, §9.10).
+class NonRegularFaculty(TimestampedSoftDelete, table=True):
+    """Non-regular faculty: visiting, adjunct, guest, contract, honorary (E-003, §9.10).
 
     Date-windowed, not AY-locked — availability may straddle academic years.
     No academic_year_id; AY-lock machinery does not apply.
     """
 
-    __tablename__ = "visiting_faculty"
+    __tablename__ = "non_regular_faculty"
     __table_args__ = (
-        sa.Index("ix_vf_department_id", "department_id"),
+        sa.Index("ix_nrf_department_id", "department_id"),
     )
 
     department_id: UUID = Field(foreign_key="departments.id", nullable=False)
@@ -259,6 +281,7 @@ class VisitingFaculty(TimestampedSoftDelete, table=True):
     available_from: date = Field(nullable=False)
     available_to: date = Field(nullable=False)
     is_admin_approved: bool = Field(default=False, nullable=False)
+    non_regular_type: str = Field(max_length=32, default="visiting", nullable=False)
 
 
 class NonOwnedCourse(TimestampedSoftDelete, table=True):

@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from uuid import UUID
+
+import reflex as rx
 
 from durgam.auth.decorators import audit_action, require_role
 from durgam.db import open_session
-from durgam.models.config_anchors import FacultyMentorAssignment
+from durgam.models.config_anchors import (
+    FacultyMentorAssignment,
+    FacultyMentorConfirmation,
+)
 from durgam.repositories.academic_year import AcademicYearRepository
 from durgam.repositories.assignment import AssignmentRepository
 from durgam.repositories.campus import CampusRepository
@@ -41,6 +47,10 @@ class FacultyMentorConfigState(BaseState):
     form_faculty: str = ""
     form_student: str = ""
     form_notes: str = ""
+
+    # Roster confirmation
+    is_confirmed: bool = False
+    confirmed_info: str = ""
 
     # Confirmation dialog
     confirm_open: bool = False
@@ -84,13 +94,30 @@ class FacultyMentorConfigState(BaseState):
         self.loading = False
 
     def _load_data(self, session) -> None:
+        from sqlmodel import select
+
         self.mentors = []
+        self.is_confirmed = False
+        self.confirmed_info = ""
         if not self.selected_ay_id or not self.selected_campus_id:
             self.ay_is_locked = False
             return
         ay_repo = AcademicYearRepository(session)
         ay = ay_repo.get_by_id(UUID(self.selected_ay_id))
         self.ay_is_locked = ay.is_locked if ay else False
+
+        confirmation = session.exec(
+            select(FacultyMentorConfirmation).where(
+                FacultyMentorConfirmation.academic_year_id == UUID(self.selected_ay_id),
+                FacultyMentorConfirmation.campus_id == UUID(self.selected_campus_id),
+                FacultyMentorConfirmation.is_deleted == False,  # noqa: E712
+            )
+        ).first()
+        if confirmation and confirmation.confirmed_at:
+            self.is_confirmed = True
+            self.confirmed_info = (
+                f"Confirmed on {confirmation.confirmed_at.strftime('%b %-d, %Y %I:%M %p')}"
+            )
 
         repo = AssignmentRepository(FacultyMentorAssignment, session)
         for m in repo.list_by_ay_and_scope(
@@ -236,3 +263,72 @@ class FacultyMentorConfigState(BaseState):
     def cancel_confirm(self) -> None:
         self.confirm_open = False
         self.confirm_id = ""
+
+    # ── Roster confirmation (Director-only) ──────────────────────────────────
+
+    @require_role(action="write", resource="faculty_mentor_assignment")
+    @audit_action(action="write", resource="faculty_mentor_assignment")
+    async def confirm_roster(self) -> None:
+        if not self.selected_ay_id or not self.selected_campus_id:
+            self.flash = "Select an academic year and campus first."
+            self.flash_type = "error"
+            return
+        try:
+            with open_session() as session:
+                confirmation = FacultyMentorConfirmation(
+                    academic_year_id=UUID(self.selected_ay_id),
+                    campus_id=UUID(self.selected_campus_id),
+                    confirmed_at=datetime.now(UTC),
+                    confirmed_by_user_id=UUID(self.current_user_id),
+                    created_by=UUID(self.current_user_id),
+                    updated_by=UUID(self.current_user_id),
+                )
+                session.add(confirmation)
+                session.commit()
+        except Exception as e:
+            self.flash = f"Confirmation failed: {e}"
+            self.flash_type = "error"
+            return
+        await self.load_mentors()
+        self.flash = "Faculty mentor roster confirmed."
+        self.flash_type = "success"
+
+    # ── Roster download ──────────────────────────────────────────────────────
+
+    @require_role(action="read", resource="faculty_mentor_assignment")
+    @audit_action(action="read", resource="faculty_mentor_assignment")
+    async def download_roster(self) -> None:
+        if not self.selected_ay_id or not self.selected_campus_id:
+            self.flash = "Select an academic year and campus first."
+            self.flash_type = "error"
+            return
+
+        with open_session() as session:
+            repo = AssignmentRepository(FacultyMentorAssignment, session)
+            rows = repo.list_by_ay_and_scope(
+                UUID(self.selected_ay_id), UUID(self.selected_campus_id), "campus_id",
+            )
+
+            ay_label = ""
+            for opt in self.ay_options:
+                if opt["value"] == self.selected_ay_id:
+                    ay_label = opt["label"]
+                    break
+            campus_label = ""
+            for opt in self.campus_options:
+                if opt["value"] == self.selected_campus_id:
+                    campus_label = opt["label"]
+                    break
+
+            import csv
+            import io
+
+            buf = io.StringIO()
+            writer = csv.writer(buf)
+            writer.writerow(["S.No", "Faculty", "Student", "Notes"])
+            for i, m in enumerate(rows, 1):
+                writer.writerow([i, m.faculty_id_placeholder, m.student_id_placeholder, m.notes or ""])
+            csv_bytes = buf.getvalue().encode("utf-8")
+
+        filename = f"faculty_mentor_roster_{ay_label}_{campus_label}.csv"
+        return rx.download(data=csv_bytes, filename=filename)

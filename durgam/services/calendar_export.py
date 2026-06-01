@@ -72,20 +72,25 @@ class CalendarExportService:
     ) -> bytes:
         from fpdf import FPDF
 
+        _DEJAVU = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+        _DEJAVU_B = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+
         pdf = FPDF(orientation="L", format="A4")
+        pdf.add_font("DejaVuSans", "", _DEJAVU)
+        pdf.add_font("DejaVuSans", "B", _DEJAVU_B)
         pdf.set_auto_page_break(auto=True, margin=15)
         pdf.add_page()
-        pdf.set_font("Helvetica", "B", 14)
+        pdf.set_font("DejaVuSans", "B", 14)
         pdf.cell(0, 10, f"Academic Calendar - {ay_code}", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(4)
 
-        pdf.set_font("Helvetica", "B", 9)
+        pdf.set_font("DejaVuSans", "B", 9)
         col_widths = (80, 50, 50, 57)
         for i, col_name in enumerate(_COLUMNS):
             pdf.cell(col_widths[i], 8, col_name, border=1)
         pdf.ln()
 
-        pdf.set_font("Helvetica", "", 8)
+        pdf.set_font("DejaVuSans", "", 8)
         for entry in entries:
             row = _row(entry, scope_labels)
             for i, value in enumerate(row):

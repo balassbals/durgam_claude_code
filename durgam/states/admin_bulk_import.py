@@ -1,9 +1,10 @@
 """BulkImportState — two-stage CSV import for users, courses, programs (§9.2(d), §16).
 
-Bulk import is SysAdmin-only. The @require_role decorator gates on user:write
-(the original resource). For course/program imports, the handler body performs
-a fine-grained can() check against course:write / program:write so the
-permission named matches the resource being imported.
+Per-entity import permissions (M5b-R3 V2):
+- Users tab: gated on user:write (SysAdmin-only).
+- Courses tab: gated on course_import:write (HOD family + HOD_OFFICE).
+- Programs tab: gated on program_import:write (Registrar family).
+SysAdmin gets all three via global permission grant.
 """
 
 from __future__ import annotations
@@ -42,8 +43,8 @@ _IMPORT_TYPES = ("users", "courses", "programs")
 
 _RESOURCE_FOR_TYPE = {
     "users": "user",
-    "courses": "course",
-    "programs": "program",
+    "courses": "course_import",
+    "programs": "program_import",
 }
 
 _COLUMN_HEADERS = {
@@ -95,14 +96,31 @@ class BulkImportState(BaseState):
 
     def _check_import_permission(self, session) -> bool:
         resource = _RESOURCE_FOR_TYPE.get(self.import_type, "user")
-        if resource == "user":
-            return True
         return can(
             UUID(self.current_user_id), "write", resource,
             scope_type=None, scope_id=None, session=session,
         )
 
-    @require_role(action="write", resource="user")
+    def _can_any_import(self, session) -> bool:
+        uid = UUID(self.current_user_id)
+        return any(
+            can(uid, "write", res, scope_type=None, scope_id=None, session=session)
+            for res in _RESOURCE_FOR_TYPE.values()
+        )
+
+    async def load_import(self) -> None:
+        guard = self._admin_guard()
+        if guard is not None:
+            return guard
+        with open_session() as session:
+            if not self._can_any_import(session):
+                self.flash = "You do not have permission to import data."
+                return rx.redirect("/login")
+        self._reset_state()
+        h = _COLUMN_HEADERS.get(self.import_type, _COLUMN_HEADERS["users"])
+        self.col1_header, self.col2_header, self.col3_header = h
+        self._load_nav_entries()
+
     @audit_action(action="upload_csv", resource="user")
     async def upload_csv(self, files: list[rx.UploadFile]) -> None:
         self.flash = ""
@@ -200,7 +218,6 @@ class BulkImportState(BaseState):
         if invalid:
             self._build_error_report(invalid, [])
 
-    @require_role(action="write", resource="user")
     @audit_action(action="commit_import", resource="user")
     async def commit_import(self) -> None:
         if not self._stashed_valid:

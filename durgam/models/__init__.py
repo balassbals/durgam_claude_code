@@ -11,6 +11,7 @@ from .config_anchors import (
     Designation,
     DocumentTemplate,
     FacultyMentorAssignment,
+    FacultyMentorConfirmation,
     Holiday,
     MentalHealthCounsellor,
     NonOwnedCourse,
@@ -19,7 +20,7 @@ from .config_anchors import (
     RoleEmail,
     StudentCategoryCount,
     UGTimetable,
-    VisitingFaculty,
+    NonRegularFaculty,
     WorkingDaysConfig,
 )
 from .course import Course
@@ -81,9 +82,10 @@ __all__ = [
     # Config anchors (M5b)
     "MentalHealthCounsellor",
     "FacultyMentorAssignment",
+    "FacultyMentorConfirmation",
     "ClassTeacherAssignment",
     "ClassCoordinatorAssignment",
-    "VisitingFaculty",
+    "NonRegularFaculty",
     "NonOwnedCourse",
     "UGTimetable",
     "Designation",

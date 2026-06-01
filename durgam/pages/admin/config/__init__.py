@@ -45,7 +45,7 @@ register(NavEntry(
         ("write",     "faculty_mentor_assignment",      None),
         ("write",     "class_teacher_assignment",       None),
         ("write",     "class_coordinator_assignment",   None),
-        ("write",     "visiting_faculty",               None),
+        ("write",     "non_regular_faculty",             None),
         ("write",     "non_owned_course",                None),
         ("write",     "ug_timetable",                    None),
         ("write",     "purchase_procedure_rule",         None),
@@ -222,12 +222,12 @@ register(NavEntry(
     permission_resource="class_coordinator_assignment",
 ))
 register(NavEntry(
-    label="Visiting Faculty",
-    href="/admin/config/visiting-faculty",
+    label="Non-Regular Faculty",
+    href="/admin/config/non-regular-faculty",
     icon="briefcase",
     group="Config",
     permission_action="write",
-    permission_resource="visiting_faculty",
+    permission_resource="non_regular_faculty",
 ))
 # Non-Owned Courses: Director family + DAA family (two distinct permission paths)
 register(NavEntry(

@@ -205,7 +205,6 @@ class BaseState(rx.State):
             .where(
                 UserRole.user_id == UUID(self.current_user_id),
                 UserRole.scope_type == "department",
-                UserRole.is_deleted == False,  # noqa: E712
             )
             .limit(1)
         )

@@ -227,6 +227,37 @@ def admin_config_faculty_mentors() -> rx.Component:
                         empty_message="No mentor assignments found for this academic year and campus.",
                     ),
                 ),
+                rx.hstack(
+                    rx.cond(
+                        ~FacultyMentorConfigState.is_confirmed
+                        & ~FacultyMentorConfigState.ay_is_locked,
+                        primary_btn(
+                            "Confirm Roster",
+                            on_click=FacultyMentorConfigState.confirm_roster,
+                        ),
+                        rx.fragment(),
+                    ),
+                    rx.cond(
+                        FacultyMentorConfigState.is_confirmed,
+                        rx.hstack(
+                            rx.badge(
+                                FacultyMentorConfigState.confirmed_info,
+                                color_scheme="green",
+                                variant="soft",
+                            ),
+                            primary_btn(
+                                "Download Roster",
+                                on_click=FacultyMentorConfigState.download_roster,
+                            ),
+                            gap="0.75rem",
+                            align="center",
+                        ),
+                        rx.fragment(),
+                    ),
+                    gap="0.75rem",
+                    margin_top="1rem",
+                    margin_bottom="1rem",
+                ),
                 confirmation_dialog(
                     is_open=FacultyMentorConfigState.confirm_open,
                     title=FacultyMentorConfigState.confirm_title,

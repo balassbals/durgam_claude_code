@@ -14,12 +14,19 @@ log = structlog.get_logger(__name__)
 
 _IQAC_ROLES = frozenset({"IQAC_COORDINATOR"})
 
-_PHASE3_ROLES = frozenset({
-    "DIRECTOR", "DEPUTY_DIRECTOR", "DIRECTOR_OFFICE",
-    "DEAN_STUDENT_WELFARE",
-    "HOD", "AHOD", "HOD_OFFICE",
-    "DEAN",
-})
+_EXCLUDED_FROM_PHASE3 = frozenset({"STUDENT", "BASIC_USER", "SYSTEM_ADMIN"})
+
+
+def _get_phase3_roles(session) -> frozenset[str]:
+    """Compute phase-3 calendar notification target roles at runtime.
+
+    Excludes STUDENT (not a calendar stakeholder), BASIC_USER (base role for
+    scoped users — they receive notifications via their scoped role), and
+    SYSTEM_ADMIN (infrastructure role, not academic calendar stakeholder —
+    conscious exclusion choice).
+    """
+    all_codes = session.exec(select(Role.code)).all()
+    return frozenset(c for c in all_codes if c not in _EXCLUDED_FROM_PHASE3)
 
 
 def _get_role_emails(role_codes: frozenset[str]) -> list[str]:
@@ -57,7 +64,9 @@ async def send_registrar_confirmed_email(ay_code: str) -> None:
 
 
 async def send_iqac_confirmed_email(ay_code: str) -> None:
-    recipients = _get_role_emails(_PHASE3_ROLES)
+    with open_session() as session:
+        phase3_roles = _get_phase3_roles(session)
+    recipients = _get_role_emails(phase3_roles)
     if not recipients:
         log.warning("calendar_email_no_phase3_recipients", ay_code=ay_code)
         return

@@ -425,3 +425,24 @@ first) is the policy input; M7's committee-assembly UI enforces it.
 **Read by**: M5b planning (config), M7 planning (runtime), M10 planning
 (Faculty model), M11 planning (project-fund link). Supersedes the sequential
 channel phrasing of §9.5 for the CPC/purchase case.
+
+---
+
+## E-008 — Per-entity bulk-import permissions
+
+- **Status**: Resolved-at-M5b.
+- **Source**: Stakeholder confirmation during M5b-R3 gate verification.
+- **Gap in v3 RFP**: §16 describes bulk import as a SysAdmin function. The informal
+  requirements specify that HoD/AHoD/HoD-Office should bulk-import courses and
+  Registrar/Registrar-Office/Deputy-Registrar should bulk-import programs.
+- **Resolution**: Two new permission resources:
+  - `program_import:write:*` — granted to Registrar family (REGISTRAR,
+    REGISTRAR_OFFICE, DEPUTY_REGISTRAR).
+  - `course_import:write:*` — granted to HOD family (HOD, AHOD) and HOD_OFFICE.
+  - Users tab retains `user:write:*` gate (SysAdmin-only).
+  - The bulk import nav entry uses `permission_any` so any user with at least one
+    import permission sees the link. The on_load guard checks per-type permissions.
+  - SysAdmin retains access to all three import types via global permission grant.
+
+**Read by**: M5b implementation, any future milestone that adds entity-specific
+import UIs.

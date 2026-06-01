@@ -49,6 +49,26 @@ def _kebab(row: dict) -> rx.Component:
                         row["display_order"],
                     ),
                 ),
+                rx.cond(
+                    row["appt_file_id"] != "",
+                    rx.menu.item(
+                        "Download Appointment Letter",
+                        on_click=CounsellorConfigState.download_document(  # type: ignore[call-arg, func-returns-value]
+                            row["appt_file_id"], "appointment_letter.pdf",
+                        ),
+                    ),
+                    rx.fragment(),
+                ),
+                rx.cond(
+                    row["qual_file_id"] != "",
+                    rx.menu.item(
+                        "Download Qualification Proof",
+                        on_click=CounsellorConfigState.download_document(  # type: ignore[call-arg, func-returns-value]
+                            row["qual_file_id"], "qualification_proof.pdf",
+                        ),
+                    ),
+                    rx.fragment(),
+                ),
                 rx.menu.item(
                     "Deactivate",
                     on_click=CounsellorConfigState.open_deactivate_confirm(  # type: ignore[call-arg, func-returns-value]

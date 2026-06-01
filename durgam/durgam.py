@@ -67,7 +67,7 @@ app.add_page(admin_role_detail, route="/admin/roles/[role_id]",
 app.add_page(admin_permissions, route="/admin/permissions",
              on_load=AdminPermissionsState.load_permissions)
 app.add_page(admin_import_users, route="/admin/import",
-             on_load=BulkImportState.reset_import)
+             on_load=BulkImportState.load_import)
 app.add_page(audit_log, route="/audit", on_load=AuditLogState.load_audit)
 
 # ── M3 Config routes ────────────────────────────────────────────────────────────
@@ -176,17 +176,17 @@ app.add_page(admin_config_faculty_mentors, route="/admin/config/faculty-mentors"
 
 from durgam.pages.admin.config.class_teachers import admin_config_class_teachers
 from durgam.pages.admin.config.class_coordinators import admin_config_class_coordinators
-from durgam.pages.admin.config.visiting_faculty import admin_config_visiting_faculty
+from durgam.pages.admin.config.non_regular_faculty import admin_config_non_regular_faculty
 from durgam.states.config_class_teacher import ClassTeacherConfigState
 from durgam.states.config_class_coordinator import ClassCoordinatorConfigState
-from durgam.states.config_visiting_faculty import VisitingFacultyConfigState
+from durgam.states.config_non_regular_faculty import NonRegularFacultyConfigState
 
 app.add_page(admin_config_class_teachers, route="/admin/config/class-teachers",
              on_load=ClassTeacherConfigState.load_teachers)
 app.add_page(admin_config_class_coordinators, route="/admin/config/class-coordinators",
              on_load=ClassCoordinatorConfigState.load_coordinators)
-app.add_page(admin_config_visiting_faculty, route="/admin/config/visiting-faculty",
-             on_load=VisitingFacultyConfigState.load_visitors)
+app.add_page(admin_config_non_regular_faculty, route="/admin/config/non-regular-faculty",
+             on_load=NonRegularFacultyConfigState.load_visitors)
 
 from durgam.pages.admin.config.non_owned_courses import admin_config_non_owned_courses
 from durgam.pages.admin.config.ug_timetable import admin_config_ug_timetable

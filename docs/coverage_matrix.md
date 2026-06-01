@@ -198,7 +198,7 @@ deferred scope.
    each step of an approval process. → M7.
 7. **Class coordinator student picker** — currently a text placeholder; needs
    the Student model from M12 for a real student selector. → M12.
-8. **Visiting faculty contract term tracking** — tracking formal contract dates,
+8. **Non-regular faculty contract term tracking** — tracking formal contract dates,
    renewal, and integration with HR. → M10.
 9. **Role-based dashboard widgets** — per-role landing page with relevant
    quick-access panels. → M15.
@@ -211,6 +211,12 @@ deferred scope.
 13. **Full routing customization for approval processes** — the current
     channel_role_codes + informational_cc_role_codes cover the common case;
     conditional branching (if amount > X, route to Y) is M7 runtime. → M7.
+14. **Counsellor roster letterhead-overlay rendering** — Jinja2 placeholders in
+    letterhead template for counsellor roster export. → M14.
+15. **Faculty mentor confirmation notification emails** — email notifications
+    when Director confirms a campus mentor roster. → M9.
+16. **Faculty mentor roster letterhead overlay** — fitting mentor roster content
+    into letterhead template requires docgen polish. → M14.
 
 ---
 

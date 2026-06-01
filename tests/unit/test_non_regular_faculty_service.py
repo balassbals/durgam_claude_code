@@ -1,4 +1,4 @@
-"""Unit tests for VisitingFacultyService — CRUD + approval + validation."""
+"""Unit tests for NonRegularFacultyService — CRUD + approval + validation."""
 
 from datetime import date
 from unittest.mock import MagicMock
@@ -6,13 +6,13 @@ from uuid import uuid4
 
 import pytest
 
-from durgam.services.visiting_faculty import VisitingFacultyError, VisitingFacultyService
+from durgam.services.non_regular_faculty import NonRegularFacultyError, NonRegularFacultyService
 
 
-class TestVisitingFacultyCreate:
+class TestNonRegularFacultyCreate:
     def _make_svc(self):
         repo = MagicMock()
-        return VisitingFacultyService(repo=repo), repo
+        return NonRegularFacultyService(repo=repo), repo
 
     def test_create_success(self):
         svc, repo = self._make_svc()
@@ -30,10 +30,42 @@ class TestVisitingFacultyCreate:
         repo.save.assert_called_once()
         assert result.name == "Dr. Alice"
         assert result.is_admin_approved is False
+        assert result.non_regular_type == "visiting"
+
+    def test_create_with_type(self):
+        svc, repo = self._make_svc()
+        repo.save.side_effect = lambda r: r
+        result = svc.create(
+            department_id=uuid4(),
+            name="Dr. Bob",
+            designation="Professor",
+            organization="MIT",
+            expertise="AI",
+            available_from=date(2025, 7, 1),
+            available_to=date(2025, 12, 31),
+            actor_id=uuid4(),
+            non_regular_type="adjunct",
+        )
+        assert result.non_regular_type == "adjunct"
+
+    def test_create_invalid_type_raises(self):
+        svc, repo = self._make_svc()
+        with pytest.raises(NonRegularFacultyError, match="Invalid type"):
+            svc.create(
+                department_id=uuid4(),
+                name="Dr. Alice",
+                designation="Professor",
+                organization="IISc",
+                expertise="Physics",
+                available_from=date(2025, 7, 1),
+                available_to=date(2025, 12, 31),
+                actor_id=uuid4(),
+                non_regular_type="invalid_type",
+            )
 
     def test_create_blank_name_raises(self):
         svc, repo = self._make_svc()
-        with pytest.raises(VisitingFacultyError, match="Name is required"):
+        with pytest.raises(NonRegularFacultyError, match="Name is required"):
             svc.create(
                 department_id=uuid4(),
                 name="  ",
@@ -47,7 +79,7 @@ class TestVisitingFacultyCreate:
 
     def test_create_blank_designation_raises(self):
         svc, repo = self._make_svc()
-        with pytest.raises(VisitingFacultyError, match="Designation is required"):
+        with pytest.raises(NonRegularFacultyError, match="Designation is required"):
             svc.create(
                 department_id=uuid4(),
                 name="Dr. Alice",
@@ -61,7 +93,7 @@ class TestVisitingFacultyCreate:
 
     def test_create_blank_organization_raises(self):
         svc, repo = self._make_svc()
-        with pytest.raises(VisitingFacultyError, match="Organization is required"):
+        with pytest.raises(NonRegularFacultyError, match="Organization is required"):
             svc.create(
                 department_id=uuid4(),
                 name="Dr. Alice",
@@ -75,7 +107,7 @@ class TestVisitingFacultyCreate:
 
     def test_create_blank_expertise_raises(self):
         svc, repo = self._make_svc()
-        with pytest.raises(VisitingFacultyError, match="Expertise is required"):
+        with pytest.raises(NonRegularFacultyError, match="Expertise is required"):
             svc.create(
                 department_id=uuid4(),
                 name="Dr. Alice",
@@ -89,7 +121,7 @@ class TestVisitingFacultyCreate:
 
     def test_create_end_before_start_raises(self):
         svc, repo = self._make_svc()
-        with pytest.raises(VisitingFacultyError, match="Available-to date"):
+        with pytest.raises(NonRegularFacultyError, match="Available-to date"):
             svc.create(
                 department_id=uuid4(),
                 name="Dr. Alice",
@@ -102,10 +134,10 @@ class TestVisitingFacultyCreate:
             )
 
 
-class TestVisitingFacultyUpdate:
+class TestNonRegularFacultyUpdate:
     def _make_svc(self):
         repo = MagicMock()
-        return VisitingFacultyService(repo=repo), repo
+        return NonRegularFacultyService(repo=repo), repo
 
     def test_update_success(self):
         svc, repo = self._make_svc()
@@ -119,14 +151,14 @@ class TestVisitingFacultyUpdate:
     def test_update_not_found_raises(self):
         svc, repo = self._make_svc()
         repo.get_by_id.return_value = None
-        with pytest.raises(VisitingFacultyError, match="not found"):
+        with pytest.raises(NonRegularFacultyError, match="not found"):
             svc.update(uuid4(), {}, uuid4())
 
 
-class TestVisitingFacultySoftDelete:
+class TestNonRegularFacultySoftDelete:
     def _make_svc(self):
         repo = MagicMock()
-        return VisitingFacultyService(repo=repo), repo
+        return NonRegularFacultyService(repo=repo), repo
 
     def test_soft_delete_success(self):
         svc, repo = self._make_svc()
@@ -139,14 +171,14 @@ class TestVisitingFacultySoftDelete:
     def test_soft_delete_not_found_raises(self):
         svc, repo = self._make_svc()
         repo.get_by_id.return_value = None
-        with pytest.raises(VisitingFacultyError, match="not found"):
+        with pytest.raises(NonRegularFacultyError, match="not found"):
             svc.soft_delete(uuid4(), uuid4())
 
 
-class TestVisitingFacultyApproval:
+class TestNonRegularFacultyApproval:
     def _make_svc(self):
         repo = MagicMock()
-        return VisitingFacultyService(repo=repo), repo
+        return NonRegularFacultyService(repo=repo), repo
 
     def test_set_approval_approve(self):
         svc, repo = self._make_svc()
@@ -169,5 +201,5 @@ class TestVisitingFacultyApproval:
     def test_set_approval_not_found_raises(self):
         svc, repo = self._make_svc()
         repo.get_by_id.return_value = None
-        with pytest.raises(VisitingFacultyError, match="not found"):
+        with pytest.raises(NonRegularFacultyError, match="not found"):
             svc.set_approval(uuid4(), True, uuid4())

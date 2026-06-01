@@ -294,11 +294,11 @@ def seed(session: Session) -> dict[str, int]:
         {"resource": "class_coordinator_assignment", "action": "read",    "scope": "*"},
         {"resource": "class_coordinator_assignment", "action": "write",   "scope": "*"},
         {"resource": "class_coordinator_assignment", "action": "delete",  "scope": "*"},
-        # Visiting faculty (HoD family read/write/delete + SysAdmin; approve = SysAdmin only)
-        {"resource": "visiting_faculty",             "action": "read",    "scope": "*"},
-        {"resource": "visiting_faculty",             "action": "write",   "scope": "*"},
-        {"resource": "visiting_faculty",             "action": "delete",  "scope": "*"},
-        {"resource": "visiting_faculty",             "action": "approve", "scope": "*"},
+        # Non-regular faculty (HoD family read/write/delete + SysAdmin; approve = SysAdmin only)
+        {"resource": "non_regular_faculty",          "action": "read",    "scope": "*"},
+        {"resource": "non_regular_faculty",          "action": "write",   "scope": "*"},
+        {"resource": "non_regular_faculty",          "action": "delete",  "scope": "*"},
+        {"resource": "non_regular_faculty",          "action": "approve", "scope": "*"},
         # Non-owned course (Director family + DAA family + SysAdmin; no department_id)
         {"resource": "non_owned_course",             "action": "read",    "scope": "*"},
         {"resource": "non_owned_course",             "action": "write",   "scope": "*"},
@@ -324,6 +324,9 @@ def seed(session: Session) -> dict[str, int]:
         {"resource": "designation",                  "action": "read",    "scope": "*"},
         {"resource": "designation",                  "action": "write",   "scope": "*"},
         {"resource": "designation",                  "action": "delete",  "scope": "*"},
+        # M5b-R3 V2 — per-entity bulk-import permissions
+        {"resource": "program_import",               "action": "write",   "scope": "*"},
+        {"resource": "course_import",                "action": "write",   "scope": "*"},
     ]
     perm_inserted = 0
     for p in perms_data:
@@ -403,6 +406,11 @@ def seed(session: Session) -> dict[str, int]:
         ("letterhead_asset",           "read",      "*"),
         ("letterhead_asset",           "write",     "*"),
         ("letterhead_asset",           "delete",    "*"),
+        # M5b-R3 V1 — Registrar family manages programs
+        ("program",                    "write",     "*"),
+        ("program",                    "delete",    "*"),
+        # M5b-R3 V2 — Registrar family can bulk-import programs
+        ("program_import",             "write",     "*"),
     ]
 
     _HOD_SPECIFIC = [
@@ -413,10 +421,15 @@ def seed(session: Session) -> dict[str, int]:
         ("calendar_entry",             "read",      "*"),
         ("calendar_entry",             "write",     "*"),
         ("student_category_count",     "read",      "*"),
-        # M5b — visiting faculty (read/write/delete but NOT approve)
-        ("visiting_faculty",           "read",      "*"),
-        ("visiting_faculty",           "write",     "*"),
-        ("visiting_faculty",           "delete",    "*"),
+        # M5b — non-regular faculty (read/write/delete but NOT approve)
+        ("non_regular_faculty",        "read",      "*"),
+        ("non_regular_faculty",        "write",     "*"),
+        ("non_regular_faculty",        "delete",    "*"),
+        # M5b-R3 V1 — HOD manages courses for their department
+        ("course",                     "write",     "*"),
+        ("course",                     "delete",    "*"),
+        # M5b-R3 V2 — HOD can bulk-import courses
+        ("course_import",              "write",     "*"),
     ]
 
     _DEAN_SPECIFIC = [
@@ -536,8 +549,14 @@ def seed(session: Session) -> dict[str, int]:
             ("calendar_entry",             "read",      "*"),
             ("calendar_entry",             "write",     "*"),
             ("student_category_count",     "read",      "*"),
-            # M5b — visiting faculty read-only
-            ("visiting_faculty",           "read",      "*"),
+            # M5b — non-regular faculty read-only
+            ("non_regular_faculty",        "read",      "*"),
+            # M5b-R3 V1 — HoD Office assists with course and dept V&M management
+            ("course",                     "write",     "*"),
+            ("course",                     "delete",    "*"),
+            ("department_vision_mission",  "write",     "department"),
+            # M5b-R3 V2 — HoD Office can bulk-import courses
+            ("course_import",              "write",     "*"),
         ],
         # M5b — approver/channel roles; no config-write permissions yet (runtime → M7)
         "VC":                   _PUBLIC_READ,

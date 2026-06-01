@@ -1,4 +1,4 @@
-"""VisitingFacultyConfigState — department-scoped visiting faculty CRUD + approval."""
+"""NonRegularFacultyConfigState — department-scoped non-regular faculty CRUD + approval."""
 
 from __future__ import annotations
 
@@ -8,18 +8,20 @@ from uuid import UUID
 from durgam.auth.decorators import audit_action, require_role
 from durgam.db import open_session
 from durgam.repositories.department import DepartmentRepository
-from durgam.repositories.visiting_faculty import VisitingFacultyRepository
-from durgam.services.visiting_faculty import VisitingFacultyError, VisitingFacultyService
+from durgam.repositories.non_regular_faculty import NonRegularFacultyRepository
+from durgam.services.non_regular_faculty import NonRegularFacultyError, NonRegularFacultyService
 from durgam.states.base import BaseState
 
+_TYPE_OPTIONS = ["visiting", "adjunct", "guest", "contract", "honorary"]
 
-def _svc(session) -> VisitingFacultyService:
-    return VisitingFacultyService(
-        repo=VisitingFacultyRepository(session),
+
+def _svc(session) -> NonRegularFacultyService:
+    return NonRegularFacultyService(
+        repo=NonRegularFacultyRepository(session),
     )
 
 
-class VisitingFacultyConfigState(BaseState):
+class NonRegularFacultyConfigState(BaseState):
     dept_options: list[dict[str, str]] = []
     selected_dept_id: str = ""
     dept_locked: bool = False
@@ -36,6 +38,7 @@ class VisitingFacultyConfigState(BaseState):
     form_expertise: str = ""
     form_available_from: str = ""
     form_available_to: str = ""
+    form_type: str = "visiting"
 
     confirm_open: bool = False
     confirm_id: str = ""
@@ -45,7 +48,7 @@ class VisitingFacultyConfigState(BaseState):
     can_approve: bool = False
 
     async def load_visitors(self) -> None:
-        guard = self._config_guard("visiting_faculty", "write")
+        guard = self._config_guard("non_regular_faculty", "write")
         if guard is not None:
             return guard
         self.loading = True
@@ -80,7 +83,7 @@ class VisitingFacultyConfigState(BaseState):
         with open_session() as session:
             self.can_approve = can(
                 UUID(self.current_user_id),
-                "approve", "visiting_faculty", None, None, session,
+                "approve", "non_regular_faculty", None, None, session,
             )
 
         self._load_nav_entries()
@@ -101,6 +104,7 @@ class VisitingFacultyConfigState(BaseState):
                 "available_from": str(v.available_from),
                 "available_to": str(v.available_to),
                 "approved": "yes" if v.is_admin_approved else "no",
+                "non_regular_type": v.non_regular_type,
             })
 
     async def on_dept_change(self, value: str) -> None:
@@ -129,6 +133,9 @@ class VisitingFacultyConfigState(BaseState):
     def set_form_available_to(self, v: str) -> None:
         self.form_available_to = v
 
+    def set_form_type(self, v: str) -> None:
+        self.form_type = v
+
     def open_create(self):
         self.flash = ""
         self.flash_type = "info"
@@ -139,11 +146,13 @@ class VisitingFacultyConfigState(BaseState):
         self.form_expertise = ""
         self.form_available_from = ""
         self.form_available_to = ""
+        self.form_type = "visiting"
         self.show_form = True
 
     def open_edit(
         self, vid: str, name: str, designation: str, organization: str,
         expertise: str, available_from: str, available_to: str,
+        non_regular_type: str,
     ):
         self.flash = ""
         self.flash_type = "info"
@@ -154,6 +163,7 @@ class VisitingFacultyConfigState(BaseState):
         self.form_expertise = expertise
         self.form_available_from = available_from
         self.form_available_to = available_to
+        self.form_type = non_regular_type
         self.show_form = True
 
     def cancel_form(self):
@@ -162,8 +172,8 @@ class VisitingFacultyConfigState(BaseState):
         self.flash = ""
         self.flash_type = "info"
 
-    @require_role(action="write", resource="visiting_faculty")
-    @audit_action(action="write", resource="visiting_faculty")
+    @require_role(action="write", resource="non_regular_faculty")
+    @audit_action(action="write", resource="non_regular_faculty")
     async def save_visitor(self, form_data: dict) -> None:
         name = form_data.get("form_name", "").strip()
         designation = form_data.get("form_designation", "").strip()
@@ -200,6 +210,7 @@ class VisitingFacultyConfigState(BaseState):
                         available_from=available_from,
                         available_to=available_to,
                         actor_id=actor_id,
+                        non_regular_type=self.form_type,
                     )
                 else:
                     svc.update(
@@ -211,11 +222,12 @@ class VisitingFacultyConfigState(BaseState):
                             "expertise": expertise,
                             "available_from": available_from,
                             "available_to": available_to,
+                            "non_regular_type": self.form_type,
                         },
                         actor_id,
                     )
                 session.commit()
-        except VisitingFacultyError as e:
+        except NonRegularFacultyError as e:
             self.flash = e.message if hasattr(e, "message") else str(e)
             self.flash_type = "error"
             self.show_form = False
@@ -224,17 +236,17 @@ class VisitingFacultyConfigState(BaseState):
         self.show_form = False
         self.editing_id = ""
         await self.load_visitors()
-        self.flash = "Visiting faculty record saved."
+        self.flash = "Non-regular faculty record saved."
         self.flash_type = "success"
 
     def open_deactivate_confirm(self, record_id: str, name: str) -> None:
         self.confirm_id = record_id
         self.confirm_title = f"Deactivate '{name}'?"
-        self.confirm_body = "This will remove the visiting faculty record."
+        self.confirm_body = "This will remove the non-regular faculty record."
         self.confirm_open = True
 
-    @require_role(action="delete", resource="visiting_faculty")
-    @audit_action(action="delete", resource="visiting_faculty")
+    @require_role(action="delete", resource="non_regular_faculty")
+    @audit_action(action="delete", resource="non_regular_faculty")
     async def soft_delete_visitor(self) -> None:
         try:
             with open_session() as session:
@@ -242,7 +254,7 @@ class VisitingFacultyConfigState(BaseState):
                     UUID(self.confirm_id), UUID(self.current_user_id),
                 )
                 session.commit()
-        except VisitingFacultyError as e:
+        except NonRegularFacultyError as e:
             self.flash = e.message if hasattr(e, "message") else str(e)
             self.flash_type = "error"
             self.confirm_open = False
@@ -251,15 +263,15 @@ class VisitingFacultyConfigState(BaseState):
         self.confirm_open = False
         self.confirm_id = ""
         await self.load_visitors()
-        self.flash = "Visiting faculty record deactivated."
+        self.flash = "Non-regular faculty record deactivated."
         self.flash_type = "success"
 
     def cancel_confirm(self) -> None:
         self.confirm_open = False
         self.confirm_id = ""
 
-    @require_role(action="approve", resource="visiting_faculty")
-    @audit_action(action="approve", resource="visiting_faculty")
+    @require_role(action="approve", resource="non_regular_faculty")
+    @audit_action(action="approve", resource="non_regular_faculty")
     async def toggle_approval(self, record_id: str, current_status: str) -> None:
         new_approved = current_status != "yes"
         try:
@@ -268,11 +280,11 @@ class VisitingFacultyConfigState(BaseState):
                     UUID(record_id), new_approved, UUID(self.current_user_id),
                 )
                 session.commit()
-        except VisitingFacultyError as e:
+        except NonRegularFacultyError as e:
             self.flash = e.message if hasattr(e, "message") else str(e)
             self.flash_type = "error"
             return
         await self.load_visitors()
         status_label = "approved" if new_approved else "unapproved"
-        self.flash = f"Visiting faculty record {status_label}."
+        self.flash = f"Non-regular faculty record {status_label}."
         self.flash_type = "success"

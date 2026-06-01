@@ -5,7 +5,10 @@ from __future__ import annotations
 import io
 from typing import Any
 
+import structlog
 from docxtpl import DocxTemplate
+
+log = structlog.get_logger(__name__)
 
 
 class DocgenError(Exception):
@@ -30,6 +33,13 @@ def render_docx_template(
     """
     try:
         tpl = DocxTemplate(io.BytesIO(template_bytes))
+        template_vars = tpl.get_undeclared_template_variables()
+        if not template_vars:
+            log.warning(
+                "Document template has no placeholders matching the provided context "
+                "— export will be the unmodified template",
+                context_keys=list(context.keys()),
+            )
         tpl.render(context)
         buf = io.BytesIO()
         tpl.save(buf)

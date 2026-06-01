@@ -118,6 +118,13 @@ class TestExportPDF:
         result = svc.export_pdf([], "2025-26")
         assert isinstance(result, bytes)
 
+    def test_unicode_emdash_does_not_crash(self):
+        entry = _entry(title="DMACS — Mathematics and Computer Science")
+        svc = CalendarExportService()
+        data = svc.export_pdf([entry], "2025-26")
+        assert data[:5] == b"%PDF-"
+        assert len(data) > 100
+
 
 class TestExportDOCX:
     def test_empty_produces_valid_docx(self):

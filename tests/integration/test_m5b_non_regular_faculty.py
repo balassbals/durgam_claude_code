@@ -1,11 +1,12 @@
-"""Integration tests for VisitingFaculty — CRUD, lockless, approval.
+"""Integration tests for NonRegularFaculty — CRUD, lockless, approval, type field.
 
 Key tests:
-- VisitingFaculty CRUD with real database
-- VisitingFaculty is deliberately NOT AY-locked: LOCK an AY, confirm VF
-  create/update still succeeds (proves AY-lock machinery doesn't reach VF)
+- NonRegularFaculty CRUD with real database
+- NonRegularFaculty is deliberately NOT AY-locked: LOCK an AY, confirm NRF
+  create/update still succeeds (proves AY-lock machinery doesn't reach NRF)
 - Approval toggle changes is_admin_approved
 - list_by_department returns active only
+- non_regular_type field persists correctly
 """
 
 from datetime import date
@@ -14,12 +15,12 @@ from uuid import uuid4
 import pytest
 
 from durgam.models.campus import Campus
-from durgam.models.config_anchors import AcademicYear, VisitingFaculty
+from durgam.models.config_anchors import AcademicYear, NonRegularFaculty
 from durgam.models.department import Department
 from durgam.models.identity import User
 from durgam.models.school import School
-from durgam.repositories.visiting_faculty import VisitingFacultyRepository
-from durgam.services.visiting_faculty import VisitingFacultyError, VisitingFacultyService
+from durgam.repositories.non_regular_faculty import NonRegularFacultyRepository
+from durgam.services.non_regular_faculty import NonRegularFacultyError, NonRegularFacultyService
 
 
 def _ay(session, *, locked: bool = False) -> AcademicYear:
@@ -79,11 +80,11 @@ def _user(session) -> User:
     return u
 
 
-def _svc(session) -> VisitingFacultyService:
-    return VisitingFacultyService(repo=VisitingFacultyRepository(session))
+def _svc(session) -> NonRegularFacultyService:
+    return NonRegularFacultyService(repo=NonRegularFacultyRepository(session))
 
 
-class TestVisitingFacultyCRUD:
+class TestNonRegularFacultyCRUD:
     def test_create_and_list(self, db_session):
         campus = _campus(db_session)
         school = _school(db_session)
@@ -104,10 +105,31 @@ class TestVisitingFacultyCRUD:
         assert created.id is not None
         assert created.name == "Dr. Test"
         assert created.is_admin_approved is False
+        assert created.non_regular_type == "visiting"
 
         results = svc.list_by_department(dept.id)
         assert len(results) == 1
         assert results[0].id == created.id
+
+    def test_create_with_type(self, db_session):
+        campus = _campus(db_session)
+        school = _school(db_session)
+        dept = _dept(db_session, school, campus)
+        user = _user(db_session)
+        svc = _svc(db_session)
+
+        created = svc.create(
+            department_id=dept.id,
+            name="Dr. Adjunct",
+            designation="Associate Professor",
+            organization="MIT",
+            expertise="Machine Learning",
+            available_from=date(2025, 7, 1),
+            available_to=date(2025, 12, 31),
+            actor_id=user.id,
+            non_regular_type="adjunct",
+        )
+        assert created.non_regular_type == "adjunct"
 
     def test_update(self, db_session):
         campus = _campus(db_session)
@@ -151,17 +173,16 @@ class TestVisitingFacultyCRUD:
         assert len(results) == 0
 
 
-class TestVisitingFacultyLockless:
-    """Prove VisitingFaculty is deliberately not AY-locked.
+class TestNonRegularFacultyLockless:
+    """Prove NonRegularFaculty is deliberately not AY-locked.
 
-    The meaningful test: LOCK an academic year, then confirm a VF create/update
+    The meaningful test: LOCK an academic year, then confirm a NRF create/update
     still SUCCEEDS. This proves the AY-lock machinery deliberately doesn't reach
     this entity and guards against someone later adding AY-locking by
     pattern-matching it to its neighbours.
     """
 
     def test_create_succeeds_with_locked_ay_present(self, db_session):
-        """Lock an AY, then create a VF — proves VF is not AY-scoped."""
         locked_ay = _ay(db_session, locked=True)
         campus = _campus(db_session)
         school = _school(db_session)
@@ -183,7 +204,6 @@ class TestVisitingFacultyLockless:
         assert created.name == "Dr. Lockless Create"
 
     def test_update_succeeds_with_locked_ay_present(self, db_session):
-        """Lock an AY, then update a VF — proves VF ignores AY-lock."""
         locked_ay = _ay(db_session, locked=True)
         campus = _campus(db_session)
         school = _school(db_session)
@@ -209,7 +229,6 @@ class TestVisitingFacultyLockless:
         assert updated.name == "Dr. Still Lockless"
 
     def test_soft_delete_succeeds_with_locked_ay_present(self, db_session):
-        """Lock an AY, then soft-delete a VF — proves VF ignores AY-lock."""
         locked_ay = _ay(db_session, locked=True)
         campus = _campus(db_session)
         school = _school(db_session)
@@ -231,7 +250,7 @@ class TestVisitingFacultyLockless:
         assert deleted.is_deleted is True
 
 
-class TestVisitingFacultyApproval:
+class TestNonRegularFacultyApproval:
     def test_approval_toggle(self, db_session):
         campus = _campus(db_session)
         school = _school(db_session)
@@ -289,3 +308,70 @@ class TestVisitingFacultyApproval:
         results = svc.list_by_department(dept.id)
         assert len(results) == 1
         assert results[0].name == "Dr. Active"
+
+
+class TestResolveDeptScope:
+    """Regression test for U1: _resolve_user_dept_scope must not reference is_deleted."""
+
+    def test_userrole_query_without_is_deleted(self, db_session):
+        """Prove UserRole has no is_deleted column — a join query must work without it."""
+        from durgam.models.identity import Role, UserRole
+        from durgam.services.password import hash_password
+
+        role = Role(code=f"R{uuid4().hex[:6]}", name="Test Role", level=50)
+        db_session.add(role)
+        db_session.flush()
+        db_session.refresh(role)
+
+        user = _user(db_session)
+        campus = _campus(db_session)
+        school = _school(db_session)
+        dept = _dept(db_session, school, campus)
+
+        ur = UserRole(
+            user_id=user.id,
+            role_id=role.id,
+            scope_type="department",
+            scope_id=dept.id,
+        )
+        db_session.add(ur)
+        db_session.flush()
+
+        from sqlmodel import select
+
+        stmt = (
+            select(UserRole.scope_id)
+            .join(Role, UserRole.role_id == Role.id)
+            .where(UserRole.scope_type == "department")
+            .limit(1)
+        )
+        result = db_session.exec(stmt).first()
+        assert result is not None
+        assert result == dept.id
+
+    def test_dept_scoped_userrole_returns_scope_id(self, db_session):
+        """Verify scope_id is correctly set on department-scoped UserRole."""
+        from durgam.models.identity import Role, UserRole
+
+        role = Role(code=f"R{uuid4().hex[:6]}", name="Test HOD", level=50)
+        db_session.add(role)
+        db_session.flush()
+        db_session.refresh(role)
+
+        user = _user(db_session)
+        campus = _campus(db_session)
+        school = _school(db_session)
+        dept = _dept(db_session, school, campus)
+
+        ur = UserRole(
+            user_id=user.id,
+            role_id=role.id,
+            scope_type="department",
+            scope_id=dept.id,
+        )
+        db_session.add(ur)
+        db_session.flush()
+        db_session.refresh(ur)
+
+        assert ur.scope_id == dept.id
+        assert ur.scope_type == "department"

@@ -1,4 +1,4 @@
-"""Visiting faculty management page — /admin/config/visiting-faculty."""
+"""Non-regular faculty management page — /admin/config/non-regular-faculty."""
 
 import reflex as rx
 
@@ -13,12 +13,15 @@ from durgam.pages.components import (
 )
 from durgam.pages.shared.confirmation_dialog import confirmation_dialog
 from durgam.pages.shared.data_table import TableColumn, data_table
-from durgam.states.config_visiting_faculty import VisitingFacultyConfigState
+from durgam.states.config_non_regular_faculty import (
+    NonRegularFacultyConfigState,
+    _TYPE_OPTIONS,
+)
 
 
 def _approval_cell(row: dict) -> rx.Component:
     return rx.cond(
-        VisitingFacultyConfigState.can_approve,
+        NonRegularFacultyConfigState.can_approve,
         rx.box(
             rx.cond(
                 row["approved"] == "yes",
@@ -27,7 +30,7 @@ def _approval_cell(row: dict) -> rx.Component:
                     color_scheme="green",
                     variant="soft",
                     cursor="pointer",
-                    on_click=VisitingFacultyConfigState.toggle_approval(  # type: ignore[call-arg, func-returns-value]
+                    on_click=NonRegularFacultyConfigState.toggle_approval(  # type: ignore[call-arg, func-returns-value]
                         row["id"], row["approved"]
                     ),
                 ),
@@ -36,7 +39,7 @@ def _approval_cell(row: dict) -> rx.Component:
                     color_scheme="amber",
                     variant="soft",
                     cursor="pointer",
-                    on_click=VisitingFacultyConfigState.toggle_approval(  # type: ignore[call-arg, func-returns-value]
+                    on_click=NonRegularFacultyConfigState.toggle_approval(  # type: ignore[call-arg, func-returns-value]
                         row["id"], row["approved"]
                     ),
                 ),
@@ -68,15 +71,16 @@ def _kebab(row: dict) -> rx.Component:
             rx.menu.content(
                 rx.menu.item(
                     "Edit",
-                    on_click=VisitingFacultyConfigState.open_edit(  # type: ignore[call-arg, func-returns-value]
+                    on_click=NonRegularFacultyConfigState.open_edit(  # type: ignore[call-arg, func-returns-value]
                         row["id"], row["name"], row["designation"],
                         row["organization"], row["expertise"],
                         row["available_from"], row["available_to"],
+                        row["non_regular_type"],
                     ),
                 ),
                 rx.menu.item(
                     "Deactivate",
-                    on_click=VisitingFacultyConfigState.open_deactivate_confirm(  # type: ignore[call-arg, func-returns-value]
+                    on_click=NonRegularFacultyConfigState.open_deactivate_confirm(  # type: ignore[call-arg, func-returns-value]
                         row["id"], row["name"]
                     ),
                     color="var(--color-danger, #c0392b)",
@@ -92,19 +96,19 @@ def _dept_selector() -> rx.Component:
     return rx.hstack(
         rx.text("Department:", font_size="0.85rem", color="var(--color-muted)"),
         rx.cond(
-            VisitingFacultyConfigState.dept_locked,
-            rx.text(VisitingFacultyConfigState.dept_name_display,
+            NonRegularFacultyConfigState.dept_locked,
+            rx.text(NonRegularFacultyConfigState.dept_name_display,
                     font_weight="600", font_size="0.9rem"),
             rx.select.root(
                 rx.select.trigger(placeholder="Select department"),
                 rx.select.content(
                     rx.foreach(
-                        VisitingFacultyConfigState.dept_options,
+                        NonRegularFacultyConfigState.dept_options,
                         lambda o: rx.select.item(o["label"], value=o["value"]),
                     ),
                 ),
-                value=VisitingFacultyConfigState.selected_dept_id,
-                on_change=VisitingFacultyConfigState.on_dept_change,
+                value=NonRegularFacultyConfigState.selected_dept_id,
+                on_change=NonRegularFacultyConfigState.on_dept_change,
                 width="320px",
             ),
         ),
@@ -118,9 +122,9 @@ def _inline_form() -> rx.Component:
         content=rx.vstack(
             rx.heading(
                 rx.cond(
-                    VisitingFacultyConfigState.editing_id == "",
-                    "New Visiting Faculty",
-                    "Edit Visiting Faculty",
+                    NonRegularFacultyConfigState.editing_id == "",
+                    "New Non-Regular Faculty",
+                    "Edit Non-Regular Faculty",
                 ),
                 size="4",
                 font_family="var(--font-sans)",
@@ -131,14 +135,30 @@ def _inline_form() -> rx.Component:
                     rx.input(
                         type="hidden",
                         name="editing_id",
-                        value=VisitingFacultyConfigState.editing_id,
+                        value=NonRegularFacultyConfigState.editing_id,
+                    ),
+                    rx.vstack(
+                        rx.text("Type *", font_size="0.85rem", color="var(--color-muted)"),
+                        rx.select.root(
+                            rx.select.trigger(placeholder="Select type"),
+                            rx.select.content(
+                                rx.foreach(
+                                    _TYPE_OPTIONS,
+                                    lambda o: rx.select.item(o, value=o),
+                                ),
+                            ),
+                            value=NonRegularFacultyConfigState.form_type,
+                            on_change=NonRegularFacultyConfigState.set_form_type,
+                            width="100%",
+                        ),
+                        align="start", gap="0.25rem", width="100%",
                     ),
                     rx.vstack(
                         rx.text("Name *", font_size="0.85rem", color="var(--color-muted)"),
                         rx.input(
                             name="form_name",
-                            value=VisitingFacultyConfigState.form_name,
-                            on_change=VisitingFacultyConfigState.set_form_name,
+                            value=NonRegularFacultyConfigState.form_name,
+                            on_change=NonRegularFacultyConfigState.set_form_name,
                             placeholder="Full name",
                             width="100%",
                         ),
@@ -148,8 +168,8 @@ def _inline_form() -> rx.Component:
                         rx.text("Designation *", font_size="0.85rem", color="var(--color-muted)"),
                         rx.input(
                             name="form_designation",
-                            value=VisitingFacultyConfigState.form_designation,
-                            on_change=VisitingFacultyConfigState.set_form_designation,
+                            value=NonRegularFacultyConfigState.form_designation,
+                            on_change=NonRegularFacultyConfigState.set_form_designation,
                             placeholder="e.g. Professor",
                             width="100%",
                         ),
@@ -159,8 +179,8 @@ def _inline_form() -> rx.Component:
                         rx.text("Organization *", font_size="0.85rem", color="var(--color-muted)"),
                         rx.input(
                             name="form_organization",
-                            value=VisitingFacultyConfigState.form_organization,
-                            on_change=VisitingFacultyConfigState.set_form_organization,
+                            value=NonRegularFacultyConfigState.form_organization,
+                            on_change=NonRegularFacultyConfigState.set_form_organization,
                             placeholder="e.g. IISc Bangalore",
                             width="100%",
                         ),
@@ -170,8 +190,8 @@ def _inline_form() -> rx.Component:
                         rx.text("Expertise *", font_size="0.85rem", color="var(--color-muted)"),
                         rx.input(
                             name="form_expertise",
-                            value=VisitingFacultyConfigState.form_expertise,
-                            on_change=VisitingFacultyConfigState.set_form_expertise,
+                            value=NonRegularFacultyConfigState.form_expertise,
+                            on_change=NonRegularFacultyConfigState.set_form_expertise,
                             placeholder="e.g. Quantum Physics",
                             width="100%",
                         ),
@@ -182,8 +202,8 @@ def _inline_form() -> rx.Component:
                         rx.input(
                             name="form_available_from",
                             type="date",
-                            value=VisitingFacultyConfigState.form_available_from,
-                            on_change=VisitingFacultyConfigState.set_form_available_from,
+                            value=NonRegularFacultyConfigState.form_available_from,
+                            on_change=NonRegularFacultyConfigState.set_form_available_from,
                             width="100%",
                         ),
                         align="start", gap="0.25rem", width="100%",
@@ -193,8 +213,8 @@ def _inline_form() -> rx.Component:
                         rx.input(
                             name="form_available_to",
                             type="date",
-                            value=VisitingFacultyConfigState.form_available_to,
-                            on_change=VisitingFacultyConfigState.set_form_available_to,
+                            value=NonRegularFacultyConfigState.form_available_to,
+                            on_change=NonRegularFacultyConfigState.set_form_available_to,
                             width="100%",
                         ),
                         align="start", gap="0.25rem", width="100%",
@@ -203,7 +223,7 @@ def _inline_form() -> rx.Component:
                         primary_btn("Save", type="submit"),
                         secondary_btn(
                             "Cancel",
-                            on_click=VisitingFacultyConfigState.cancel_form,
+                            on_click=NonRegularFacultyConfigState.cancel_form,
                             type="button",
                         ),
                         gap="0.75rem",
@@ -212,32 +232,32 @@ def _inline_form() -> rx.Component:
                     align="start",
                     width="100%",
                 ),
-                on_submit=VisitingFacultyConfigState.save_visitor,
+                on_submit=NonRegularFacultyConfigState.save_visitor,
                 reset_on_submit=False,
             ),
             gap="0",
             align="start",
             width="100%",
         ),
-        is_open=VisitingFacultyConfigState.show_form,
+        is_open=NonRegularFacultyConfigState.show_form,
     )
 
 
-def admin_config_visiting_faculty() -> rx.Component:
+def admin_config_non_regular_faculty() -> rx.Component:
     return admin_page(
         rx.vstack(
             nav_shell(),
             rx.box(
                 rx.hstack(
                     rx.heading(
-                        "Visiting Faculty",
+                        "Non-Regular Faculty",
                         size="5",
                         font_family="var(--font-sans)",
                     ),
                     rx.spacer(),
                     primary_btn(
                         "+ Add",
-                        on_click=VisitingFacultyConfigState.open_create,
+                        on_click=NonRegularFacultyConfigState.open_create,
                     ),
                     align="center",
                     width="100%",
@@ -250,18 +270,19 @@ def admin_config_visiting_faculty() -> rx.Component:
                 ),
                 rx.box(height="1rem"),
                 config_toast(
-                    VisitingFacultyConfigState.flash,
-                    VisitingFacultyConfigState.flash_type,
-                    VisitingFacultyConfigState.dismiss_flash,
+                    NonRegularFacultyConfigState.flash,
+                    NonRegularFacultyConfigState.flash_type,
+                    NonRegularFacultyConfigState.dismiss_flash,
                 ),
                 _inline_form(),
                 rx.cond(
-                    VisitingFacultyConfigState.loading,
+                    NonRegularFacultyConfigState.loading,
                     rx.center(rx.spinner(), padding="2rem"),
                     data_table(
-                        rows=VisitingFacultyConfigState.visitors,
+                        rows=NonRegularFacultyConfigState.visitors,
                         columns=[
                             TableColumn(key="name", label="Name"),
+                            TableColumn(key="non_regular_type", label="Type"),
                             TableColumn(key="designation", label="Designation"),
                             TableColumn(key="organization", label="Organization"),
                             TableColumn(key="expertise", label="Expertise"),
@@ -271,15 +292,15 @@ def admin_config_visiting_faculty() -> rx.Component:
                         card_primary_key="name",
                         is_mobile=False,
                         actions=_kebab,
-                        empty_message="No visiting faculty records found.",
+                        empty_message="No non-regular faculty records found.",
                     ),
                 ),
                 confirmation_dialog(
-                    is_open=VisitingFacultyConfigState.confirm_open,
-                    title=VisitingFacultyConfigState.confirm_title,
-                    body=VisitingFacultyConfigState.confirm_body,
-                    on_confirm=VisitingFacultyConfigState.soft_delete_visitor,
-                    on_cancel=VisitingFacultyConfigState.cancel_confirm,
+                    is_open=NonRegularFacultyConfigState.confirm_open,
+                    title=NonRegularFacultyConfigState.confirm_title,
+                    body=NonRegularFacultyConfigState.confirm_body,
+                    on_confirm=NonRegularFacultyConfigState.soft_delete_visitor,
+                    on_cancel=NonRegularFacultyConfigState.cancel_confirm,
                     confirm_label="Deactivate",
                 ),
                 padding="2rem",
