@@ -215,12 +215,16 @@ deferred scope.
     letterhead template for counsellor roster export. → M14.
 15. **Faculty mentor confirmation notification emails** — email notifications
     when Director confirms a campus mentor roster. → M9.
-16. **Faculty mentor roster letterhead overlay** — fitting mentor roster content
-    into letterhead template requires docgen polish. → M14.
+16. **Faculty mentor roster letterhead overlay** — basic DOCX-on-letterhead
+    (render_docx_template with Director letterhead) works at M5b. Rich auto-fill
+    polish (campus/director-name/designation from login scope) remains. → M14.
 17. **Non-regular faculty approval-request workflow** — current M5b direct-approve
-    (Director clicks Approve) is a simple admin action recording `approved_at` and
-    `approved_by_user_id`. At M7, this migrates to a proper request artifact with
-    approval channel, audit trail, and SLA enforcement. → M7.
+    (Director or Registrar family clicks Approve) is a simple admin action recording
+    `approved_at` and `approved_by_user_id`. At M7, the Approval Requests module
+    replaces this with proper case-by-case routing: configurable per-case selection
+    between Director and Registrar (and any other institutional approvers), with the
+    request artifact, channel, audit trail, and SLA. The direct-approve action
+    becomes either retired or an override-only mechanism. → M7.
 
 ---
 

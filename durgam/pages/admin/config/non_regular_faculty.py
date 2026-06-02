@@ -235,8 +235,11 @@ def _inline_form() -> rx.Component:
                         gap="0.75rem",
                     ),
                     rx.text(
-                        "New entries appear as Pending. A Director must approve "
-                        "before the appointment is institutionally recognized.",
+                        "New entries appear as Pending. An authorized approver "
+                        "(Director or Registrar family) must approve before the "
+                        "appointment is institutionally recognized. The Approval "
+                        "Requests module in a future milestone will configure "
+                        "case-by-case routing between Director and Registrar.",
                         font_size="0.75rem",
                         color="var(--color-muted)",
                         font_style="italic",

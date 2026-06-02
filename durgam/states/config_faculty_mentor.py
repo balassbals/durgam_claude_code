@@ -16,9 +16,12 @@ from durgam.models.config_anchors import (
 from durgam.repositories.academic_year import AcademicYearRepository
 from durgam.repositories.assignment import AssignmentRepository
 from durgam.repositories.campus import CampusRepository
+from durgam.repositories.document_template import DocumentTemplateRepository
+from durgam.repositories.file_asset import FileAssetRepository
 from durgam.services.assignment import AssignmentError, FacultyMentorService
 from durgam.services.org_exceptions import AcademicYearLockedError
 from durgam.states.base import BaseState
+from durgam.storage import get_storage_backend
 
 
 def _svc(session) -> FacultyMentorService:
@@ -298,37 +301,80 @@ class FacultyMentorConfigState(BaseState):
     @require_role(action="read", resource="faculty_mentor_assignment")
     @audit_action(action="read", resource="faculty_mentor_assignment")
     async def download_roster(self) -> None:
+        from durgam.docgen.merge import DocgenError, render_docx_template
+
         if not self.selected_ay_id or not self.selected_campus_id:
             self.flash = "Select an academic year and campus first."
             self.flash_type = "error"
             return
 
-        with open_session() as session:
-            repo = AssignmentRepository(FacultyMentorAssignment, session)
-            rows = repo.list_by_ay_and_scope(
-                UUID(self.selected_ay_id), UUID(self.selected_campus_id), "campus_id",
-            )
+        try:
+            with open_session() as session:
+                dt_repo = DocumentTemplateRepository(session)
+                letterhead = dt_repo.get_letterhead_by_role("DIRECTOR")
+                if letterhead is None:
+                    self.flash = (
+                        "No Director letterhead configured — upload one "
+                        "under Config → Letterheads before downloading the roster."
+                    )
+                    self.flash_type = "error"
+                    return
 
-            ay_label = ""
-            for opt in self.ay_options:
-                if opt["value"] == self.selected_ay_id:
-                    ay_label = opt["label"]
-                    break
-            campus_label = ""
-            for opt in self.campus_options:
-                if opt["value"] == self.selected_campus_id:
-                    campus_label = opt["label"]
-                    break
+                file_asset_repo = FileAssetRepository(session)
+                lh_asset = file_asset_repo.get_by_id(letterhead.file_id)
+                if lh_asset is None:
+                    self.flash = "Director letterhead file not found."
+                    self.flash_type = "error"
+                    return
 
-            import csv
-            import io
+                backend = get_storage_backend()
+                template_bytes = backend.get(lh_asset.storage_key)
 
-            buf = io.StringIO()
-            writer = csv.writer(buf)
-            writer.writerow(["S.No", "Faculty", "Student", "Notes"])
-            for i, m in enumerate(rows, 1):
-                writer.writerow([i, m.faculty_id_placeholder, m.student_id_placeholder, m.notes or ""])
-            csv_bytes = buf.getvalue().encode("utf-8")
+                repo = AssignmentRepository(FacultyMentorAssignment, session)
+                rows = repo.list_by_ay_and_scope(
+                    UUID(self.selected_ay_id), UUID(self.selected_campus_id), "campus_id",
+                )
 
-        filename = f"faculty_mentor_roster_{ay_label}_{campus_label}.csv"
-        return rx.download(data=csv_bytes, filename=filename)
+                ay_label = ""
+                for opt in self.ay_options:
+                    if opt["value"] == self.selected_ay_id:
+                        ay_label = opt["label"]
+                        break
+                campus_label = ""
+                for opt in self.campus_options:
+                    if opt["value"] == self.selected_campus_id:
+                        campus_label = opt["label"]
+                        break
+
+                context = {
+                    "academic_year": ay_label,
+                    "campus": campus_label,
+                    "mentors": [
+                        {
+                            "sno": i + 1,
+                            "faculty": m.faculty_id_placeholder,
+                            "student": m.student_id_placeholder,
+                            "notes": m.notes or "",
+                        }
+                        for i, m in enumerate(rows)
+                    ],
+                }
+                rendered, docgen_warnings = render_docx_template(template_bytes, context)
+
+        except DocgenError as e:
+            self.flash = f"Export failed: {e}"
+            self.flash_type = "error"
+            return
+        except Exception as e:
+            self.flash = f"Export failed: {e}"
+            self.flash_type = "error"
+            return
+
+        roster_filename = f"faculty_mentor_roster_{ay_label}_{campus_label}.docx"
+        if docgen_warnings:
+            self.flash = docgen_warnings[0]
+            self.flash_type = "warning"
+        else:
+            self.flash = "Roster exported."
+            self.flash_type = "success"
+        return rx.download(data=rendered, filename=roster_filename)

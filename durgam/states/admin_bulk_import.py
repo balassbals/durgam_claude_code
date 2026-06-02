@@ -57,6 +57,10 @@ _COLUMN_HEADERS = {
 class BulkImportState(BaseState):
     import_type: str = "users"
 
+    can_import_users: bool = False
+    can_import_courses: bool = False
+    can_import_programs: bool = False
+
     preview_valid: list[dict[str, str]] = []
     preview_invalid: list[dict[str, str]] = []
     preview_ready: bool = False
@@ -117,9 +121,32 @@ class BulkImportState(BaseState):
         if guard is not None:
             return guard
         self._reset_state()
+
+        with open_session() as session:
+            uid = UUID(self.current_user_id)
+            self.can_import_users = can(uid, "write", "user", scope_type=None, scope_id=None, session=session)
+            self.can_import_courses = can(uid, "write", "course_import", scope_type=None, scope_id=None, session=session)
+            self.can_import_programs = can(uid, "write", "program_import", scope_type=None, scope_id=None, session=session)
+
+        if not self._can_current_type():
+            for t in ("users", "courses", "programs"):
+                if self._can_type(t):
+                    self.import_type = t
+                    break
+
         h = _COLUMN_HEADERS.get(self.import_type, _COLUMN_HEADERS["users"])
         self.col1_header, self.col2_header, self.col3_header = h
         self._load_nav_entries()
+
+    def _can_type(self, import_type: str) -> bool:
+        return {
+            "users": self.can_import_users,
+            "courses": self.can_import_courses,
+            "programs": self.can_import_programs,
+        }.get(import_type, False)
+
+    def _can_current_type(self) -> bool:
+        return self._can_type(self.import_type)
 
     @audit_action(action="upload_csv", resource="user")
     async def upload_csv(self, files: list[rx.UploadFile]) -> None:

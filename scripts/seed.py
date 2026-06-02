@@ -411,6 +411,8 @@ def seed(session: Session) -> dict[str, int]:
         ("program",                    "delete",    "*"),
         # M5b-R3 V2 — Registrar family can bulk-import programs
         ("program_import",             "write",     "*"),
+        # M5b — non-regular faculty approval (Registrar family is also institutional approver)
+        ("non_regular_faculty",        "approve",   "*"),
     ]
 
     _HOD_SPECIFIC = [

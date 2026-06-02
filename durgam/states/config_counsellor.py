@@ -265,37 +265,9 @@ class CounsellorConfigState(BaseState):
             with open_session() as session:
                 svc = _svc(session)
                 actor_id = UUID(self.current_user_id)
-                if not editing_id:
-                    svc.create(
-                        academic_year_id=UUID(self.selected_ay_id),
-                        campus_id=UUID(self.selected_campus_id),
-                        name=name,
-                        qualification=qualification,
-                        specialisation=specialisation,
-                        mode_of_appointment=mode,
-                        appointment_start=start_date,
-                        appointment_end=end_date,
-                        actor_id=actor_id,
-                        phone=phone,
-                        email=email_val,
-                        display_order=display_order,
-                    )
-                else:
-                    record = svc.update(
-                        UUID(editing_id),
-                        {
-                            "name": name,
-                            "qualification": qualification,
-                            "specialisation": specialisation,
-                            "mode_of_appointment": mode,
-                            "appointment_start": start_date,
-                            "appointment_end": end_date,
-                            "phone": phone,
-                            "email": email_val,
-                            "display_order": display_order,
-                        },
-                        actor_id,
-                    )
+
+                appt_file_id: UUID | None = None
+                qual_file_id: UUID | None = None
 
                 if self.staged_appt_letter:
                     upload_svc = UploadService(
@@ -311,8 +283,7 @@ class CounsellorConfigState(BaseState):
                         actor_id,
                         purpose="counsellor_document",
                     )
-                    if editing_id:
-                        svc.update(UUID(editing_id), {"appointment_letter_file_id": asset.id}, actor_id)
+                    appt_file_id = asset.id
                 if self.staged_qual_proof:
                     upload_svc = UploadService(
                         file_repo=FileAssetRepository(session),
@@ -327,8 +298,43 @@ class CounsellorConfigState(BaseState):
                         actor_id,
                         purpose="counsellor_document",
                     )
-                    if editing_id:
-                        svc.update(UUID(editing_id), {"qualification_proof_file_id": asset.id}, actor_id)
+                    qual_file_id = asset.id
+
+                if not editing_id:
+                    svc.create(
+                        academic_year_id=UUID(self.selected_ay_id),
+                        campus_id=UUID(self.selected_campus_id),
+                        name=name,
+                        qualification=qualification,
+                        specialisation=specialisation,
+                        mode_of_appointment=mode,
+                        appointment_start=start_date,
+                        appointment_end=end_date,
+                        actor_id=actor_id,
+                        phone=phone,
+                        email=email_val,
+                        display_order=display_order,
+                        appointment_letter_file_id=appt_file_id,
+                        qualification_proof_file_id=qual_file_id,
+                    )
+                else:
+                    fields: dict = {
+                        "name": name,
+                        "qualification": qualification,
+                        "specialisation": specialisation,
+                        "mode_of_appointment": mode,
+                        "appointment_start": start_date,
+                        "appointment_end": end_date,
+                        "phone": phone,
+                        "email": email_val,
+                        "display_order": display_order,
+                    }
+                    if appt_file_id is not None:
+                        fields["appointment_letter_file_id"] = appt_file_id
+                    if qual_file_id is not None:
+                        fields["qualification_proof_file_id"] = qual_file_id
+                    svc.update(UUID(editing_id), fields, actor_id)
+
                 session.commit()
                 self.staged_appt_letter = b""
                 self.staged_appt_letter_name = ""

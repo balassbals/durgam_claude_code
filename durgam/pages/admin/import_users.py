@@ -90,11 +90,23 @@ def admin_import_users() -> rx.Component:
                 rx.heading("Bulk Import", size="5", font_family="var(--font-sans)"),
                 gap="1rem", align="center", margin_bottom="1rem",
             ),
-            # Import type selector
+            # Import type selector — only show tabs the user has permission for
             rx.hstack(
-                _type_button("Users", "users"),
-                _type_button("Courses", "courses"),
-                _type_button("Programs", "programs"),
+                rx.cond(
+                    BulkImportState.can_import_users,
+                    _type_button("Users", "users"),
+                    rx.fragment(),
+                ),
+                rx.cond(
+                    BulkImportState.can_import_courses,
+                    _type_button("Courses", "courses"),
+                    rx.fragment(),
+                ),
+                rx.cond(
+                    BulkImportState.can_import_programs,
+                    _type_button("Programs", "programs"),
+                    rx.fragment(),
+                ),
                 gap="0.5rem",
                 margin_bottom="1.5rem",
             ),
