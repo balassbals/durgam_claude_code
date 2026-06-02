@@ -255,6 +255,56 @@ git push -u origin m<N+1>-<short-name>
 Take a break. Do not start the next milestone's planning in the
 same session.
 
+## Lessons from M5b — what the ritual taught
+
+M5b required six gate-fix rounds after the initial "ready to ship" report. Each round caught real bugs that the unit/integration suite did not catch. These patterns are the institutional memory worth keeping for M6 and beyond.
+
+### 1. The manual ritual is non-negotiable and catches a specific class of bugs
+
+Tests pass on every metric the agent measures (count, determinism, no crashes), yet the page can still be broken at the user-visible layer. Every round, the manual ritual found things tests missed:
+- Pages that crashed on load for one role family (Round 3: UserRole.is_deleted)
+- Save flows that silently dropped file persistence (Round 5: FF1 — file_ids NULL on create path)
+- Permission gates that worked in isolation but had an upstream guard blocking the user before reaching them (Round 4: CC3 — _admin_guard rejecting non-sysadmins before per-resource gates ran)
+- URLs that were structurally correct but failed at the framework layer (Round 6: rx.download URL validation)
+- Notification recipients that resolved to the wrong set (Round 2 + Round 3 Z1: RoleEmail config vs. User+UserRole join; phase-3 role list expanded)
+- Features the spec described but the build silently substituted with a simpler equivalent (Round 5 FF4: CSV download instead of DOCX-on-letterhead)
+
+These can only be caught by a human clicking through with domain knowledge against fresh seeded state.
+
+### 2. PASS claims require evidence, not assertion
+
+The Round 4 "Pre-existing test isolation issue" claim was technically true but obscured a real regression that pushback exposed. The "not reproducible" finding for H1 in Round 2 was wrong and caused U1 in Round 3. The CC1 download bug was claimed PASS twice (Rounds 3 and 4) before Round 5's root-cause investigation found the real fault.
+
+For M6 onward: every PASS claim in a build report must be backed by either (a) file:line evidence showing the actual change, or (b) a test that exercises the user-visible path (state handler → DB row → loaded row dict → rendered output) — not just a single isolated layer.
+
+When a manual verification finding conflicts with a build report, the build report is wrong by default. The remediation is to require the agent to produce concrete evidence (file:line + DB query + state inspection + execution trace) BEFORE planning any fix.
+
+### 3. Multi-step user flows need end-to-end tests
+
+Tests that exercise a single layer (just the service, just the state handler, just the page) can all pass while the integrated flow is broken. Counsellor save → load → render hid a file-id-dropping bug across multiple rounds because no test exercised the full path.
+
+For M6 onward: any feature involving save-then-display, create-then-approve, upload-then-confirm, or schedule-then-notify needs at least one integration test that runs through the state-handler layer end-to-end and inspects the resulting DB row + the loaded row dict + the rendered UI condition. The Round 5 test pattern (tests/integration/test_m5b_counsellor_file_ids.py) is the template.
+
+### 4. "Pre-existing" requires a true baseline
+
+"This failure was pre-existing" claims require demonstrating the failure on truly clean baseline — both code AND schema matching the prior commit. `git stash` doesn't unwind migrations; comparing stashed code against current schema is not a valid baseline.
+
+For M6 onward: any "pre-existing failure" diagnostic must include `alembic downgrade` to the prior schema head before the comparison run, OR a fresh DB with only the baseline migrations applied. State this explicitly in the report.
+
+### 5. Specs imply features the agent may silently substitute
+
+Round 5's FF4 found the faculty mentor download had been built as CSV when the Y1 spec called for DOCX-on-letterhead. The agent's Round 3 report marked Y1 PASS because download_roster existed and produced a file; it didn't verify the file type matched the spec. Similar pattern: agent's initial dean-role design ignored the M5a decision that letterhead is per-role no scope.
+
+For M6 onward: spec divergences — where the agent picks a simpler-or-different implementation than the spec asked — must be flagged in the build report ("I built X but the spec said Y; here's why"). Silent substitution is the failure mode to watch for.
+
+### 6. Decisions live in authority files, not chat
+
+Round 2 found M5a UI decisions (role_code dropdown, letterhead per-role, etc.) that were made in conversation but never written to an authority doc. The build correctly forgot them. Conversations have no persistence; only the errata, the milestone docs, and the configuration doc do.
+
+For M6 onward: every binding decision goes into an authority file (errata, milestone doc, or configuration doc) AT THE TIME OF THE DECISION. "We discussed it in chat" is not record-keeping.
+
+---
+
 ## Why this ritual exists
 
 Tests verify what is tested. Manual use verifies what users actually

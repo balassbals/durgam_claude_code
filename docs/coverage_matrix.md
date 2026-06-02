@@ -114,16 +114,41 @@ E-004 (RoleEmail) bind to this split.
 
 | Concern | Source | Deferred to | Notes |
 |---|---|---|---|
+| UGTimetable rename + class-label refactor | §9.3 | Separate focused pass | Currently handles UG year 1/2 only |
+| Faculty dropdowns on assignment pages | §9.3 | M10 + M14 | Depends on Faculty model |
+| Student dropdowns on assignment pages | §9.3 | M12 + M14 | Depends on Student model |
+| Course dropdown on NonOwnedCourse | §9.3 | M14 | |
 | Faculty bulk import (CSV) | §9.3, §16 | M10 | Requires Faculty model |
 | Student bulk import (CSV) | §9.3, §16 | M12 | Requires Student model |
+| Bulk-add for campuses/depts/programs | §9.3 | M13 | |
+| Cross-entity search + filtering | §9.3 | M13 / dashboard | |
+| Viewability of basic info by all | §9.3 | Dashboard milestone | |
+| Sub-departments management | §8.2 | Future | |
+| Class teacher load → faculty workload | §9.3 | M10 | |
+| Non-owned-course faculty workload contribution | §9.3 | M10 | |
+| Class coordinator student picker | §9.3 | M12 | Needs Student model |
+| Course-code dropdown auto-fill | §9.3 | M14 | |
+| Announcement composer roster | §9.3 | M9 (RFP §12) | |
+| HoD picks next-level approver from candidate set | E-007 | M7 | E-007 R1 semantic |
+| Informational CC notification on approval | E-007 | M7 | informational_cc_role_codes field |
+| Non-regular faculty approval routing per case | E-003, E-007 | M7 | Current direct-approve placeholder |
+| Approval-process SLA enforcement | §9.5 | M7 | |
 | Purchase committee rank-preference enforcement | E-007 | M7 | Runtime concern: highest-rank-first selection from eligible_designations requires M10 Faculty model for who-exists/availability |
 | Purchase committee availability/fatigue check | E-007 | M7 | Runtime concern: reject faculty serving on too many concurrent committees; requires M10 Faculty model |
 | Purchase committee justification field | E-007 | M7 | Runtime concern: text justification when lower-ranked faculty selected; requires purchase-request artifact (M7) |
 | Project-fund link to PI | E-007 | M11 | Runtime concern: link project fund source to PI's faculty record; requires M10 Faculty + M11 Research |
-| ClassCoordinatorAssignment ownership transfer to class-teacher role | §9.3 | M14 | Requires M10 Faculty identity + M12 Student model for student-picker. Current HoD/SysAdmin write access is a placeholder |
+| ClassCoordinatorAssignment ownership transfer to class-teacher role | §9.3 | M14 | Requires M10 Faculty identity + M12 Student model for student-picker |
 | Committee member selection (rank-preference, availability) | E-007 | M10/M14 | Requires M10 Faculty model for who-exists/who's-available lookup |
-| Rank-preference enforcement, availability/fatigue check, justification field | E-007 | M7/M10 | Requires M10 Faculty + M7 purchase-request artifact |
-| Retrofit older config pages (M3/M4) with live-sourced role picker | UI Polish | UI Polish | M5b established `role_multi_select()` and `_load_role_options()` patterns; older pages not yet retrofitted |
+| Retrofit older config pages (M3/M4) with live-sourced role picker | UI Polish | UI Polish | M5b established `role_multi_select()` and `_load_role_options()` patterns |
+| Counsellor roster letterhead overlay polish | M5b | M14 docgen | Auto-fill campus/director/designation |
+| Faculty mentor roster letterhead overlay polish | M5b | M14 docgen | Auto-fill campus/director/designation |
+| Calendar entry conflict detection | M5b | M6 | |
+| Calendar email per-user notification preferences | M5b | M9 | |
+| Visiting/non-regular faculty contract term tracking | E-003 | M10 | |
+| Role-based dashboard widgets | §9.3 | M15 | |
+| Bulk assignment import (class teachers, coordinators) | §9.3 | M14 | |
+| Designation-based committee eligibility verification | E-007 | M10 | |
+| Test fixture isolation (db_session vs seeded_session) | TD-008 | Test infra | |
 
 ---
 

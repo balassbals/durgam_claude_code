@@ -91,6 +91,16 @@ Applied to all config pages and home page. See CLAUDE.md →
 
 ---
 
+## M5b deferrals
+
+- Cramped horizontal config navbar — TD-007 / responsive design pass needed
+- Mobile / non-WSL desktop layout polish
+- Older config pages (M2/M3/M4) audit for hardcoded/free-text role fields — apply the live-sourced role-picker pattern uniformly
+- Consider richer warning UX when a docgen template has no placeholders (currently a flash; might be more prominent)
+- Letterhead replace flow could show preview of what's being replaced (currently just a kebab action)
+
+---
+
 ## Permission-denied redirect notification rendering
 
 When a non-permitted user attempts to reach an admin route (e.g.,

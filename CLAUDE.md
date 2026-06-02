@@ -1193,6 +1193,48 @@ Discovered at M5a: Playwright's `set_input_files` triggers `on_drop` before a pr
 `on_change` completes its WebSocket round-trip. In production, a fast user or laggy
 connection would hit the same race.
 
+## Patterns established at M5b
+
+### When you've claimed PASS, verify against user-visible behavior
+
+The unit/integration test passing is necessary but not sufficient. For features involving multi-step user flows (save → load → render, create → approve, upload → confirm), the test must exercise the full path: state handler → DB row → loaded row dict → rendered UI condition. The Round 5 counsellor file-id bug was hidden across three rounds because tests at single layers all passed while the integrated flow silently dropped data.
+
+Before claiming PASS:
+1. If the feature has a save/persist step: write a test that calls the state handler and queries the DB for the resulting row's expected fields.
+2. If the feature renders something: assert the state's row-dict contains the values the UI's rx.cond checks.
+3. If the feature triggers a download: assert the URL or trigger is the same pattern as the working precedent (e.g. counsellor downloads should match letterhead download pattern from durgam/pages/admin/config/letterheads.py).
+
+### When manual verification conflicts with your report, the report is wrong
+
+If the user says "this doesn't work" and your last report said PASS, do not re-assert PASS. Investigate first:
+1. Show the exact current code (file:line) implementing the feature.
+2. Query the live DB to show the relevant rows have the expected state.
+3. Trace the execution path from user action to visible output.
+4. State whether the bug is missing-code, present-but-incorrect-condition, or present-but-blocked-upstream.
+Only then propose a fix.
+
+### When you defer something, defer it explicitly
+
+If the spec calls for feature X and you build the simpler-but-different feature Y because Y is easier or because some dependency doesn't yet exist, flag it: "Built Y instead of X because Z; recorded as forward concern." Do not silently substitute. The Round 5 CSV-vs-DOCX divergence was found three rounds late because Y looked similar enough to X that the build report glossed it.
+
+### When you change permissions, verify the inheritance chain
+
+seed.py uses list composition for many role grants ("AHOD": _PUBLIC_READ + _HOD_SPECIFIC). Adding to _HOD_SPECIFIC propagates to AHOD. But some roles have inline lists (HOD_OFFICE) that do NOT inherit. Before assuming a permission propagates, verify the actual composition in seed.py role_perm_map.
+
+### When you investigate a "pre-existing" failure, downgrade the schema too
+
+Stashing code does not unwind migrations. A "pre-existing failure" run that compares stashed code against current schema is invalid. Either alembic downgrade to the prior head before testing, or run against a fresh DB with only baseline migrations applied. State this explicitly in your report.
+
+### Reference patterns in this codebase
+
+When implementing common shapes, follow the existing pattern rather than inventing:
+- File downloads in kebab menus: durgam/pages/admin/config/letterheads.py lines around 41 (rx.link with DOWNLOAD_PREFIX)
+- Render-after-confirm form with uploads: durgam/states/config_counsellor.py post-Round-5 (staged file vars, single save with file_ids passed to create)
+- Ordered multi-select with visible order: durgam/pages/components.py role_multi_select_ordered
+- Scope label resolution: durgam/scopes/registry.py resolve_scope_label
+- Live-sourced role picker: BaseState._load_role_options + RoleRepository.list_active
+- DOCX-on-letterhead generation: durgam/docgen/merge.py render_docx_template (returns tuple[bytes, list[str]] — destructure warnings)
+
 ## Current milestone
 **M5b — Configuration — Assignments & Approval Config.**
 

@@ -211,3 +211,19 @@ explicitly **not** required until their named milestone:
 A milestone is not failing the charter by deferring items that
 belong to a later milestone. Apply the charter to what the milestone
 introduces; trust that later milestones handle what is theirs.
+
+## 13. Principles confirmed at M5b
+
+1. **Render-after-confirm for forms with uploads.** Forms that involve file uploads stage the file selections in state and persist everything (record + files) in a single save action. No auto-save on file selection. Pattern reference: counsellor and non-regular faculty pages.
+
+2. **Live-sourced role pickers everywhere.** All role-code fields read the roles table at render time. No hardcoded role enums in UI components. New roles added through admin appear in pickers automatically.
+
+3. **Permission visibility matches capability.** If a user can't perform an action, they don't see the UI affordance for it. Applied to: bulk-import tabs, kebab menu items, back-links, confirmation buttons. Defense-in-depth — backend checks still reject unauthorized actions even when UI hides the affordance.
+
+4. **Downloads via rx.link, not rx.download.** rx.download has strict URL validation that doesn't accept cross-origin URLs. Kebab download items use rx.link href={DOWNLOAD_PREFIX + path}. Pattern reference: letterheads.py and templates.py.
+
+5. **User-facing flash for silent infrastructure failures.** When a docgen template has no placeholders and the export "succeeds" with the unmodified template, surface a clear user-facing warning explaining what happened and how to fix it. Pattern reference: counsellor and faculty-mentor exports.
+
+6. **Scope-aware displays.** Scoped roles render as "{role} ({scope label})" — e.g. "Dean (SCI — Sciences)" not just "DEAN". Use the shared scope-label resolver in durgam/scopes/registry.py. Apply uniformly across calendar owner_role displays, role-email scope columns, etc.
+
+7. **Pending/Approved badge for entities with approval workflow.** Non-regular faculty appears as "Pending" until approved; "Approved (by Director Name, on date)" after. Make the state visible at-a-glance in listings.

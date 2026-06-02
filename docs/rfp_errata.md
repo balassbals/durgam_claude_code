@@ -446,3 +446,49 @@ channel phrasing of §9.5 for the CPC/purchase case.
 
 **Read by**: M5b implementation, any future milestone that adds entity-specific
 import UIs.
+
+---
+
+## E-009 — FACULTY role and coordinator roles added to role catalog at M5b
+
+- **Status**: Resolved-at-M5b.
+- **Source**: M5b implementation — informal requirements and operational needs.
+- **Gap in v3 RFP**: §8.5 lists role codes but does not include FACULTY as a
+  distinct role (only HOD, AHOD, etc. — all of which are faculty who hold an
+  administrative appointment). The informal requirements reference "faculty"
+  as a requestor in purchase workflows and as a role that creates calendar
+  entries, but no FACULTY role existed in the M4 seed.
+- **Resolution**: Added to the M5b seed:
+  - `FACULTY` — basic faculty role; can submit purchase requests (M7), create
+    Phase 3 calendar entries, and appear as approval-process requestor.
+  - `CESRC_COORDINATOR` — Centre for Excellence in Sports, Recreation &
+    Culture coordinator.
+  - `CENTRE_COORDINATOR` — generic centre coordinator.
+  - `LIBRARIAN` — library management role.
+  - `PLACEMENT_OFFICER` — placement cell role.
+  These roles participate in calendar, approval, and config flows. Their
+  specific permission grants are documented in `scripts/seed.py`.
+
+---
+
+## E-010 — Dean role collapse: single DEAN with school scope
+
+- **Status**: Resolved-at-M5b.
+- **Source**: M5b gate verification round 2 — stakeholder review of seeded
+  role catalog.
+- **Gap in v3 RFP**: The RFP references "Dean of Sciences", "Dean of
+  Humanities", etc. as distinct individuals. The M4 seed modeled these as
+  separate role codes (`DEAN_SCI`, `DEAN_HSS`, `DEAN_LL`, `DEAN_MC`), each
+  with its own permission grants. This created four separate permission sets
+  for functionally identical roles, and made letterhead/role-email
+  configuration per-Dean rather than per-role-with-scope.
+- **Resolution**: At M5b, the four `DEAN_*` variants were collapsed into a
+  single `DEAN` role. Each Dean's school is expressed via `UserRole.scope_id`
+  pointing to their school's UUID — the same scoping mechanism used for HOD
+  (scoped to department). The `dean_sci` seeded user holds `DEAN` with
+  `scope_type="school"`, `scope_id=<Sciences school UUID>`.
+  - Letterheads use the `DEAN` role code (one letterhead for all Deans).
+  - Role-emails use `DEAN` with scope to distinguish per-school inboxes.
+  - Calendar entries created by a Dean carry `owner_role_code="DEAN"` and
+    resolve the scope label via the shared scope-label resolver.
+  - This aligns with the M5a decision that letterhead is per-role, no scope.
