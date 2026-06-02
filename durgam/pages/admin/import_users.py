@@ -85,8 +85,12 @@ def admin_import_users() -> rx.Component:
         nav_shell(),
         rx.box(
             rx.hstack(
-                rx.link("← Admin", href="/admin", color="var(--color-primary)",
-                        font_size="0.875rem"),
+                rx.cond(
+                    BulkImportState.has_admin_access,
+                    rx.link("← Admin", href="/admin", color="var(--color-primary)",
+                            font_size="0.875rem"),
+                    rx.fragment(),
+                ),
                 rx.heading("Bulk Import", size="5", font_family="var(--font-sans)"),
                 gap="1rem", align="center", margin_bottom="1rem",
             ),

@@ -2,6 +2,7 @@
 
 import reflex as rx
 
+from durgam.api import DOWNLOAD_PREFIX
 from durgam.pages.components import (
     admin_page,
     config_toast,
@@ -53,8 +54,8 @@ def _kebab(row: dict) -> rx.Component:
                     row["appt_file_id"] != "",
                     rx.menu.item(
                         "Download Appointment Letter",
-                        on_click=CounsellorConfigState.download_document(  # type: ignore[call-arg, func-returns-value]
-                            row["appt_file_id"], "appointment_letter.pdf",
+                        on_click=rx.redirect(
+                            DOWNLOAD_PREFIX + "/api/files/" + row["appt_file_id"],
                         ),
                     ),
                     rx.fragment(),
@@ -63,8 +64,8 @@ def _kebab(row: dict) -> rx.Component:
                     row["qual_file_id"] != "",
                     rx.menu.item(
                         "Download Qualification Proof",
-                        on_click=CounsellorConfigState.download_document(  # type: ignore[call-arg, func-returns-value]
-                            row["qual_file_id"], "qualification_proof.pdf",
+                        on_click=rx.redirect(
+                            DOWNLOAD_PREFIX + "/api/files/" + row["qual_file_id"],
                         ),
                     ),
                     rx.fragment(),

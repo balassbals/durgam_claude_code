@@ -60,6 +60,7 @@ class BulkImportState(BaseState):
     can_import_users: bool = False
     can_import_courses: bool = False
     can_import_programs: bool = False
+    has_admin_access: bool = False
 
     preview_valid: list[dict[str, str]] = []
     preview_invalid: list[dict[str, str]] = []
@@ -127,6 +128,7 @@ class BulkImportState(BaseState):
             self.can_import_users = can(uid, "write", "user", scope_type=None, scope_id=None, session=session)
             self.can_import_courses = can(uid, "write", "course_import", scope_type=None, scope_id=None, session=session)
             self.can_import_programs = can(uid, "write", "program_import", scope_type=None, scope_id=None, session=session)
+            self.has_admin_access = can(uid, "read", "user", scope_type=None, scope_id=None, session=session)
 
         if not self._can_current_type():
             for t in ("users", "courses", "programs"):
