@@ -1,7 +1,7 @@
 # Configuration Module
 
 **RFP reference:** §9.3  
-**Milestone:** M3  
+**Milestones:** M3, M4, M5a, M5b  
 **Gate clause:** "All four campuses, four schools, ten departments, sub-departments, centres seeded; one program seeded with full PEO/PO/PSO/regulation/scheme/exit-level data."  
 **Extended by E-001:** University and department vision/mission management; viewable by all authenticated users.
 
@@ -9,7 +9,7 @@
 
 ## Overview
 
-The Configuration module manages the organisational core of SSSIHL: campuses, schools, departments, centres, programs, courses, vision/mission, and singleton operational settings (class timings, working days). It is split into:
+The Configuration module manages the organisational core of SSSIHL: campuses, schools, departments, centres, programs, courses, vision/mission, singleton operational settings (class timings, working days), personnel assignments (counsellors, mentors, class teachers/coordinators, visiting faculty), timetables, approval processes, purchase policy rules, and bulk data import. It is split into:
 
 - **Admin config pages** (`/admin/config/*`) — write/configure access; gated by role.
 - **About pages** (`/about/*`) — read-only; accessible to all authenticated users.
@@ -50,6 +50,18 @@ The Configuration module manages the organisational core of SSSIHL: campuses, sc
 | FileAsset | `file_assets` | Cross-cutting; `storage_key` + `purpose` field for permission escalation |
 | LetterheadAsset | `letterhead_assets` | Partial unique indexes: global `(role_code)` + scoped `(role_code, scope_type, scope_id)` WHERE `is_deleted=false` |
 | TemplateAsset | `template_assets` | Partial unique index on `template_type` WHERE `is_deleted=false`; types: `bos`, `mom`, `vac` |
+| DocumentTemplate | `document_templates` | E-005 unification of LetterheadAsset + TemplateAsset; one letterhead per `(purpose, role_code)` |
+| MentalHealthCounsellor | `mental_health_counsellors` | AY-scoped; unique `(academic_year_id, name)` WHERE `is_deleted=false` |
+| FacultyMentorAssignment | `faculty_mentor_assignments` | AY-scoped; FK `department_id`; thin UI at M5b, rich UI at M14 |
+| ClassTeacherAssignment | `class_teacher_assignments` | AY-scoped; FK `department_id`; unique `(academic_year_id, department_id, year_of_study, section)` |
+| ClassCoordinatorAssignment | `class_coordinator_assignments` | AY-scoped; FK `department_id`; unique `(academic_year_id, department_id, year_of_study)` |
+| VisitingFaculty | `visiting_faculty` | FK `department_id`; unique `(department_id, name)` WHERE `is_deleted=false` |
+| NonOwnedCourse | `non_owned_courses` | FK `course_id`, `owning_department_id`, `teaching_department_id`; unique on `(course_id, teaching_department_id)` |
+| UGTimetable | `ug_timetables` | AY-scoped; `year_of_study` (1 or 2); Director's office |
+| ApprovalProcess | `approval_processes` | Unique `process_type` WHERE `is_deleted=false`; `ordered_steps` JSONB |
+| PurchaseProcedureRule | `purchase_procedure_rules` | Unique `(fund_source, tier)` WHERE `is_deleted=false`; `amount_floor`/`amount_ceiling` with overlap validation |
+| PurchaseCommitteeTemplate | `purchase_committee_templates` | Unique `committee_type` WHERE `is_deleted=false`; `eligible_designations` ordered JSONB |
+| Designation | `designations` | Extensible faculty designation config; unique `code`; ordered by `rank` |
 
 All entities inherit `TimestampedSoftDelete` (id UUID v4, created_at, updated_at, is_deleted, etc.).
 
@@ -76,6 +88,19 @@ All entities inherit `TimestampedSoftDelete` (id UUID v4, created_at, updated_at
 | `UploadService` | `upload(data, name, mime, actor, purpose)` | Validates, hashes, stores via backend; returns FileAsset |
 | `LetterheadAssetService` | `upload_letterhead`, `soft_delete`, `list_all` | MIME filter (PDF/PNG/JPG); max 5 MB; replace = soft-delete old + upload new |
 | `TemplateAssetService` | `upload_template`, `soft_delete`, `list_all` | Type-specific MIME (bos/mom=DOCX, vac=PPTX); max 2 MB; replace = soft-delete old + upload new |
+| `DocumentTemplateService` | `upload`, `soft_delete`, `list_all`, `get_for_scope` | E-005 unified template management; scope-aware |
+| `MentalHealthCounsellorService` | `create`, `update`, `soft_delete`, `list_by_ay`, `export_docx` | AY-scoped; DOCX export with Director letterhead |
+| `FacultyMentorAssignmentService` | `create`, `update`, `soft_delete`, `list_by_ay` | AY-scoped; thin management (rich UI at M14) |
+| `ClassTeacherAssignmentService` | `create`, `update`, `soft_delete`, `list_by_ay` | AY-scoped; unique per (AY, dept, year, section) |
+| `ClassCoordinatorAssignmentService` | `create`, `update`, `soft_delete`, `list_by_ay` | AY-scoped; unique per (AY, dept, year) |
+| `VisitingFacultyService` | `create`, `update`, `soft_delete`, `list_by_department` | Per-department external personnel (E-003) |
+| `NonOwnedCourseService` | `create`, `update`, `soft_delete`, `list_all` | Cross-department course sharing |
+| `UGTimetableService` | `create`, `update`, `soft_delete`, `list_by_ay` | AY-scoped; year 1/2; Director's office |
+| `ApprovalProcessService` | `create`, `update`, `soft_delete`, `list_all` | Ordered approval steps per process type |
+| `PurchaseProcedureRuleService` | `create`, `update`, `soft_delete`, `list_all` | Overlap validation with self-exclusion on update (DD-M5b-4) |
+| `PurchaseCommitteeTemplateService` | `create`, `update`, `soft_delete`, `list_all` | `eligible_designations` ordered JSONB + `faculty_member_count` (DD-M5b-2) |
+| `DesignationService` | `create`, `update`, `soft_delete`, `list_all` | Ordered by rank; extensible config (DD-M5b-3) |
+| `BulkImportService` | `validate_user_csv`, `commit_user_import`, `validate_course_csv`, `commit_course_import`, `validate_program_csv`, `commit_program_import` | Two-stage validate→commit; users (M2), courses + programs (M5b); faculty/student deferred to M10/M12 |
 
 ---
 
@@ -103,6 +128,18 @@ All entities inherit `TimestampedSoftDelete` (id UUID v4, created_at, updated_at
 | `/admin/config/role-emails` | `role_email:write:*` | `RoleEmailConfigState` | SYSTEM_ADMIN, Registrar family |
 | `/admin/config/letterheads` | `letterhead_asset:write:*` | `LetterheadConfigState` | SYSTEM_ADMIN, Registrar family |
 | `/admin/config/templates` | `template_asset:write:*` | `TemplateConfigState` | SYSTEM_ADMIN, IQAC_COORDINATOR |
+| `/admin/config/counsellors` | `mental_health_counsellor:write:*` | `CounsellorConfigState` | SYSTEM_ADMIN, DIRECTOR |
+| `/admin/config/faculty-mentors` | `faculty_mentor_assignment:write:*` | `FacultyMentorConfigState` | SYSTEM_ADMIN, DIRECTOR |
+| `/admin/config/class-teachers` | `class_teacher_assignment:write:*` | `ClassTeacherConfigState` | SYSTEM_ADMIN |
+| `/admin/config/class-coordinators` | `class_coordinator_assignment:write:*` | `ClassCoordinatorConfigState` | SYSTEM_ADMIN |
+| `/admin/config/visiting-faculty` | `visiting_faculty:write:*` | `VisitingFacultyConfigState` | SYSTEM_ADMIN |
+| `/admin/config/non-owned-courses` | `non_owned_course:write:*` | `NonOwnedCourseConfigState` | SYSTEM_ADMIN |
+| `/admin/config/ug-timetable` | `ug_timetable:write:*` | `UGTimetableConfigState` | SYSTEM_ADMIN, DIRECTOR |
+| `/admin/config/approval-processes` | `approval_process:write:*` | `ApprovalProcessConfigState` | SYSTEM_ADMIN |
+| `/admin/config/purchase-rules` | `purchase_procedure_rule:write:*` | `PurchaseRuleConfigState` | SYSTEM_ADMIN |
+| `/admin/config/purchase-committees` | `purchase_committee_template:write:*` | `PurchaseCommitteeConfigState` | SYSTEM_ADMIN |
+| `/admin/config/designations` | `designation:write:*` | `DesignationConfigState` | SYSTEM_ADMIN |
+| `/admin/import` | `user:write:*` + fine-grained `can()` for `course:write` / `program:write` | `BulkImportState` | SYSTEM_ADMIN |
 
 ### About pages (read-only, all authenticated users)
 
@@ -149,6 +186,14 @@ These patterns are canonical (see CLAUDE.md for full examples):
 14. **`from __future__ import annotations`** — required in all service files to avoid `list` builtin shadowing (see `list` method naming note below).
 
 15. **Never name a service method `list`** — shadows the Python builtin; use `list_all`, `list_campuses`, etc.
+
+---
+
+## UI Principles (from M5b)
+
+1. **All role-code fields must be sourced from the live roles table** via `BaseState._load_role_options()`. Single-role fields use `rx.select`. Multi-role fields use the `role_multi_select()` checkbox component from `durgam/pages/components.py`. Free-text role code entry is prohibited.
+
+2. **Designation fields use `BaseState._load_designation_options()`** and the same `role_multi_select()` component (it accepts any `options` list with `code`/`label` dicts).
 
 ---
 
@@ -222,5 +267,9 @@ superseded by E-005).
 
 | Milestone | What it adds to this module |
 |---|---|
-| **M5b** (Configuration — Assignments) | MentalHealthCounsellor roster, FacultyMentorAssignment, ClassTeacherAssignment, ClassCoordinatorAssignment, UGTimetable |
+| **M7** (Purchase & Inventory) | Rank-preference enforcement, availability/fatigue check, justification field (require M10 Faculty + M7 purchase-request artifact) |
+| **M10** (Faculty) | Faculty model enables rich assignment UI + committee member selection; faculty bulk import |
+| **M11** (Projects & Research) | Project-fund link to PI's faculty record |
+| **M12** (Student) | Student model enables rich class-teacher/coordinator UI; student bulk import |
 | **M13** (Program & Course Management) | Rich edit UI for Program sub-entities (PEO/PO/PSO forms, regulation editor, scheme builder, specialisation editor, exit-level editor); Course extended fields (course_type, delivery_mode, IKS flags); credit-hour ratio per ProgramRegulation |
+| **M14** (Department) | Rich UI for FacultyMentor, ClassTeacher, ClassCoordinator assignments (thin UI shipped at M5b) |

@@ -223,13 +223,25 @@ class CalendarEntryConfigState(BaseState):
         svc = _svc(session)
         all_entries = svc.list_by_ay(UUID(self.selected_ay_id))
 
+        from durgam.scopes.registry import resolve_scope_label
+        role_name_map: dict[str, str] = {}
+        for r in session.exec(select(Role).where(Role.is_deleted == False)).all():  # noqa: E712
+            role_name_map[r.code] = r.name
+
+        def _enrich_role(code: str, scope_type: str | None = None, scope_id=None) -> str:
+            name = role_name_map.get(code, code)
+            if scope_type and scope_id:
+                scope_lbl = resolve_scope_label(scope_type, str(scope_id), session)
+                return f"{name} ({scope_lbl})"
+            return name
+
         seen_roles: set[str] = set()
         for e in all_entries:
             if e.owner_role_code not in seen_roles:
                 seen_roles.add(e.owner_role_code)
                 self.owner_role_options.append({
                     "value": e.owner_role_code,
-                    "label": e.owner_role_code,
+                    "label": _enrich_role(e.owner_role_code),
                 })
         self.owner_role_options.sort(key=lambda o: o["label"])
 
@@ -268,7 +280,7 @@ class CalendarEntryConfigState(BaseState):
                 "type_raw": e.entry_type,
                 "starts_at": e.starts_at.strftime("%Y-%m-%d %H:%M"),
                 "ends_at": e.ends_at.strftime("%Y-%m-%d %H:%M"),
-                "owner_role": e.owner_role_code,
+                "owner_role": _enrich_role(e.owner_role_code, e.scope_type, e.scope_id),
                 "owner_user_id": str(e.owner_user_id),
                 "is_owner": "1" if str(e.owner_user_id) == current_user_id else "0",
                 "notes": e.notes or "",
@@ -550,6 +562,16 @@ class CalendarEntryConfigState(BaseState):
             entries_raw = svc.list_by_ay(UUID(self.selected_ay_id))
             ay_code = self._get_ay_code()
 
+            from durgam.scopes.registry import resolve_scope_label
+            scope_labels: dict[str, str] = {}
+            for e in entries_raw:
+                if e.scope_type and e.scope_id:
+                    key = f"{e.scope_type}:{e.scope_id}"
+                    if key not in scope_labels:
+                        scope_labels[key] = resolve_scope_label(
+                            e.scope_type, str(e.scope_id), session,
+                        )
+
         export_svc = CalendarExportService()
         ext_map = {
             "csv": "csv",
@@ -559,7 +581,7 @@ class CalendarEntryConfigState(BaseState):
         }
         ext = ext_map[fmt]
         method = getattr(export_svc, f"export_{fmt}")
-        data = method(entries_raw, ay_code)
+        data = method(entries_raw, ay_code, scope_labels=scope_labels)
         filename = f"calendar_{ay_code}.{ext}"
         return rx.download(data=data, filename=filename)
 

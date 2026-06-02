@@ -243,3 +243,252 @@ chains). An admin creating a role scoped to a committee would need
   for it before the scope-type count grows.
 
 **Disposition**: No code change at M5a. M5b planning must address this.
+
+---
+
+## E-007 — CPC / purchase approval topology and ownership: concurrent for committee tiers, sequential for no-committee tiers; Finance owns the policy, faculty assembles per-purchase at runtime; §9.5's flat sequential channel is incomplete
+
+**Status**: Acknowledged. Configuration → M5b. Runtime → M7.
+
+**Source**: Stakeholder correction during M5b planning (2026-05-26), read
+against `docs/4384-Purchase_Procedures_of_the_Institute.PDF` and RFP §9.5.
+
+**Gap in v3 RFP**: §9.5 describes the CPC fund-release flow as a single
+ordered sequential channel: "HoD/AHoD → Registrar Office → Finance Officer
+(recommend) → CPC Chairperson → VC." This is incomplete on two counts —
+topology and ownership.
+
+### Topology
+
+The real process has two distinct topologies, selected by whether a purchase
+committee is required (which is determined by the spend tier):
+
+1. **Committee tiers (concurrent — tiers 3–5).** A committee exists to
+   deliberate together; concurrent mutually-visible comment is the meaning of
+   "committee":
+   - The purchaser (Faculty / PI) submits the proposal.
+   - All committee members receive concurrent read + comment access; comments
+     and recommendations are mutually visible to all members.
+   - The purchaser may revise the proposal in light of comments and resubmit
+     (revise-and-resubmit loop).
+   - Escalation topology differs by committee type:
+     - **Central Purchase Committee**: Registrar (a committee member) takes
+       the proposal to VC; decision returns with copy to all members.
+     - **Campus Purchase Committee** (Director is NOT a member): the purchaser
+       invites the campus Director to view the proposal together with all
+       comments; Director raises to Registrar → VC; decision returns with copy
+       to all committee members AND the involved Director.
+
+2. **No-committee tiers (sequential — tiers 1–2).** Purchaser → HoD/AHoD
+   (AHoD forwards to HoD) → then Director OR Dean of School. The HoD chooses
+   the onward route from a dropdown of eligible roles, because the approving
+   authority may change over time (e.g. a Dean may become the approver).
+
+**Why the distinction is correct**: the spend threshold is the switch between
+the two topologies. Committee = none → sequential. Committee present →
+concurrent. These are not two ways of doing one thing; they are fundamentally
+different runtime shapes.
+
+### Candidate-set semantic for `approving_authority_role_codes`
+
+The `PurchaseProcedureRule.approving_authority_role_codes` JSONB list uses
+candidate-set semantics, NOT sequential-chain semantics:
+
+- **Position 0** is the immediate next-step approver. M7 routes the request
+  there automatically.
+- **Positions 1+** are the unordered candidate pool. The position-0 approver
+  picks ONE from this set at request time (M7 runtime prompts the choice).
+
+Example: `["HOD", "DIRECTOR", "DEAN"]` means HoD is the immediate next-step
+approver; HoD then chooses either Director or Dean as the onward approver.
+This is NOT a three-step sequential chain.
+
+For strictly-sequential tiers (only one approving authority), the list is a
+single-element list like `["REGISTRAR"]`.
+
+Resolved at M5b gate verification round 2.
+
+### Ownership (who configures what)
+
+There are three distinct concerns with distinct owners:
+
+1. **The tier table (institutional purchase policy) — owned by Finance
+   Officer / Finance Office.** Floor/ceiling amounts, minimum-quotes
+   requirement and count, comparative-statement requirement, committee level,
+   and the fund-source definitions (institute_budgeted / projects / ugc /
+   other) are the standing institutional ruleset. Finance configures this once
+   and edits it when the procedure changes. This is NOT re-entered per
+   purchase. (`PurchaseProcedureRule`, M5b.)
+
+2. **The committee templates (standing composition policy) — owned by Finance
+   Officer / Finance Office.** The editable definition of "a Central Purchase
+   Committee is composed of {these roles}; external expert optional; escalation
+   designate = Registrar; topology = concurrent" and the campus equivalent.
+   When composition changes (e.g. a Dean becomes a mandatory member), the
+   template row is edited — no code change. (`PurchaseCommitteeTemplate`, M5b.)
+
+3. **Per-purchase tier selection + committee assembly — performed by the
+   purchasing Faculty at request time (M7 runtime).** The faculty selects the
+   row that fits their purchase (amount + fund source → tier → committee
+   required or not) and, if a committee is required, assembles the specific
+   committee by instantiating the template (naming the members, adding the
+   named external expert, inviting the Director in the campus case). This is a
+   runtime act, NOT configuration. Faculty therefore receives NO purchase-
+   config write permission at M5b; the faculty-facing write is at M7 request
+   time.
+
+SysAdmin can edit the Finance-owned policy via its existing global
+`('*','*','global')` permission; no explicit grant is added.
+
+### Schema implication (§8.4)
+
+The `ApprovalStep` model encodes a sequential single-decision-per-stage chain.
+It cannot express concurrent committee deliberation (N members commenting in
+parallel, mutual visibility, proposal versioning, revise-and-resubmit). M7 must
+either extend the schema with a collaboration sub-model for committee-type
+processes, or model committee deliberation as a distinct entity that the engine
+branches into. This is an M7 design decision; E-007 records that the sequential
+schema is insufficient for the committee case.
+
+### External expert participation (per-purchase, M7 runtime; template flags the mode)
+
+The committee template carries the allowed external-expert mode; the faculty
+applies it per purchase:
+- `guest_user`: the faculty requests SysAdmin to create a time-boxed guest-role
+  user; the expert logs in and comments directly. Account creation is a
+  deliberate audited human action by SysAdmin — the system NEVER auto-creates
+  the guest account.
+- `proxied_with_proof`: the faculty enters the expert's recommendation
+  themselves, with the expert's signed document uploaded as proof (PDF via M5a
+  UploadService/FileAsset).
+
+### Project-fund → PI-project link (forward-concern, depends on M11)
+
+When a purchase draws on `fund_source = projects` (or `ugc` where project-
+linked), the purchase must link to the specific project on which the faculty is
+PI. The PI↔Project relationship lives in the Faculty Research module (M11:
+`FacultyResearchProject`, sanctioned grants, "request to release funds
+sanctioned as PI" per §9.7). M5b's tier table models `fund_source` as an enum
+ONLY; it does NOT model the project link. The project-fund→PI-project linkage
+is an M7+ runtime concern dependent on M11. M7 must not be considered complete
+on the purchase flow until this link is wired once M11 exists. Recorded here so
+it is not silently dropped between M5b, M7 and M11.
+
+### Disposition for M5b (config only)
+
+- `PurchaseProcedureRule` tier config (Finance-owned): per tier per fund
+  source — floor/ceiling, min-quotes flag + count, comparative-statement flag,
+  committee_level (none | campus_purchase_committee |
+  central_purchase_committee). committee_level implies topology (none →
+  sequential; committee → concurrent).
+- `PurchaseCommitteeTemplate` config (Finance-owned): per committee type —
+  member-role set (flexibly editable), escalation designate, allowed
+  external_expert_mode, and the no-committee onward-route options (the eligible
+  roles the HoD may pick from). Editable so procedure changes need no code
+  change.
+- Seed the `CPC_FUND_RELEASE` `ApprovalProcess` row for the representable parts.
+- NO faculty purchase-config write at M5b. NO runtime.
+
+### Disposition for M7 (runtime — do NOT build at M5b)
+
+- Per-purchase tier selection + committee assembly by the purchasing faculty.
+- Concurrent committee runtime: parallel member comment access, mutual
+  visibility, proposal versioning + revise-and-resubmit, per-committee
+  escalation topology (central: Registrar → VC → return-copy-all; campus:
+  invite-Director → Registrar → VC → return-copy-all + Director),
+  decision-return-with-copy.
+- Sequential no-committee runtime: purchaser → HoD/AHoD → HoD → Director or
+  Dean per the configured route.
+- Resolution of the §8.4 `ApprovalStep` schema insufficiency.
+- The project-fund → PI-project link (depends on M11).
+
+### M7/M10 forward-concern: rank-preference enforcement, availability, justification
+
+The following are M7 RUNTIME concerns that depend on the Faculty model (M10).
+M5b stores the ranked designation policy via `PurchaseCommitteeTemplate.
+eligible_designations` (ordered list) and `faculty_member_count`; it enforces
+nothing.
+
+1. **Rank-preference enforcement**: "if enough Senior Professors are available
+   across different departments, faculty cannot pick lower-ranked designations."
+   Requires M10 `Faculty` to know who holds which designation and is available.
+2. **Availability/fatigue check**: "can't repeatedly pick the same people for
+   consecutive committees." Requires M7 purchase-request history + M10 Faculty.
+3. **Justification field**: "faculty must justify the committee composition"
+   (why these specific people, why a lower rank was chosen if higher-ranked
+   faculty exist). This is captured on the purchase-request artifact (M7), not
+   on the committee template (M5b).
+
+M7 must implement all three. The `eligible_designations` order (highest rank
+first) is the policy input; M7's committee-assembly UI enforces it.
+
+**Read by**: M5b planning (config), M7 planning (runtime), M10 planning
+(Faculty model), M11 planning (project-fund link). Supersedes the sequential
+channel phrasing of §9.5 for the CPC/purchase case.
+
+---
+
+## E-008 — Per-entity bulk-import permissions
+
+- **Status**: Resolved-at-M5b.
+- **Source**: Stakeholder confirmation during M5b-R3 gate verification.
+- **Gap in v3 RFP**: §16 describes bulk import as a SysAdmin function. The informal
+  requirements specify that HoD/AHoD/HoD-Office should bulk-import courses and
+  Registrar/Registrar-Office/Deputy-Registrar should bulk-import programs.
+- **Resolution**: Two new permission resources:
+  - `program_import:write:*` — granted to Registrar family (REGISTRAR,
+    REGISTRAR_OFFICE, DEPUTY_REGISTRAR).
+  - `course_import:write:*` — granted to HOD family (HOD, AHOD) and HOD_OFFICE.
+  - Users tab retains `user:write:*` gate (SysAdmin-only).
+  - The bulk import nav entry uses `permission_any` so any user with at least one
+    import permission sees the link. The on_load guard checks per-type permissions.
+  - SysAdmin retains access to all three import types via global permission grant.
+
+**Read by**: M5b implementation, any future milestone that adds entity-specific
+import UIs.
+
+---
+
+## E-009 — FACULTY role and coordinator roles added to role catalog at M5b
+
+- **Status**: Resolved-at-M5b.
+- **Source**: M5b implementation — informal requirements and operational needs.
+- **Gap in v3 RFP**: §8.5 lists role codes but does not include FACULTY as a
+  distinct role (only HOD, AHOD, etc. — all of which are faculty who hold an
+  administrative appointment). The informal requirements reference "faculty"
+  as a requestor in purchase workflows and as a role that creates calendar
+  entries, but no FACULTY role existed in the M4 seed.
+- **Resolution**: Added to the M5b seed:
+  - `FACULTY` — basic faculty role; can submit purchase requests (M7), create
+    Phase 3 calendar entries, and appear as approval-process requestor.
+  - `CESRC_COORDINATOR` — Centre for Excellence in Sports, Recreation &
+    Culture coordinator.
+  - `CENTRE_COORDINATOR` — generic centre coordinator.
+  - `LIBRARIAN` — library management role.
+  - `PLACEMENT_OFFICER` — placement cell role.
+  These roles participate in calendar, approval, and config flows. Their
+  specific permission grants are documented in `scripts/seed.py`.
+
+---
+
+## E-010 — Dean role collapse: single DEAN with school scope
+
+- **Status**: Resolved-at-M5b.
+- **Source**: M5b gate verification round 2 — stakeholder review of seeded
+  role catalog.
+- **Gap in v3 RFP**: The RFP references "Dean of Sciences", "Dean of
+  Humanities", etc. as distinct individuals. The M4 seed modeled these as
+  separate role codes (`DEAN_SCI`, `DEAN_HSS`, `DEAN_LL`, `DEAN_MC`), each
+  with its own permission grants. This created four separate permission sets
+  for functionally identical roles, and made letterhead/role-email
+  configuration per-Dean rather than per-role-with-scope.
+- **Resolution**: At M5b, the four `DEAN_*` variants were collapsed into a
+  single `DEAN` role. Each Dean's school is expressed via `UserRole.scope_id`
+  pointing to their school's UUID — the same scoping mechanism used for HOD
+  (scoped to department). The `dean_sci` seeded user holds `DEAN` with
+  `scope_type="school"`, `scope_id=<Sciences school UUID>`.
+  - Letterheads use the `DEAN` role code (one letterhead for all Deans).
+  - Role-emails use `DEAN` with scope to distinguish per-school inboxes.
+  - Calendar entries created by a Dean carry `owner_role_code="DEAN"` and
+    resolve the scope label via the shared scope-label resolver.
+  - This aligns with the M5a decision that letterhead is per-role, no scope.

@@ -1,4 +1,4 @@
-"""Idempotent seed script for M4 development and CI.
+"""Idempotent seed script for M5b development and CI.
 
 Upserts data keyed on natural identifiers (codes, emails) — never on UUIDs.
 All personal data is synthetic. Real names / emails / IDs are NEVER hardcoded
@@ -28,14 +28,16 @@ from durgam.models.config_anchors import (
     AcademicYear,
     CalendarEntry,
     ClassTimingsConfig,
+    Designation,
+    DocumentTemplate,
     Holiday,
-    LetterheadAsset,
+    PurchaseCommitteeTemplate,
+    PurchaseProcedureRule,
     RoleEmail,
     StudentCategoryCount,
-    TemplateAsset,
     WorkingDaysConfig,
 )
-from durgam.models.crosscutting import FileAsset
+from durgam.models.crosscutting import ApprovalProcess, FileAsset
 from durgam.models.course import Course
 from durgam.models.department import (
     Department,
@@ -113,8 +115,9 @@ def seed(session: Session) -> dict[str, int]:
 
     # ── Roles ─────────────────────────────────────────────────────────────────
     # Role levels reflect organisational hierarchy (OQ-M4-4):
-    # SYSTEM_ADMIN=100 · REGISTRAR family=80-73 · DIRECTOR family=75-69
-    # · IQAC_COORDINATOR=71 · DEAN_*=70 · HOD family=50-42 · STUDENT=10 · BASIC_USER=1
+    # SYSTEM_ADMIN=100 · VC family=90-85 · REGISTRAR/FINANCE=80 · DIRECTOR/CPC_CHAIR=75
+    # · REGISTRAR sub=77-73 · DEPUTY_DIRECTOR=72 · IQAC=71 · DEAN_*=70
+    # · DIRECTOR_OFFICE=69 · HOD family=50-42 · STUDENT=10 · BASIC_USER=1
     # on_conflict_do_update so re-seeding repairs any level drift (e.g. DEAN 50→70).
     roles_data = [
         # Technical admin (cross-cutting; not in org hierarchy)
@@ -129,17 +132,31 @@ def seed(session: Session) -> dict[str, int]:
         {"code": "DIRECTOR_OFFICE",      "name": "Director Office",         "level": 69},
         # IQAC (M4)
         {"code": "IQAC_COORDINATOR",     "name": "IQAC Coordinator",        "level": 71},
-        # School deans (one per school; school.dean_role_code references these)
+        # Dean (school-scoped via UserRole.scope_type='school')
         {"code": "DEAN",                 "name": "Dean",                    "level": 70},
-        {"code": "DEAN_SCI",             "name": "Dean — School of Sciences",                        "level": 70},
-        {"code": "DEAN_HSS",             "name": "Dean — School of Humanities & Social Sciences",    "level": 70},
-        {"code": "DEAN_LL",              "name": "Dean — School of Languages & Literature",          "level": 70},
-        {"code": "DEAN_MC",              "name": "Dean — School of Management & Commerce",           "level": 70},
         {"code": "DEAN_STUDENT_WELFARE", "name": "Dean of Student Welfare",                          "level": 70},
+        {"code": "DEAN_STUDENT_WELFARE_OFFICE", "name": "Dean of Student Welfare Office",              "level": 69},
+        # Academic affairs (M5b — assignment config ownership)
+        {"code": "DEAN_ACADEMIC_AFFAIRS",       "name": "Dean of Academic Affairs",                    "level": 70},
+        {"code": "DEAN_ACADEMIC_AFFAIRS_OFFICE", "name": "Dean of Academic Affairs Office",            "level": 69},
         # HoD family
         {"code": "HOD",                  "name": "Head of Department",                 "level": 50},
         {"code": "AHOD",                 "name": "Associate Head of Department",       "level": 45},
         {"code": "HOD_OFFICE",           "name": "Head of Department Office",          "level": 42},
+        # Vice-Chancellor family (M5b — approver/channel roles for purchase config)
+        {"code": "VC",                   "name": "Vice-Chancellor",                    "level": 90},
+        {"code": "VC_OFFICE",            "name": "Vice-Chancellor's Office",           "level": 85},
+        # Finance (M5b — owns purchase procedure rules + committee templates)
+        {"code": "FINANCE_OFFICER",      "name": "Finance Officer",                    "level": 80},
+        # CPC (M5b — Central Purchase Committee)
+        {"code": "CPC_CHAIRPERSON",      "name": "Central Purchase Committee Chairperson", "level": 75},
+        # Faculty (dept-scoped via UserRole; M10 Faculty model deferred)
+        {"code": "FACULTY",              "name": "Faculty",                            "level": 30},
+        # Library, placements, centres
+        {"code": "LIBRARIAN",            "name": "Librarian",                          "level": 40},
+        {"code": "PLACEMENT_OFFICER",    "name": "Placement Officer",                  "level": 40},
+        {"code": "CESRC_COORDINATOR",    "name": "CESRC Coordinator",                  "level": 40},
+        {"code": "CENTRE_COORDINATOR",   "name": "Centre of Excellence Coordinator",   "level": 40},
         # Students and base
         {"code": "STUDENT",              "name": "Student",                            "level": 10},
         {"code": "BASIC_USER",           "name": "Basic User",                         "level": 1},
@@ -260,6 +277,56 @@ def seed(session: Session) -> dict[str, int]:
         {"resource": "template_asset",             "action": "read",      "scope": "*"},
         {"resource": "template_asset",             "action": "write",     "scope": "*"},
         {"resource": "template_asset",             "action": "delete",    "scope": "*"},
+        # ── M5b new triples ────────────────────────────────────────────────────
+        # Mental health counsellor (Dean SW family + SysAdmin)
+        {"resource": "mental_health_counsellor",   "action": "read",      "scope": "*"},
+        {"resource": "mental_health_counsellor",   "action": "write",     "scope": "*"},
+        {"resource": "mental_health_counsellor",   "action": "delete",    "scope": "*"},
+        # Faculty mentor assignment (Dean SW family + SysAdmin)
+        {"resource": "faculty_mentor_assignment",  "action": "read",      "scope": "*"},
+        {"resource": "faculty_mentor_assignment",  "action": "write",     "scope": "*"},
+        {"resource": "faculty_mentor_assignment",  "action": "delete",    "scope": "*"},
+        # Class teacher assignment (Dean Academic Affairs family + HOD + SysAdmin)
+        {"resource": "class_teacher_assignment",   "action": "read",      "scope": "*"},
+        {"resource": "class_teacher_assignment",   "action": "write",     "scope": "*"},
+        {"resource": "class_teacher_assignment",   "action": "delete",    "scope": "*"},
+        # Class coordinator assignment (Dean Academic Affairs family + HOD + SysAdmin)
+        {"resource": "class_coordinator_assignment", "action": "read",    "scope": "*"},
+        {"resource": "class_coordinator_assignment", "action": "write",   "scope": "*"},
+        {"resource": "class_coordinator_assignment", "action": "delete",  "scope": "*"},
+        # Non-regular faculty (HoD family read/write/delete + SysAdmin; approve = SysAdmin only)
+        {"resource": "non_regular_faculty",          "action": "read",    "scope": "*"},
+        {"resource": "non_regular_faculty",          "action": "write",   "scope": "*"},
+        {"resource": "non_regular_faculty",          "action": "delete",  "scope": "*"},
+        {"resource": "non_regular_faculty",          "action": "approve", "scope": "*"},
+        # Non-owned course (Director family + DAA family + SysAdmin; no department_id)
+        {"resource": "non_owned_course",             "action": "read",    "scope": "*"},
+        {"resource": "non_owned_course",             "action": "write",   "scope": "*"},
+        {"resource": "non_owned_course",             "action": "delete",  "scope": "*"},
+        # UG timetable (Director family + SysAdmin only)
+        {"resource": "ug_timetable",                 "action": "read",    "scope": "*"},
+        {"resource": "ug_timetable",                 "action": "write",   "scope": "*"},
+        {"resource": "ug_timetable",                 "action": "delete",  "scope": "*"},
+        # ── M5b Session 7: Purchase policy & approval config ──────────────────
+        # Purchase procedure rule (Finance Officer only — NOT in _PUBLIC_READ; E-007)
+        {"resource": "purchase_procedure_rule",      "action": "read",    "scope": "*"},
+        {"resource": "purchase_procedure_rule",      "action": "write",   "scope": "*"},
+        {"resource": "purchase_procedure_rule",      "action": "delete",  "scope": "*"},
+        # Purchase committee template (Finance Officer only — NOT in _PUBLIC_READ; E-007)
+        {"resource": "purchase_committee_template",  "action": "read",    "scope": "*"},
+        {"resource": "purchase_committee_template",  "action": "write",   "scope": "*"},
+        {"resource": "purchase_committee_template",  "action": "delete",  "scope": "*"},
+        # Approval process (SysAdmin only via global — NOT in _PUBLIC_READ)
+        {"resource": "approval_process",             "action": "read",    "scope": "*"},
+        {"resource": "approval_process",             "action": "write",   "scope": "*"},
+        {"resource": "approval_process",             "action": "delete",  "scope": "*"},
+        # Designation vocabulary (Finance Officer + SysAdmin)
+        {"resource": "designation",                  "action": "read",    "scope": "*"},
+        {"resource": "designation",                  "action": "write",   "scope": "*"},
+        {"resource": "designation",                  "action": "delete",  "scope": "*"},
+        # M5b-R3 V2 — per-entity bulk-import permissions
+        {"resource": "program_import",               "action": "write",   "scope": "*"},
+        {"resource": "course_import",                "action": "write",   "scope": "*"},
     ]
     perm_inserted = 0
     for p in perms_data:
@@ -309,6 +376,11 @@ def seed(session: Session) -> dict[str, int]:
         ("holiday",                   "read", "*"),
         # M5a — file download permission for all authenticated users
         ("file_asset",                "read", "*"),
+        # M5b — non-owned courses + UG timetable (scheduling info all users see)
+        ("non_owned_course",          "read", "*"),
+        ("ug_timetable",              "read", "*"),
+        # M5b — class coordinator list viewable by all (B1: coordinator is a student)
+        ("class_coordinator_assignment", "read", "*"),
     ]
 
     _REGISTRAR_SPECIFIC = [
@@ -334,6 +406,13 @@ def seed(session: Session) -> dict[str, int]:
         ("letterhead_asset",           "read",      "*"),
         ("letterhead_asset",           "write",     "*"),
         ("letterhead_asset",           "delete",    "*"),
+        # M5b-R3 V1 — Registrar family manages programs
+        ("program",                    "write",     "*"),
+        ("program",                    "delete",    "*"),
+        # M5b-R3 V2 — Registrar family can bulk-import programs
+        ("program_import",             "write",     "*"),
+        # M5b — non-regular faculty approval (Registrar family is also institutional approver)
+        ("non_regular_faculty",        "approve",   "*"),
     ]
 
     _HOD_SPECIFIC = [
@@ -344,6 +423,15 @@ def seed(session: Session) -> dict[str, int]:
         ("calendar_entry",             "read",      "*"),
         ("calendar_entry",             "write",     "*"),
         ("student_category_count",     "read",      "*"),
+        # M5b — non-regular faculty (read/write/delete but NOT approve)
+        ("non_regular_faculty",        "read",      "*"),
+        ("non_regular_faculty",        "write",     "*"),
+        ("non_regular_faculty",        "delete",    "*"),
+        # M5b-R3 V1 — HOD manages courses for their department
+        ("course",                     "write",     "*"),
+        ("course",                     "delete",    "*"),
+        # M5b-R3 V2 — HOD can bulk-import courses
+        ("course_import",              "write",     "*"),
     ]
 
     _DEAN_SPECIFIC = [
@@ -357,10 +445,26 @@ def seed(session: Session) -> dict[str, int]:
     ]
 
     # M4 — Director family can read/write calendar, read student category
+    # M5b — Director family owns counsellor roster + faculty mentor assignments
     _DIRECTOR_SPECIFIC = [
         ("calendar_entry",             "read",      "*"),
         ("calendar_entry",             "write",     "*"),
         ("student_category_count",     "read",      "*"),
+        ("mental_health_counsellor",   "read",      "*"),
+        ("mental_health_counsellor",   "write",     "*"),
+        ("mental_health_counsellor",   "delete",    "*"),
+        ("faculty_mentor_assignment",  "read",      "*"),
+        ("faculty_mentor_assignment",  "write",     "*"),
+        ("faculty_mentor_assignment",  "delete",    "*"),
+        # M5b — non-owned courses (Director + DAA) + UG timetable (Director only)
+        ("non_owned_course",           "read",      "*"),
+        ("non_owned_course",           "write",     "*"),
+        ("non_owned_course",           "delete",    "*"),
+        ("ug_timetable",               "read",      "*"),
+        ("ug_timetable",               "write",     "*"),
+        ("ug_timetable",               "delete",    "*"),
+        # M5b — non-regular faculty approval (Director is institutional approver §7.1)
+        ("non_regular_faculty",        "approve",   "*"),
     ]
 
     # M4 — IQAC can read/write calendar, read student category
@@ -375,10 +479,45 @@ def seed(session: Session) -> dict[str, int]:
     ]
 
     # M4 — Dean of Student Welfare can read/write calendar, read student category
+    # M5b — Dean SW owns counsellor + faculty mentor assignment config
     _DEAN_SW_SPECIFIC = [
         ("calendar_entry",             "read",      "*"),
         ("calendar_entry",             "write",     "*"),
         ("student_category_count",     "read",      "*"),
+        ("mental_health_counsellor",   "read",      "*"),
+        ("mental_health_counsellor",   "write",     "*"),
+        ("mental_health_counsellor",   "delete",    "*"),
+        ("faculty_mentor_assignment",  "read",      "*"),
+        ("faculty_mentor_assignment",  "write",     "*"),
+        ("faculty_mentor_assignment",  "delete",    "*"),
+    ]
+
+    # M5b — Dean Academic Affairs: calendar, student categories, non-owned courses
+    # Class teacher/coordinator read-only (write is HoD-managed, not DAA)
+    _DEAN_AA_SPECIFIC = [
+        ("calendar_entry",             "read",      "*"),
+        ("calendar_entry",             "write",     "*"),
+        ("student_category_count",     "read",      "*"),
+        ("class_teacher_assignment",   "read",      "*"),
+        ("class_coordinator_assignment", "read",    "*"),
+        # M5b — non-owned courses (DAA family; NOT ug_timetable — Director only)
+        ("non_owned_course",           "read",      "*"),
+        ("non_owned_course",           "write",     "*"),
+        ("non_owned_course",           "delete",    "*"),
+    ]
+
+    # M5b — Finance Officer owns purchase procedure rules + committee templates +
+    # designation vocabulary (E-007: "not viewable by others" → NOT in _PUBLIC_READ)
+    _FINANCE_SPECIFIC = [
+        ("purchase_procedure_rule",     "read",   "*"),
+        ("purchase_procedure_rule",     "write",  "*"),
+        ("purchase_procedure_rule",     "delete", "*"),
+        ("purchase_committee_template", "read",   "*"),
+        ("purchase_committee_template", "write",  "*"),
+        ("purchase_committee_template", "delete", "*"),
+        ("designation",                 "read",   "*"),
+        ("designation",                 "write",  "*"),
+        ("designation",                 "delete", "*"),
     ]
 
     role_perm_map: dict[str, list[tuple[str, str, str]]] = {
@@ -390,18 +529,49 @@ def seed(session: Session) -> dict[str, int]:
         "DIRECTOR_OFFICE":      _PUBLIC_READ + _DIRECTOR_SPECIFIC,
         "IQAC_COORDINATOR":     _PUBLIC_READ + _IQAC_SPECIFIC,
         "DEAN":                 _PUBLIC_READ + _DEAN_SPECIFIC,
-        "DEAN_SCI":             _PUBLIC_READ + _DEAN_SPECIFIC,
-        "DEAN_HSS":             _PUBLIC_READ + _DEAN_SPECIFIC,
-        "DEAN_LL":              _PUBLIC_READ + _DEAN_SPECIFIC,
-        "DEAN_MC":              _PUBLIC_READ + _DEAN_SPECIFIC,
         "DEAN_STUDENT_WELFARE": _PUBLIC_READ + _DEAN_SW_SPECIFIC,
-        "HOD":                  _PUBLIC_READ + _HOD_SPECIFIC,
-        "AHOD":                 _PUBLIC_READ + _HOD_SPECIFIC,
+        "DEAN_STUDENT_WELFARE_OFFICE": _PUBLIC_READ + _DEAN_SW_SPECIFIC,
+        "DEAN_ACADEMIC_AFFAIRS": _PUBLIC_READ + _DEAN_AA_SPECIFIC,
+        "DEAN_ACADEMIC_AFFAIRS_OFFICE": _PUBLIC_READ + _DEAN_AA_SPECIFIC,
+        "HOD":                  _PUBLIC_READ + _HOD_SPECIFIC + [
+            ("class_teacher_assignment",   "read",      "*"),
+            ("class_teacher_assignment",   "write",     "*"),
+            ("class_teacher_assignment",   "delete",    "*"),
+            ("class_coordinator_assignment", "read",    "*"),
+            ("class_coordinator_assignment", "write",   "*"),
+            ("class_coordinator_assignment", "delete",  "*"),
+        ],
+        "AHOD":                 _PUBLIC_READ + _HOD_SPECIFIC + [
+            ("class_teacher_assignment",   "read",      "*"),
+            ("class_teacher_assignment",   "write",     "*"),
+            ("class_teacher_assignment",   "delete",    "*"),
+            ("class_coordinator_assignment", "read",    "*"),
+            ("class_coordinator_assignment", "write",   "*"),
+            ("class_coordinator_assignment", "delete",  "*"),
+        ],
         "HOD_OFFICE":           _PUBLIC_READ + [
             ("calendar_entry",             "read",      "*"),
             ("calendar_entry",             "write",     "*"),
             ("student_category_count",     "read",      "*"),
+            # M5b — non-regular faculty read-only
+            ("non_regular_faculty",        "read",      "*"),
+            # M5b-R3 V1 — HoD Office assists with course and dept V&M management
+            ("course",                     "write",     "*"),
+            ("course",                     "delete",    "*"),
+            ("department_vision_mission",  "write",     "department"),
+            # M5b-R3 V2 — HoD Office can bulk-import courses
+            ("course_import",              "write",     "*"),
         ],
+        # M5b — approver/channel roles; no config-write permissions yet (runtime → M7)
+        "VC":                   _PUBLIC_READ,
+        "VC_OFFICE":            _PUBLIC_READ,
+        "FINANCE_OFFICER":      _PUBLIC_READ + _FINANCE_SPECIFIC,
+        "CPC_CHAIRPERSON":      _PUBLIC_READ,
+        "FACULTY":              _PUBLIC_READ,
+        "LIBRARIAN":            _PUBLIC_READ,
+        "PLACEMENT_OFFICER":    _PUBLIC_READ,
+        "CESRC_COORDINATOR":    _PUBLIC_READ,
+        "CENTRE_COORDINATOR":   _PUBLIC_READ,
         "STUDENT":              _PUBLIC_READ,
         "BASIC_USER":           _PUBLIC_READ,
     }
@@ -442,7 +612,7 @@ def seed(session: Session) -> dict[str, int]:
     # ── Users ─────────────────────────────────────────────────────────────────
     # Read-only seeded fixtures (CLAUDE.md Testing rules):
     #   sys_admin / SysAdmin_Dev1!XZ      — SYSTEM_ADMIN
-    #   dean_sci / DeanSci_Dev1!XZ        — DEAN (+ DEAN_SCI added below)
+    #   dean_sci / DeanSci_Dev1!XZ        — DEAN scoped to SCI school
     #   firstlogin_user / FirstLogin_Dev1!XZ — STUDENT, must_change_password=True
     #   inactive_user / Inactive_Dev1!XZ  — STUDENT, is_active=False
     #   student_001 / Student_Dev1!XZ     — STUDENT
@@ -451,6 +621,21 @@ def seed(session: Session) -> dict[str, int]:
     #   director_psn / DirectorPsn_Dev1!XZ — DIRECTOR scoped to PSN (new at M4; scoped role added after campuses)
     #   iqac_user / IqacCoord_Dev1!XZ    — IQAC_COORDINATOR unscoped (new at M4)
     #   dean_sw / DeanSW_Dev1!XZ         — DEAN_STUDENT_WELFARE unscoped (new at M4)
+    #   finance_user / Finance_Dev1!XZ  — FINANCE_OFFICER unscoped (new at M5b)
+    #   daa_user / DeanAA_Dev1!XZ       — DEAN_ACADEMIC_AFFAIRS unscoped (new at M5b)
+    #   registrar_office_user / RegOffice_Dev1!XZ — REGISTRAR_OFFICE (M5b-R2)
+    #   deputy_registrar_user / DeputyReg_Dev1!XZ — DEPUTY_REGISTRAR (M5b-R2)
+    #   hod_office_dmacs / HodOffice_Dev1!XZ — HOD_OFFICE scoped to DMACS (M5b-R2)
+    #   ahod_dmacs / AhodDmacs_Dev1!XZ — AHOD scoped to DMACS (M5b-R2)
+    #   director_office_psn / DirOffice_Dev1!XZ — DIRECTOR_OFFICE scoped to PSN (M5b-R2)
+    #   deputy_director_psn / DeputyDir_Dev1!XZ — DEPUTY_DIRECTOR scoped to PSN (M5b-R2)
+    #   dsw_office_user / DSWOffice_Dev1!XZ — DEAN_STUDENT_WELFARE_OFFICE (M5b-R2)
+    #   daa_office_user / DaaOffice_Dev1!XZ — DEAN_ACADEMIC_AFFAIRS_OFFICE (M5b-R2)
+    #   faculty_user / Faculty_Dev1!XZ — FACULTY scoped to DMACS (M5b-R2)
+    #   librarian_user / Librarian_Dev1!XZ — LIBRARIAN (M5b-R2)
+    #   placement_officer_user / Placement_Dev1!XZ — PLACEMENT_OFFICER (M5b-R2)
+    #   cesrc_coord_user / Cesrc_Dev1!XZ — CESRC_COORDINATOR (M5b-R2)
+    #   center_coord_user / Center_Dev1!XZ — CENTRE_COORDINATOR (M5b-R2)
     users_data = [
         {
             "email": "sys.admin@sssihl.edu.in",
@@ -528,6 +713,113 @@ def seed(session: Session) -> dict[str, int]:
             "full_name": "Dean of Student Welfare",
             "role_code": "DEAN_STUDENT_WELFARE",
             "plain_password": "DeanSW_Dev1!XZ",
+        },
+        # M5b demo users
+        {
+            "email": "finance.officer@sssihl.edu.in",
+            "username": "finance_user",
+            "full_name": "Finance Officer",
+            "role_code": "FINANCE_OFFICER",
+            "plain_password": "Finance_Dev1!XZ",
+        },
+        {
+            "email": "dean.aa@sssihl.edu.in",
+            "username": "daa_user",
+            "full_name": "Dean of Academic Affairs",
+            "role_code": "DEAN_ACADEMIC_AFFAIRS",
+            "plain_password": "DeanAA_Dev1!XZ",
+        },
+        # M5b-R2 demo users (13 new)
+        {
+            "email": "registrar.office@sssihl.edu.in",
+            "username": "registrar_office_user",
+            "full_name": "Registrar Office Staff",
+            "role_code": "REGISTRAR_OFFICE",
+            "plain_password": "RegOffice_Dev1!XZ",
+        },
+        {
+            "email": "deputy.registrar@sssihl.edu.in",
+            "username": "deputy_registrar_user",
+            "full_name": "Deputy Registrar",
+            "role_code": "DEPUTY_REGISTRAR",
+            "plain_password": "DeputyReg_Dev1!XZ",
+        },
+        {
+            "email": "hod.office.dmacs@sssihl.edu.in",
+            "username": "hod_office_dmacs",
+            "full_name": "HoD Office DMACS",
+            "role_code": "BASIC_USER",
+            "plain_password": "HodOffice_Dev1!XZ",
+        },
+        {
+            "email": "ahod.dmacs@sssihl.edu.in",
+            "username": "ahod_dmacs",
+            "full_name": "Associate HoD Mathematics and Computer Science",
+            "role_code": "BASIC_USER",
+            "plain_password": "AhodDmacs_Dev1!XZ",
+        },
+        {
+            "email": "director.office.psn@sssihl.edu.in",
+            "username": "director_office_psn",
+            "full_name": "Director Office Prasanthi Nilayam",
+            "role_code": "BASIC_USER",
+            "plain_password": "DirOffice_Dev1!XZ",
+        },
+        {
+            "email": "deputy.director.psn@sssihl.edu.in",
+            "username": "deputy_director_psn",
+            "full_name": "Deputy Director Prasanthi Nilayam",
+            "role_code": "BASIC_USER",
+            "plain_password": "DeputyDir_Dev1!XZ",
+        },
+        {
+            "email": "dsw.office@sssihl.edu.in",
+            "username": "dsw_office_user",
+            "full_name": "Dean Student Welfare Office Staff",
+            "role_code": "DEAN_STUDENT_WELFARE_OFFICE",
+            "plain_password": "DSWOffice_Dev1!XZ",
+        },
+        {
+            "email": "daa.office@sssihl.edu.in",
+            "username": "daa_office_user",
+            "full_name": "Dean Academic Affairs Office Staff",
+            "role_code": "DEAN_ACADEMIC_AFFAIRS_OFFICE",
+            "plain_password": "DaaOffice_Dev1!XZ",
+        },
+        {
+            "email": "faculty.dmacs@sssihl.edu.in",
+            "username": "faculty_user",
+            "full_name": "Faculty Member DMACS",
+            "role_code": "BASIC_USER",
+            "plain_password": "Faculty_Dev1!XZ",
+        },
+        {
+            "email": "librarian@sssihl.edu.in",
+            "username": "librarian_user",
+            "full_name": "University Librarian",
+            "role_code": "LIBRARIAN",
+            "plain_password": "Librarian_Dev1!XZ",
+        },
+        {
+            "email": "placement@sssihl.edu.in",
+            "username": "placement_officer_user",
+            "full_name": "Placement Officer",
+            "role_code": "PLACEMENT_OFFICER",
+            "plain_password": "Placement_Dev1!XZ",
+        },
+        {
+            "email": "cesrc@sssihl.edu.in",
+            "username": "cesrc_coord_user",
+            "full_name": "CESRC Coordinator",
+            "role_code": "CESRC_COORDINATOR",
+            "plain_password": "Cesrc_Dev1!XZ",
+        },
+        {
+            "email": "centre.coord@sssihl.edu.in",
+            "username": "center_coord_user",
+            "full_name": "Centre of Excellence Coordinator",
+            "role_code": "CENTRE_COORDINATOR",
+            "plain_password": "Center_Dev1!XZ",
         },
     ]
     user_inserted = 0
@@ -657,7 +949,7 @@ def seed(session: Session) -> dict[str, int]:
     ).first()
     _seed_actor_id = sys_admin_user.id if sys_admin_user else None
 
-    # ── Placeholder LetterheadAsset ──────────────────────────────────────────
+    # ── Placeholder DocumentTemplate (letterhead) ──────────────────────────
     # A minimal DOCX so the gate demo has a downloadable letterhead template.
     # DB row creation and file-byte writes are decoupled: uploaded_files/ is
     # gitignored and lost on fresh clone, but the DB persists. The seed must
@@ -674,10 +966,10 @@ def seed(session: Session) -> dict[str, int]:
     _DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
     existing_lh = session.exec(
-        select(LetterheadAsset).where(
-            LetterheadAsset.role_code == "REGISTRAR",
-            LetterheadAsset.scope_type.is_(None),  # type: ignore[union-attr]
-            LetterheadAsset.is_deleted == False,  # noqa: E712
+        select(DocumentTemplate).where(
+            DocumentTemplate.purpose == "letterhead",
+            DocumentTemplate.role_code == "REGISTRAR",
+            DocumentTemplate.is_deleted == False,  # noqa: E712
         )
     ).first()
     lh_inserted = 0
@@ -699,10 +991,9 @@ def seed(session: Session) -> dict[str, int]:
         session.flush()
         session.refresh(fa)
 
-        lh = LetterheadAsset(
+        lh = DocumentTemplate(
+            purpose="letterhead",
             role_code="REGISTRAR",
-            scope_type=None,
-            scope_id=None,
             file_id=fa.id,
             created_by=_seed_actor_id,
             updated_by=_seed_actor_id,
@@ -715,9 +1006,9 @@ def seed(session: Session) -> dict[str, int]:
         if fa and not backend.exists(fa.storage_key):
             backend.put(fa.storage_key, _PLACEHOLDER_DOCX, _DOCX_MIME)
             log.info("seed_file_restored", key=fa.storage_key, asset="letterhead_REGISTRAR")
-    counts["letterhead_assets"] = lh_inserted
+    counts["document_templates_letterhead"] = lh_inserted
 
-    # ── Placeholder TemplateAsset ────────────────────────────────────────────
+    # ── Placeholder DocumentTemplate (BoS template) ─────────────────────────
     # A minimal DOCX so the gate demo has a downloadable BoS template.
     # Same decoupled DB-row/file-byte pattern as letterhead above.
     from io import BytesIO as _BytesIO
@@ -733,9 +1024,10 @@ def seed(session: Session) -> dict[str, int]:
     _TPL_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
     existing_tpl = session.exec(
-        select(TemplateAsset).where(
-            TemplateAsset.template_type == "bos",
-            TemplateAsset.is_deleted == False,  # noqa: E712
+        select(DocumentTemplate).where(
+            DocumentTemplate.purpose == "bos",
+            DocumentTemplate.role_code.is_(None),  # type: ignore[union-attr]
+            DocumentTemplate.is_deleted == False,  # noqa: E712
         )
     ).first()
     tpl_inserted = 0
@@ -758,8 +1050,9 @@ def seed(session: Session) -> dict[str, int]:
         session.flush()
         session.refresh(tpl_fa)
 
-        tpl = TemplateAsset(
-            template_type="bos",
+        tpl = DocumentTemplate(
+            purpose="bos",
+            role_code=None,
             file_id=tpl_fa.id,
             created_by=_seed_actor_id,
             updated_by=_seed_actor_id,
@@ -772,7 +1065,7 @@ def seed(session: Session) -> dict[str, int]:
         if tpl_fa and not backend.exists(tpl_fa.storage_key):
             backend.put(tpl_fa.storage_key, _TPL_DOCX, _TPL_MIME)
             log.info("seed_file_restored", key=tpl_fa.storage_key, asset="template_bos")
-    counts["template_assets"] = tpl_inserted
+    counts["document_templates_bos"] = tpl_inserted
 
     # ── StudentCategoryCount ──────────────────────────────────────────────────
     counts["student_category_counts"] = _exec_insert(
@@ -834,19 +1127,19 @@ def seed(session: Session) -> dict[str, int]:
     }
 
     # ── Schools ───────────────────────────────────────────────────────────────
-    # Gate: "four schools seeded"; dean_role_code is a plain string reference (OQ-M3-6)
+    # Gate: "four schools seeded"; Dean is scoped via UserRole, not per-school column.
     schools_raw = [
-        ("SCI", "School of Sciences",                        "DEAN_SCI"),
-        ("HSS", "School of Humanities and Social Sciences",  "DEAN_HSS"),
-        ("LL",  "School of Languages and Literature",        "DEAN_LL"),
-        ("MC",  "School of Management and Commerce",         "DEAN_MC"),
+        ("SCI", "School of Sciences"),
+        ("HSS", "School of Humanities and Social Sciences"),
+        ("LL",  "School of Languages and Literature"),
+        ("MC",  "School of Management and Commerce"),
     ]
     school_inserted = 0
-    for code, name, dean_code in schools_raw:
+    for code, name in schools_raw:
         school_inserted += _exec_insert(
             session,
             pg_insert(School)
-            .values(code=code, name=name, dean_role_code=dean_code)
+            .values(code=code, name=name)
             .on_conflict_do_nothing(constraint="uq_schools_code"),
         )
     counts["schools"] = school_inserted
@@ -1341,16 +1634,26 @@ def seed(session: Session) -> dict[str, int]:
         counts["working_days_configs"] = 0
 
     # ── Scoped role assignments (requires departments to be seeded first) ─────
-    # dean_sci → DEAN_SCI role (school-level, unscoped)
+    # dean_sci → DEAN role scoped to SCI school
     dean_sci_user = session.exec(
         select(User).where(User.username == "dean_sci")
     ).first()
-    if dean_sci_user:
-        _exec_insert(
-            session,
+    if dean_sci_user and "SCI" in schools:
+        session.execute(
             pg_insert(UserRole)
-            .values(user_id=dean_sci_user.id, role_id=roles["DEAN_SCI"].id)
-            .on_conflict_do_nothing(),
+            .values(
+                user_id=dean_sci_user.id,
+                role_id=roles["DEAN"].id,
+                scope_type="school",
+                scope_id=schools["SCI"].id,
+            )
+            .on_conflict_do_update(
+                index_elements=["user_id", "role_id"],
+                set_={
+                    "scope_type": "school",
+                    "scope_id": schools["SCI"].id,
+                },
+            )
         )
 
     # hod_dmacs → HOD role scoped to DMACS department
@@ -1394,6 +1697,101 @@ def seed(session: Session) -> dict[str, int]:
                     "scope_type": "campus",
                     "scope_id": campuses["PSN"].id,
                 },
+            )
+        )
+
+    # hod_office_dmacs → HOD_OFFICE role scoped to DMACS department (M5b-R2)
+    _hod_office_user = session.exec(
+        select(User).where(User.username == "hod_office_dmacs")
+    ).first()
+    if _hod_office_user and "DMACS" in departments:
+        session.execute(
+            pg_insert(UserRole)
+            .values(
+                user_id=_hod_office_user.id,
+                role_id=roles["HOD_OFFICE"].id,
+                scope_type="department",
+                scope_id=departments["DMACS"].id,
+            )
+            .on_conflict_do_update(
+                index_elements=["user_id", "role_id"],
+                set_={"scope_type": "department", "scope_id": departments["DMACS"].id},
+            )
+        )
+
+    # ahod_dmacs → AHOD role scoped to DMACS department (M5b-R2)
+    _ahod_user = session.exec(
+        select(User).where(User.username == "ahod_dmacs")
+    ).first()
+    if _ahod_user and "DMACS" in departments:
+        session.execute(
+            pg_insert(UserRole)
+            .values(
+                user_id=_ahod_user.id,
+                role_id=roles["AHOD"].id,
+                scope_type="department",
+                scope_id=departments["DMACS"].id,
+            )
+            .on_conflict_do_update(
+                index_elements=["user_id", "role_id"],
+                set_={"scope_type": "department", "scope_id": departments["DMACS"].id},
+            )
+        )
+
+    # director_office_psn → DIRECTOR_OFFICE role scoped to PSN campus (M5b-R2)
+    _dir_office_user = session.exec(
+        select(User).where(User.username == "director_office_psn")
+    ).first()
+    if _dir_office_user and "PSN" in campuses:
+        session.execute(
+            pg_insert(UserRole)
+            .values(
+                user_id=_dir_office_user.id,
+                role_id=roles["DIRECTOR_OFFICE"].id,
+                scope_type="campus",
+                scope_id=campuses["PSN"].id,
+            )
+            .on_conflict_do_update(
+                index_elements=["user_id", "role_id"],
+                set_={"scope_type": "campus", "scope_id": campuses["PSN"].id},
+            )
+        )
+
+    # deputy_director_psn → DEPUTY_DIRECTOR role scoped to PSN campus (M5b-R2)
+    _dep_dir_user = session.exec(
+        select(User).where(User.username == "deputy_director_psn")
+    ).first()
+    if _dep_dir_user and "PSN" in campuses:
+        session.execute(
+            pg_insert(UserRole)
+            .values(
+                user_id=_dep_dir_user.id,
+                role_id=roles["DEPUTY_DIRECTOR"].id,
+                scope_type="campus",
+                scope_id=campuses["PSN"].id,
+            )
+            .on_conflict_do_update(
+                index_elements=["user_id", "role_id"],
+                set_={"scope_type": "campus", "scope_id": campuses["PSN"].id},
+            )
+        )
+
+    # faculty_user → FACULTY role scoped to DMACS department (M5b-R2)
+    _faculty_user = session.exec(
+        select(User).where(User.username == "faculty_user")
+    ).first()
+    if _faculty_user and "DMACS" in departments:
+        session.execute(
+            pg_insert(UserRole)
+            .values(
+                user_id=_faculty_user.id,
+                role_id=roles["FACULTY"].id,
+                scope_type="department",
+                scope_id=departments["DMACS"].id,
+            )
+            .on_conflict_do_update(
+                index_elements=["user_id", "role_id"],
+                set_={"scope_type": "department", "scope_id": departments["DMACS"].id},
             )
         )
 
@@ -1441,6 +1839,219 @@ def seed(session: Session) -> dict[str, int]:
         counts["calendar_entries"] = 3
     else:
         counts["calendar_entries"] = 0
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # M5b Session 7: Purchase Policy & Approval Config (E-007)
+    # ─────────────────────────────────────────────────────────────────────────
+
+    # ── Designation vocabulary (§8.3 — extensible, editable via admin UI) ────
+    designations_raw = [
+        ("senior_professor",    "Senior Professor",    1),
+        ("professor",           "Professor",           2),
+        ("associate_professor", "Associate Professor", 3),
+        ("assistant_professor", "Assistant Professor", 4),
+    ]
+    desig_inserted = 0
+    for code, name, rank in designations_raw:
+        desig_inserted += _exec_insert(
+            session,
+            pg_insert(Designation)
+            .values(code=code, name=name, rank=rank)
+            .on_conflict_do_nothing(constraint="uq_designations_code"),
+        )
+    counts["designations"] = desig_inserted
+
+    # ── PurchaseProcedureRule (10 rows: 5 tiers × 2 fund sources) ────────────
+    # Source: docs/4384-Purchase Procedures of the Institute.PDF
+    # Institute Budgeted Funds tiers:
+    ppr_institute = [
+        {
+            "fund_source": "institute", "tier": 1,
+            "floor_amount": 0, "ceiling_amount": 10_000,
+            "min_quotes_required": False, "min_quote_count": 0,
+            "quote_at_discretion": True,
+            "comparative_statement_required": False,
+            "approving_authority_role_codes": ["DIRECTOR"],
+            "committee_level": None,
+        },
+        {
+            "fund_source": "institute", "tier": 2,
+            "floor_amount": 10_001, "ceiling_amount": 50_000,
+            "min_quotes_required": True, "min_quote_count": 3,
+            "quote_at_discretion": False,
+            "comparative_statement_required": True,
+            "approving_authority_role_codes": ["DIRECTOR"],
+            "committee_level": None,
+        },
+        {
+            "fund_source": "institute", "tier": 3,
+            "floor_amount": 50_001, "ceiling_amount": 499_999,
+            "min_quotes_required": True, "min_quote_count": 3,
+            "quote_at_discretion": False,
+            "comparative_statement_required": True,
+            "approving_authority_role_codes": ["REGISTRAR"],
+            "committee_level": "campus_purchase_committee",
+        },
+        {
+            "fund_source": "institute", "tier": 4,
+            "floor_amount": 500_000, "ceiling_amount": 999_999,
+            "min_quotes_required": True, "min_quote_count": 3,
+            "quote_at_discretion": False,
+            "comparative_statement_required": True,
+            "approving_authority_role_codes": ["VC"],
+            "committee_level": "central_purchase_committee",
+        },
+        {
+            "fund_source": "institute", "tier": 5,
+            "floor_amount": 1_000_000, "ceiling_amount": None,
+            "min_quotes_required": True, "min_quote_count": 3,
+            "quote_at_discretion": False,
+            "comparative_statement_required": True,
+            # BOM (Board of Management) is an offline statutory body;
+            # M7 handles this as offline approval. Stored as literal string,
+            # no FK/join to the roles table.
+            "approving_authority_role_codes": ["BOM"],
+            "committee_level": "central_purchase_committee",
+        },
+    ]
+    # Projects / UGC Funds tiers:
+    ppr_projects = [
+        {
+            "fund_source": "projects_ugc", "tier": 1,
+            "floor_amount": 0, "ceiling_amount": 10_000,
+            "min_quotes_required": False, "min_quote_count": 0,
+            "quote_at_discretion": True,
+            "comparative_statement_required": False,
+            "approving_authority_role_codes": ["HOD", "DIRECTOR", "DEAN"],
+            "committee_level": None,
+        },
+        {
+            # PDF states tier-2 floor as 10,000 (overlapping with tier-1 ceiling).
+            # Normalized to 10,001 to avoid range overlap.
+            "fund_source": "projects_ugc", "tier": 2,
+            "floor_amount": 10_001, "ceiling_amount": 50_000,
+            "min_quotes_required": True, "min_quote_count": 3,
+            "quote_at_discretion": False,
+            "comparative_statement_required": True,
+            "approving_authority_role_codes": ["HOD", "DIRECTOR", "DEAN"],
+            "committee_level": None,
+        },
+        {
+            # PDF states tier-3 floor as 50,000; normalized to 50,001.
+            "fund_source": "projects_ugc", "tier": 3,
+            "floor_amount": 50_001, "ceiling_amount": 499_999,
+            "min_quotes_required": True, "min_quote_count": 3,
+            "quote_at_discretion": False,
+            "comparative_statement_required": True,
+            "approving_authority_role_codes": ["REGISTRAR"],
+            "committee_level": "campus_purchase_committee",
+        },
+        {
+            "fund_source": "projects_ugc", "tier": 4,
+            "floor_amount": 500_000, "ceiling_amount": 999_999,
+            "min_quotes_required": True, "min_quote_count": 3,
+            "quote_at_discretion": False,
+            "comparative_statement_required": True,
+            "approving_authority_role_codes": ["VC"],
+            "committee_level": "central_purchase_committee",
+        },
+        {
+            "fund_source": "projects_ugc", "tier": 5,
+            "floor_amount": 1_000_000, "ceiling_amount": None,
+            "min_quotes_required": True, "min_quote_count": 3,
+            "quote_at_discretion": False,
+            "comparative_statement_required": True,
+            "approving_authority_role_codes": ["VC"],
+            "committee_level": "central_purchase_committee",
+        },
+    ]
+    ppr_inserted = 0
+    for rule in ppr_institute + ppr_projects:
+        ppr_inserted += _exec_insert(
+            session,
+            pg_insert(PurchaseProcedureRule)
+            .values(**rule)
+            .on_conflict_do_nothing(constraint="uq_ppr_fund_source_tier"),
+        )
+    counts["purchase_procedure_rules"] = ppr_inserted
+
+    # ── PurchaseCommitteeTemplate (2 rows) ───────────────────────────────────
+    # Campus purchase committee (E-007):
+    # - Director is NOT a member (director_excluded=True) — Director gives
+    #   comments and forwards. Per PDF: "Director should not be a member of the
+    #   committee as he/she would be giving comments/recommendation and
+    #   forwarding the proposal to Ad-block for approval."
+    #   Forwarding topology: Director → Registrar → VC (captured in notes;
+    #   M7 runtime enforces the actual routing).
+    # - Three faculty members from different departments + HoD of concerned dept.
+    # - eligible_designations is rank-ordered (highest rank first).
+    pct_campus_inserted = _exec_insert(
+        session,
+        pg_insert(PurchaseCommitteeTemplate)
+        .values(
+            committee_type="campus_purchase_committee",
+            eligible_designations=[
+                "senior_professor", "professor", "associate_professor",
+            ],
+            faculty_member_count=3,
+            members_from_different_departments=True,
+            fixed_role_members=["HOD"],
+            director_excluded=True,
+            escalation_designate_role_code=None,
+            external_expert_mode="proxied_with_proof",
+            topology="concurrent",
+            notes=(
+                "Director is NOT a member. Director gives comments/recommendation "
+                "and forwards to Registrar → VC. Three faculty members from "
+                "departments other than the initiating department."
+            ),
+        )
+        .on_conflict_do_nothing(constraint="uq_pct_committee_type"),
+    )
+    # Central purchase committee (E-007):
+    # - Registrar is escalation designate (takes proposal to VC).
+    # - Three faculty from different depts + HoD + Finance Officer + Registrar.
+    pct_central_inserted = _exec_insert(
+        session,
+        pg_insert(PurchaseCommitteeTemplate)
+        .values(
+            committee_type="central_purchase_committee",
+            eligible_designations=[
+                "senior_professor", "professor", "associate_professor",
+            ],
+            faculty_member_count=3,
+            members_from_different_departments=True,
+            fixed_role_members=["HOD", "FINANCE_OFFICER", "REGISTRAR"],
+            director_excluded=False,
+            escalation_designate_role_code="REGISTRAR",
+            external_expert_mode="proxied_with_proof",
+            topology="concurrent",
+            notes=(
+                "Registrar takes proposal to VC. Three faculty members from "
+                "departments other than the initiating department, plus HoD of "
+                "concerned dept, Finance Officer, and Registrar."
+            ),
+        )
+        .on_conflict_do_nothing(constraint="uq_pct_committee_type"),
+    )
+    counts["purchase_committee_templates"] = pct_campus_inserted + pct_central_inserted
+
+    # ── ApprovalProcess — CPC_FUND_RELEASE ───────────────────────────────────
+    cpc_inserted = _exec_insert(
+        session,
+        pg_insert(ApprovalProcess)
+        .values(
+            code="CPC_FUND_RELEASE",
+            title="Central Purchase Committee Fund Release",
+            requestor_role_codes=["HOD", "AHOD"],
+            channel_role_codes=[
+                "REGISTRAR", "FINANCE_OFFICER", "CPC_CHAIRPERSON", "VC",
+            ],
+            is_finance=True,
+        )
+        .on_conflict_do_nothing(constraint="uq_approval_processes_code"),
+    )
+    counts["approval_processes"] = cpc_inserted
 
     session.commit()
     return counts

@@ -17,24 +17,19 @@ class TestCreate:
     def test_empty_code_raises(self):
         svc = _make_svc()
         with pytest.raises(SchoolError, match="code is required"):
-            svc.create("", "Name", "DEAN_X", uuid4())
+            svc.create("", "Name", uuid4())
 
     def test_empty_name_raises(self):
         svc = _make_svc()
         with pytest.raises(SchoolError, match="name is required"):
-            svc.create("SCI", "", "DEAN_SCI", uuid4())
-
-    def test_empty_dean_role_code_raises(self):
-        svc = _make_svc()
-        with pytest.raises(SchoolError, match="Dean role code"):
-            svc.create("SCI", "Sciences", "", uuid4())
+            svc.create("SCI", "", uuid4())
 
     def test_duplicate_code_raises(self):
         repo = MagicMock()
         repo.get_by_code.return_value = MagicMock()
         svc = _make_svc(repo)
         with pytest.raises(SchoolError, match="already in use"):
-            svc.create("SCI", "Sciences", "DEAN_SCI", uuid4())
+            svc.create("SCI", "Sciences", uuid4())
 
     def test_creates_successfully(self):
         repo = MagicMock()
@@ -42,7 +37,7 @@ class TestCreate:
         fake = MagicMock()
         repo.save.return_value = fake
         svc = _make_svc(repo)
-        result = svc.create("SCI", "Sciences", "DEAN_SCI", uuid4())
+        result = svc.create("SCI", "Sciences", uuid4())
         assert result is fake
 
 

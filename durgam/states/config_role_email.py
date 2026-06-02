@@ -10,20 +10,13 @@ from sqlalchemy.exc import IntegrityError
 
 from durgam.auth.decorators import audit_action, require_role
 from durgam.db import open_session
-from durgam.repositories.campus import CampusRepository
-from durgam.repositories.department import DepartmentRepository
 from durgam.repositories.permission import PermissionRepository
 from durgam.repositories.role import RoleRepository
 from durgam.repositories.role_email import RoleEmailRepository
-from durgam.repositories.school import SchoolRepository
-from durgam.services.campus import CampusService
-from durgam.services.department import DepartmentService
+from durgam.scopes.registry import get_scope_type_dropdown_options, load_scope_objects
 from durgam.services.role_admin import RoleAdminService
 from durgam.services.role_email import RoleEmailError, RoleEmailService
-from durgam.services.school import SchoolService
 from durgam.states.base import BaseState
-
-_SCOPE_TYPE_OPTIONS = ["", "campus", "department", "school"]
 
 
 def _svc(session) -> RoleEmailService:
@@ -64,27 +57,9 @@ class RoleEmailConfigState(BaseState):
             self.scope_objects_dropdown = []
             return
         with open_session() as session:
-            if self.form_scope_type == "campus":
-                self.scope_objects_dropdown = [
-                    {"id": str(c.id), "label": f"{c.code} — {c.name}"}
-                    for c in CampusService(CampusRepository(session)).list()
-                ]
-            elif self.form_scope_type == "department":
-                from durgam.repositories.department import SubDepartmentRepository
-                self.scope_objects_dropdown = [
-                    {"id": str(d.id), "label": f"{d.code} — {d.name}"}
-                    for d in DepartmentService(
-                        dept_repo=DepartmentRepository(session),
-                        subdept_repo=SubDepartmentRepository(session),
-                    ).list()
-                ]
-            elif self.form_scope_type == "school":
-                self.scope_objects_dropdown = [
-                    {"id": str(s.id), "label": f"{s.code} — {s.name}"}
-                    for s in SchoolService(SchoolRepository(session)).list()
-                ]
-            else:
-                self.scope_objects_dropdown = []
+            self.scope_objects_dropdown = load_scope_objects(
+                self.form_scope_type, session,
+            )
 
     async def load_role_emails(self) -> None:
         guard = self._config_guard("role_email", "write")
@@ -94,10 +69,13 @@ class RoleEmailConfigState(BaseState):
         self.role_emails = []
         self.show_form = False
         with open_session() as session:
+            from durgam.scopes.registry import resolve_scope_label
             for r in _svc(session).list_all():
                 scope_label = "Global"
-                if r.scope_type:
-                    scope_label = f"{r.scope_type}: {r.scope_id}"
+                if r.scope_type and r.scope_id:
+                    scope_label = resolve_scope_label(
+                        r.scope_type, str(r.scope_id), session,
+                    )
                 self.role_emails.append({
                     "id": str(r.id),
                     "role_code": r.role_code,

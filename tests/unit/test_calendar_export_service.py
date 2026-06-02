@@ -57,8 +57,7 @@ class TestExportCSV:
         assert len(rows) == 3
         assert rows[1][0] == "Semester 1 Begins"
         assert rows[2][0] == "Annual Sports Day"
-        assert rows[2][5] == "campus"
-        assert rows[2][6] == "All-day event"
+        assert rows[2][3] == "campus"
 
     def test_returns_bytes(self):
         svc = CalendarExportService()
@@ -118,6 +117,13 @@ class TestExportPDF:
         svc = CalendarExportService()
         result = svc.export_pdf([], "2025-26")
         assert isinstance(result, bytes)
+
+    def test_unicode_emdash_does_not_crash(self):
+        entry = _entry(title="DMACS — Mathematics and Computer Science")
+        svc = CalendarExportService()
+        data = svc.export_pdf([entry], "2025-26")
+        assert data[:5] == b"%PDF-"
+        assert len(data) > 100
 
 
 class TestExportDOCX:

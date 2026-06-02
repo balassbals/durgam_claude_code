@@ -16,7 +16,7 @@ from durgam.pages.components import (
 from durgam.pages.shared.confirmation_dialog import confirmation_dialog
 from durgam.pages.shared.data_table import TableColumn, data_table
 from durgam.pages.shared.file_upload import file_upload_zone
-from durgam.states.config_letterhead import LetterheadConfigState
+from durgam.states.config_document_template import LetterheadConfigState
 
 
 def _kebab(row: dict) -> rx.Component:
@@ -44,6 +44,12 @@ def _kebab(row: dict) -> rx.Component:
                 ),
             ),
             rx.menu.item(
+                "Replace File",
+                on_click=LetterheadConfigState.open_replace(  # type: ignore[call-arg, func-returns-value]
+                    row["role_code"]
+                ),
+            ),
+            rx.menu.item(
                 "Deactivate",
                 on_click=LetterheadConfigState.open_deactivate_confirm(  # type: ignore[call-arg, func-returns-value]
                     row["id"], row["role_code"]
@@ -68,45 +74,17 @@ def _inline_form() -> rx.Component:
             ),
             rx.vstack(
                 rx.vstack(
-                    rx.text("Role Code", font_size="0.85rem", color="var(--color-muted)"),
-                    rx.input(
+                    rx.text("Role *", font_size="0.85rem", color="var(--color-muted)"),
+                    rx.select.root(
+                        rx.select.trigger(placeholder="Select role"),
+                        rx.select.content(
+                            rx.foreach(
+                                LetterheadConfigState.role_options,
+                                lambda o: rx.select.item(o["label"], value=o["code"]),
+                            ),
+                        ),
                         value=LetterheadConfigState.form_role_code,
                         on_change=LetterheadConfigState.set_form_role_code,
-                        placeholder="e.g. REGISTRAR",
-                        max_length=64,
-                        width="100%",
-                    ),
-                    align="start",
-                    gap="0.25rem",
-                    width="100%",
-                ),
-                rx.vstack(
-                    rx.text(
-                        "Scope Type (optional)",
-                        font_size="0.85rem",
-                        color="var(--color-muted)",
-                    ),
-                    rx.input(
-                        value=LetterheadConfigState.form_scope_type,
-                        on_change=LetterheadConfigState.set_form_scope_type,
-                        placeholder="e.g. department",
-                        max_length=32,
-                        width="100%",
-                    ),
-                    align="start",
-                    gap="0.25rem",
-                    width="100%",
-                ),
-                rx.vstack(
-                    rx.text(
-                        "Scope ID (optional)",
-                        font_size="0.85rem",
-                        color="var(--color-muted)",
-                    ),
-                    rx.input(
-                        value=LetterheadConfigState.form_scope_id,
-                        on_change=LetterheadConfigState.set_form_scope_id,
-                        placeholder="UUID of the scope entity",
                         width="100%",
                     ),
                     align="start",
@@ -223,8 +201,7 @@ def admin_config_letterheads() -> rx.Component:
                     data_table(
                         rows=LetterheadConfigState.letterheads,
                         columns=[
-                            TableColumn(key="role_code", label="Role Code"),
-                            TableColumn(key="scope", label="Scope"),
+                            TableColumn(key="role_code", label="Role"),
                         ],
                         card_primary_key="role_code",
                         is_mobile=False,

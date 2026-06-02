@@ -67,7 +67,7 @@ app.add_page(admin_role_detail, route="/admin/roles/[role_id]",
 app.add_page(admin_permissions, route="/admin/permissions",
              on_load=AdminPermissionsState.load_permissions)
 app.add_page(admin_import_users, route="/admin/import",
-             on_load=BulkImportState.reset_import)
+             on_load=BulkImportState.load_import)
 app.add_page(audit_log, route="/audit", on_load=AuditLogState.load_audit)
 
 # ── M3 Config routes ────────────────────────────────────────────────────────────
@@ -154,16 +154,68 @@ app.add_page(admin_config_role_emails, route="/admin/config/role-emails",
              on_load=RoleEmailConfigState.load_role_emails)
 
 from durgam.pages.admin.config.letterheads import admin_config_letterheads
-from durgam.states.config_letterhead import LetterheadConfigState
+from durgam.pages.admin.config.templates import admin_config_templates
+from durgam.states.config_document_template import LetterheadConfigState, TemplateConfigState
 
 app.add_page(admin_config_letterheads, route="/admin/config/letterheads",
              on_load=LetterheadConfigState.load_letterheads)
 
-from durgam.pages.admin.config.templates import admin_config_templates
-from durgam.states.config_template import TemplateConfigState
-
 app.add_page(admin_config_templates, route="/admin/config/templates",
              on_load=TemplateConfigState.load_templates)
+
+# ── M5b routes ────────────────────────────────────────────────────────────────
+from durgam.pages.admin.config.counsellors import admin_config_counsellors
+from durgam.pages.admin.config.faculty_mentors import admin_config_faculty_mentors
+from durgam.states.config_counsellor import CounsellorConfigState
+from durgam.states.config_faculty_mentor import FacultyMentorConfigState
+
+app.add_page(admin_config_counsellors, route="/admin/config/counsellors",
+             on_load=CounsellorConfigState.load_counsellors)
+app.add_page(admin_config_faculty_mentors, route="/admin/config/faculty-mentors",
+             on_load=FacultyMentorConfigState.load_mentors)
+
+from durgam.pages.admin.config.class_teachers import admin_config_class_teachers
+from durgam.pages.admin.config.class_coordinators import admin_config_class_coordinators
+from durgam.pages.admin.config.non_regular_faculty import admin_config_non_regular_faculty
+from durgam.states.config_class_teacher import ClassTeacherConfigState
+from durgam.states.config_class_coordinator import ClassCoordinatorConfigState
+from durgam.states.config_non_regular_faculty import NonRegularFacultyConfigState
+
+app.add_page(admin_config_class_teachers, route="/admin/config/class-teachers",
+             on_load=ClassTeacherConfigState.load_teachers)
+app.add_page(admin_config_class_coordinators, route="/admin/config/class-coordinators",
+             on_load=ClassCoordinatorConfigState.load_coordinators)
+app.add_page(admin_config_non_regular_faculty, route="/admin/config/non-regular-faculty",
+             on_load=NonRegularFacultyConfigState.load_visitors)
+
+from durgam.pages.admin.config.non_owned_courses import admin_config_non_owned_courses
+from durgam.pages.admin.config.ug_timetable import admin_config_ug_timetable
+from durgam.states.config_non_owned_course import NonOwnedCourseConfigState
+from durgam.states.config_ug_timetable import UGTimetableConfigState
+
+app.add_page(admin_config_non_owned_courses, route="/admin/config/non-owned-courses",
+             on_load=NonOwnedCourseConfigState.load_courses)
+app.add_page(admin_config_ug_timetable, route="/admin/config/ug-timetable",
+             on_load=UGTimetableConfigState.load_slots)
+
+# ── M5b Session 7: Purchase Policy & Approval Config ────────────────────────
+from durgam.pages.admin.config.designations import admin_config_designations
+from durgam.pages.admin.config.purchase_rules import admin_config_purchase_rules
+from durgam.pages.admin.config.purchase_committees import admin_config_purchase_committees
+from durgam.pages.admin.config.approval_processes import admin_config_approval_processes
+from durgam.states.config_designation import DesignationConfigState
+from durgam.states.config_purchase_rule import PurchaseRuleConfigState
+from durgam.states.config_purchase_committee import PurchaseCommitteeConfigState
+from durgam.states.config_approval_process import ApprovalProcessConfigState
+
+app.add_page(admin_config_designations, route="/admin/config/designations",
+             on_load=DesignationConfigState.load_designations)
+app.add_page(admin_config_purchase_rules, route="/admin/config/purchase-rules",
+             on_load=PurchaseRuleConfigState.load_rules)
+app.add_page(admin_config_purchase_committees, route="/admin/config/purchase-committees",
+             on_load=PurchaseCommitteeConfigState.load_templates)
+app.add_page(admin_config_approval_processes, route="/admin/config/approval-processes",
+             on_load=ApprovalProcessConfigState.load_processes)
 
 # ── M5a authenticated file download API ──────────────────────────────────────
 from durgam.api.download import download_file

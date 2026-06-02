@@ -1,6 +1,7 @@
-"""Integration tests for LetterheadAsset — upload pipeline, partial unique, replace.
+"""Integration tests for DocumentTemplate (letterhead) — upload pipeline, partial unique, replace.
 
 Uses db_session (transactional rollback) for isolation.
+Replaces LetterheadAsset tests per E-005 unification.
 """
 
 import hashlib
@@ -8,14 +9,13 @@ from uuid import uuid4
 
 import pytest
 import sqlalchemy as sa
-from sqlmodel import select
 
-from durgam.models.config_anchors import LetterheadAsset
+from durgam.models.config_anchors import DocumentTemplate
 from durgam.models.crosscutting import FileAsset
 from durgam.models.identity import User
+from durgam.repositories.document_template import DocumentTemplateRepository
 from durgam.repositories.file_asset import FileAssetRepository
-from durgam.repositories.letterhead_asset import LetterheadAssetRepository
-from durgam.services.letterhead_asset import LetterheadAssetService
+from durgam.services.document_template import DocumentTemplateService
 from durgam.services.upload import UploadService
 from durgam.storage import get_storage_backend
 
@@ -32,10 +32,10 @@ def _user(session) -> User:
     return u
 
 
-def _svc(session) -> LetterheadAssetService:
+def _svc(session) -> DocumentTemplateService:
     backend = get_storage_backend()
-    return LetterheadAssetService(
-        repo=LetterheadAssetRepository(session),
+    return DocumentTemplateService(
+        repo=DocumentTemplateRepository(session),
         upload_svc=UploadService(
             file_repo=FileAssetRepository(session),
             backend=backend,
@@ -55,6 +55,7 @@ class TestUploadPipeline:
             "TEST_LH", _TEST_BYTES, "test.docx", _DOCX_MIME, user.id,
         )
         assert lh.role_code == "TEST_LH"
+        assert lh.purpose == "letterhead"
         assert lh.file_id is not None
         fa = db_session.get(FileAsset, lh.file_id)
         assert fa is not None
@@ -76,8 +77,8 @@ class TestUploadPipeline:
 
 
 class TestPartialUniqueIndexes:
-    def test_global_duplicate_prevented(self, db_session):
-        """Two active NULL-scope rows for same role_code must be rejected."""
+    def test_duplicate_role_prevented(self, db_session):
+        """Two active letterheads for same role_code must be rejected."""
         user = _user(db_session)
         sha = hashlib.sha256(_TEST_BYTES).hexdigest()
 
@@ -97,14 +98,21 @@ class TestPartialUniqueIndexes:
             return fa
 
         fa1 = _make_fa()
-        lh1 = LetterheadAsset(role_code="DUP_LH", file_id=fa1.id)
+        lh1 = DocumentTemplate(
+            purpose="letterhead", role_code="DUP_LH", file_id=fa1.id,
+        )
         db_session.add(lh1)
         db_session.flush()
 
         fa2 = _make_fa()
-        lh2 = LetterheadAsset(role_code="DUP_LH", file_id=fa2.id)
+        lh2 = DocumentTemplate(
+            purpose="letterhead", role_code="DUP_LH", file_id=fa2.id,
+        )
         db_session.add(lh2)
-        with pytest.raises(sa.exc.IntegrityError, match="uq_letterhead_assets_global"):
+        with pytest.raises(
+            sa.exc.IntegrityError,
+            match="uq_document_templates_letterhead_role",
+        ):
             db_session.flush()
 
     def test_soft_deleted_excluded_from_unique(self, db_session):
@@ -113,7 +121,7 @@ class TestPartialUniqueIndexes:
         old = svc.upload_letterhead(
             "SD_LH", _TEST_BYTES, "old.docx", _DOCX_MIME, user.id,
         )
-        repo = LetterheadAssetRepository(db_session)
+        repo = DocumentTemplateRepository(db_session)
         repo.soft_delete(old, user.id)
         db_session.flush()
         new = svc.upload_letterhead(
@@ -121,50 +129,12 @@ class TestPartialUniqueIndexes:
         )
         assert new.id != old.id
 
-    def test_scoped_duplicate_prevented(self, db_session):
-        user = _user(db_session)
-        sha = hashlib.sha256(_TEST_BYTES).hexdigest()
-        dept_id = uuid4()
-
-        def _make_fa():
-            fa = FileAsset(
-                storage_key=uuid4().hex,
-                original_name="lh.docx",
-                mime_type=_DOCX_MIME,
-                size_bytes=len(_TEST_BYTES),
-                sha256=sha,
-                owner_user_id=user.id,
-            )
-            db_session.add(fa)
-            db_session.flush()
-            db_session.refresh(fa)
-            return fa
-
-        fa1 = _make_fa()
-        lh1 = LetterheadAsset(
-            role_code="HOD", scope_type="department", scope_id=dept_id,
-            file_id=fa1.id,
-        )
-        db_session.add(lh1)
-        db_session.flush()
-
-        fa2 = _make_fa()
-        lh2 = LetterheadAsset(
-            role_code="HOD", scope_type="department", scope_id=dept_id,
-            file_id=fa2.id,
-        )
-        db_session.add(lh2)
-        with pytest.raises(sa.exc.IntegrityError, match="uq_letterhead_assets_scoped"):
-            db_session.flush()
-
-    def test_different_scopes_ok(self, db_session):
+    def test_different_role_codes_ok(self, db_session):
         user = _user(db_session)
         svc = _svc(db_session)
         svc.upload_letterhead(
-            "HOD", _TEST_BYTES, "lh1.docx", _DOCX_MIME, user.id,
-            scope_type="department", scope_id=uuid4(),
+            "REGISTRAR", _TEST_BYTES, "lh1.docx", _DOCX_MIME, user.id,
         )
         svc.upload_letterhead(
-            "HOD", _TEST_BYTES, "lh2.docx", _DOCX_MIME, user.id,
-            scope_type="department", scope_id=uuid4(),
+            "DIRECTOR", _TEST_BYTES, "lh2.docx", _DOCX_MIME, user.id,
         )

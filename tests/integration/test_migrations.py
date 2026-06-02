@@ -87,28 +87,33 @@ class TestMigrations:
         result = _alembic("upgrade", "head")
         assert result.returncode == 0
 
-    def test_m5a_template_assets_table(self):
-        """Verify M5a template_assets migration creates table with partial unique index."""
+    def test_e005_document_templates_table(self):
+        """Verify E-005 document_templates migration creates unified table with partial unique indexes."""
         _reset_test_db()
 
         engine = sqlalchemy.create_engine(settings.test_database_url)
         try:
             inspector = sqlalchemy.inspect(engine)
-            assert "template_assets" in inspector.get_table_names()
+            assert "document_templates" in inspector.get_table_names()
+            assert "letterhead_assets" not in inspector.get_table_names()
+            assert "template_assets" not in inspector.get_table_names()
 
-            cols = {c["name"] for c in inspector.get_columns("template_assets")}
-            for expected in ("id", "template_type", "file_id", "is_deleted", "created_at"):
+            cols = {c["name"] for c in inspector.get_columns("document_templates")}
+            for expected in ("id", "purpose", "role_code", "file_id", "is_deleted", "created_at"):
                 assert expected in cols, f"Missing column: {expected}"
+            assert "scope_type" not in cols, "scope_type should be removed after D1 migration"
+            assert "scope_id" not in cols, "scope_id should be removed after D1 migration"
 
-            indexes = inspector.get_indexes("template_assets")
+            indexes = inspector.get_indexes("document_templates")
             idx_names = {idx["name"] for idx in indexes}
-            assert "uq_template_assets_type" in idx_names
+            assert "uq_document_templates_type" in idx_names
+            assert "uq_document_templates_letterhead_role" in idx_names
 
-            result = _alembic("downgrade", "-1")
-            assert result.returncode == 0, f"downgrade -1 failed:\n{result.stderr}"
+            result = _alembic("downgrade", "c3d4e5f6a7b8")
+            assert result.returncode == 0, f"downgrade to pre-E005 failed:\n{result.stderr}"
 
             inspector = sqlalchemy.inspect(engine)
-            assert "template_assets" not in inspector.get_table_names()
+            assert "document_templates" not in inspector.get_table_names()
 
             result = _alembic("upgrade", "head")
             assert result.returncode == 0

@@ -84,7 +84,7 @@ _SCHOOL_CODE = "TSC"
 _CENTRE_CODE = "TCE"
 _DEPT_CODE = "TDE"
 _COURSE_CODE = "TST101"
-_LH_TEST_ROLE = "E2E_LH_TEST"
+_LH_TEST_ROLE = "DEPUTY_REGISTRAR"
 _TPL_TEST_TYPE = "bos"
 
 
@@ -194,8 +194,6 @@ class TestSchoolCRUD:
             page.get_by_placeholder("e.g. SCI").fill(_SCHOOL_CODE)
             # RC-1: actual placeholder is "Full school name", not "School name"
             page.get_by_placeholder("Full school name").fill("Test School E2E")
-            # Failure B: dean_role_code is required by SchoolService.create()
-            page.get_by_placeholder("e.g. DEAN_SCI").fill("DEAN_TSC")
             page.get_by_role("button", name="Save").click()
             expect(page.get_by_text("Test School E2E", exact=True)).to_be_visible(timeout=15_000)
 
@@ -766,10 +764,11 @@ class TestLetterheadConfig:
                 page.get_by_role("heading", name="Upload Letterhead")
             ).to_be_visible(timeout=5_000)
 
-            # Fill role code
-            role_input = page.get_by_placeholder("e.g. REGISTRAR")
-            role_input.fill(_LH_TEST_ROLE)
-            expect(role_input).to_have_value(_LH_TEST_ROLE, timeout=5_000)
+            # Select role from dropdown (live-sourced from roles table)
+            role_trigger = page.locator(".rt-SelectTrigger").first
+            expect(role_trigger).to_be_visible(timeout=10_000)
+            role_trigger.click()
+            page.get_by_role("option", name=_LH_TEST_ROLE).click()
             page.wait_for_timeout(500)
 
             # Stage file via hidden <input type="file"> rendered by react-dropzone.

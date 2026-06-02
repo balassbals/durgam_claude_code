@@ -1,4 +1,4 @@
-"""Config module nav registration (M3 + M4 + M5a Sessions 2–3).
+"""Config module nav registration (M3 + M4 + M5a + M5b).
 
 Import this module to register config nav entries. Called from durgam.py.
 
@@ -41,6 +41,17 @@ register(NavEntry(
         ("write",     "role_email",                  None),
         ("write",     "letterhead_asset",             None),
         ("write",     "template_asset",                None),
+        ("write",     "mental_health_counsellor",       None),
+        ("write",     "faculty_mentor_assignment",      None),
+        ("write",     "class_teacher_assignment",       None),
+        ("write",     "class_coordinator_assignment",   None),
+        ("write",     "non_regular_faculty",             None),
+        ("write",     "non_owned_course",                None),
+        ("write",     "ug_timetable",                    None),
+        ("write",     "purchase_procedure_rule",         None),
+        ("write",     "purchase_committee_template",     None),
+        ("write",     "approval_process",                None),
+        ("write",     "designation",                     None),
     ),
 ))
 register(NavEntry(
@@ -176,4 +187,95 @@ register(NavEntry(
     group="Config",
     permission_action="write",
     permission_resource="template_asset",
+))
+# ── M5b nav entries ─────────────────────────────────────────────────────────────
+register(NavEntry(
+    label="Counsellors",
+    href="/admin/config/counsellors",
+    icon="heart-pulse",
+    group="Config",
+    permission_action="write",
+    permission_resource="mental_health_counsellor",
+))
+register(NavEntry(
+    label="Faculty Mentors",
+    href="/admin/config/faculty-mentors",
+    icon="users",
+    group="Config",
+    permission_action="write",
+    permission_resource="faculty_mentor_assignment",
+))
+register(NavEntry(
+    label="Class Teachers",
+    href="/admin/config/class-teachers",
+    icon="user-check",
+    group="Config",
+    permission_action="write",
+    permission_resource="class_teacher_assignment",
+))
+register(NavEntry(
+    label="Class Coordinators",
+    href="/admin/config/class-coordinators",
+    icon="user-cog",
+    group="Config",
+    permission_action="read",
+    permission_resource="class_coordinator_assignment",
+))
+register(NavEntry(
+    label="Non-Regular Faculty",
+    href="/admin/config/non-regular-faculty",
+    icon="briefcase",
+    group="Config",
+    permission_action="write",
+    permission_resource="non_regular_faculty",
+))
+# Non-Owned Courses: Director family + DAA family (two distinct permission paths)
+register(NavEntry(
+    label="Non-Owned Courses",
+    href="/admin/config/non-owned-courses",
+    icon="book-copy",
+    group="Config",
+    permission_action="write",
+    permission_resource="non_owned_course",
+))
+register(NavEntry(
+    label="UG Timetable",
+    href="/admin/config/ug-timetable",
+    icon="table",
+    group="Config",
+    permission_action="write",
+    permission_resource="ug_timetable",
+))
+# ── M5b Session 7: Purchase Policy & Approval Config ──────────────────────────
+register(NavEntry(
+    label="Designations",
+    href="/admin/config/designations",
+    icon="badge-check",
+    group="Config",
+    permission_action="write",
+    permission_resource="designation",
+))
+register(NavEntry(
+    label="Purchase Rules",
+    href="/admin/config/purchase-rules",
+    icon="receipt",
+    group="Config",
+    permission_action="write",
+    permission_resource="purchase_procedure_rule",
+))
+register(NavEntry(
+    label="Purchase Committees",
+    href="/admin/config/purchase-committees",
+    icon="users-round",
+    group="Config",
+    permission_action="write",
+    permission_resource="purchase_committee_template",
+))
+register(NavEntry(
+    label="Approval Processes",
+    href="/admin/config/approval-processes",
+    icon="workflow",
+    group="Config",
+    permission_action="write",
+    permission_resource="approval_process",
 ))

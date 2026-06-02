@@ -12,6 +12,8 @@ status is "In flight at M{N}" reflect the current implementation state.
 
 **M4 gate passed: 2026-05-23.** All M4 rows verified via fresh-clone ritual.
 
+**M5a gate passed: 2026-05-24.** All M5a rows verified.
+
 Errata bindings: E-001 (vision/mission) extends the M3 row. E-003 (VisitingFaculty) → M5b; E-004 (RoleEmail divergence) → M5a.
 
 **M5 split (2026-05-24):** Milestone M5 (Configuration — Identity
@@ -65,17 +67,21 @@ E-004 (RoleEmail) bind to this split.
 | Faculty (basic info in config module) | §9.3 | M10 | Planned for M10 | Faculty profile module |
 | Student (basic info in config module) | §9.3 | M12 | Planned for M12 | Student profile module |
 | RoleEmail (email bound to role/scope) | §9.3 | M2/M5a | Shipped at M5a | M2 seeded; M4 reads for calendar phase-transition emails; E-004 remediation at M5a (re-key to UUID PK + TimestampedSoftDelete + partial unique indexes); management UI at `/admin/config/role-emails` (Registrar family + SysAdmin) |
-| LetterheadAsset (file per role/scope) | §9.3 | M5a | Shipped at M5a | Upload/replace/deactivate/download; partial unique indexes (global + scoped); MIME filter (PDF/PNG/JPG); max 5 MB; `/admin/config/letterheads` |
-| ApprovalProcess (workflow config) | §9.3 | M7 | Planned for M7 | Approval Engine |
+| LetterheadAsset (file per role) | §9.3 | M5a | Shipped at M5a | Upload/replace/deactivate/download; partial unique index on `(purpose, role_code)`; MIME filter (DOCX); max 5 MB; scope columns removed at M5b gate (one letterhead per role is sufficient) |
+| ApprovalProcess (workflow config — schema + CPC config) | §9.3, §8.4 | M5b | Shipped at M5b | Config UI + service + seeds CPC_FUND_RELEASE process (is_finance=True). Runtime execution stays M7. |
+| ApprovalProcess (runtime execution) | §9.5 | M7 | Planned for M7 | Generic approval engine consumes M5b config; CPC fund-release fully wired. |
+| PurchaseProcedureRule (spend-tier config, Finance-owned) | Purchase Procedures doc, §9.5, E-007 | M5b | Shipped at M5b | 10 rows (5 tiers × 2 fund sources) seeded. Overlap validation with self-exclusion on update. Floor/ceiling normalization (Projects/UGC tier-2: 10,001). BOM as literal string in approving_authority_role_codes. Finance Officer only (NOT _PUBLIC_READ). |
+| PurchaseCommitteeTemplate (committee composition policy, Finance-owned) | E-007 | M5b | Shipped at M5b | 2 rows seeded: campus (director_excluded=True, faculty by designation rank) + central (escalation_designate=REGISTRAR). eligible_designations + faculty_member_count + fixed_role_members model. Rank-preference enforcement → M7 runtime (requires M10 Faculty). |
+| Designation (extensible faculty designation vocabulary) | E-007 | M5b | Shipped at M5b | 4 rows seeded (senior_professor through assistant_professor). Finance Officer owns. Referenced by PurchaseCommitteeTemplate.eligible_designations. |
 | StudentCategoryCount (SC/ST/OBC/EWS/General per AY) | §9.3 | M4 | Shipped at M4 | AY-scoped singleton edit; Registrar-managed; blocked when AY locked |
-| MentalHealthCounsellor (AY-scoped roster, Director's letterhead) | §9.3 | M5b | Planned for M5b | Configuration — Identity Attachments |
-| FacultyMentorAssignment | §9.3 | M5b | Planned for M5b | Requires Faculty (M10) model — see M5 inheritance note; Option A confirmed (model + thin UI at M5b, rich UI at M14) |
-| ClassTeacherAssignment | §9.3 | M5b | Planned for M5b | Requires Faculty (M10) + Student (M12) — see M5 note; Option A confirmed |
-| ClassCoordinatorAssignment | §9.3 | M5b | Planned for M5b | Same dependency as ClassTeacher; Option A confirmed |
-| NonOwnedCourse | §9.3 | M5b | Planned for M5b | Course shared across departments |
-| UGTimetable (first/second year, Director's office) | §9.3 | M5b | Planned for M5b | Auto-projects into dept timetables |
+| MentalHealthCounsellor (AY-scoped roster, Director's letterhead) | §9.3 | M5b | Shipped at M5b | Model + repo + service + config UI + DOCX roster download |
+| FacultyMentorAssignment | §9.3 | M5b | Shipped at M5b | Model + thin UI (Option A). Rich UI at M14 when Faculty (M10) exists |
+| ClassTeacherAssignment | §9.3 | M5b | Shipped at M5b | Model + thin UI (Option A). Rich UI at M14 when Faculty (M10) + Student (M12) exist |
+| ClassCoordinatorAssignment | §9.3 | M5b | Shipped at M5b | Model + thin UI (Option A). Rich UI at M14 |
+| NonOwnedCourse | §9.3 | M5b | Shipped at M5b | AY-scoped course shared across departments; Director + DAA family access |
+| UGTimetable (first/second year, Director's office) | §9.3 | M5b | Shipped at M5b | AY-scoped; unique constraint on (AY, semester, year, day, period); Director family access |
 | TemplateAsset (BoS, MoM, VAC certificate) | §9.3 | M5a | Shipped at M5a | IQAC-managed; types: bos/mom=DOCX, vac=PPTX; partial unique index on type; max 2 MB; `/admin/config/templates` |
-| VisitingFaculty (external personnel per department) | E-003, informal req | M5b | Planned for M5b | HoD-managed; inline external-personnel details; date-windowed availability; feeds M13 course allocation; does not depend on M10 Faculty |
+| VisitingFaculty (external personnel per department) | E-003, informal req | M5b | Shipped at M5b | HoD-managed; inline external-personnel details; NOT AY-locked; feeds M13 course allocation |
 | FileAsset + StorageBackend (file storage foundation) | §8.4, §4.1, §6.1 | M5a | Shipped at M5a | Local-fs dev / MinIO prod; UploadService orchestrates validate→store→record; UUID storage keys; purpose-based permission escalation on download endpoint |
 
 ---
@@ -85,22 +91,64 @@ E-004 (RoleEmail) bind to this split.
 | Requirement | Source | Milestone | Status | Notes |
 |---|---|---|---|---|
 | Schools seeded once; departments declare school | §9.3 | M3 | Shipped at M3 | Seed script; school_id FK enforced |
-| Bulk-add by CSV/Excel (users, faculty, students, courses, programs) | §9.3, §16 | M5b | Planned for M5b | Explicitly out of scope at M3 (Refinement 7) |
+| Bulk-add by CSV/Excel (users, courses, programs) | §9.3, §16 | M5b | Shipped at M5b | Two-stage validate→commit; users (M2), courses + programs (M5b Session 8). Faculty bulk import → M10 (requires Faculty model). Student bulk import → M12 (requires Student model). |
 | AY-scoped configs immutable on rollover (is_locked=true) | §9.3 | M4 | Shipped at M4 | AcademicYearLockedError in repos; lock_for_rollover service method; Celery nightly task |
 | Calendar collaboration chain (Registrar → IQAC → others) | §9.3 | M4 | Shipped at M4 | Three-phase sequential chain; 18 fixed entry types; ENTRY_TYPE_ROLE_MAP + phase gates; sports/cultural: DIRECTOR (campus) + DEAN_SW (institution) ownership split |
 | Holiday management | §9.3 | M4 | Shipped at M4 | AY-scoped CRUD; separate Holiday model (not CalendarEntry type) |
 | Calendar exports (CSV/Excel/PDF/DOCX) | §9.3 | M4 | Shipped at M4 | CalendarExportService + rx.download via bytes data |
 | Phase-transition email notifications | §9.3 | M4 | Shipped at M4 | Registrar confirm → IQAC notified; IQAC confirm → Phase 3 roles notified; reads RoleEmail bootstrap placeholders; fire-and-forget via asyncio.create_task |
 | Letterheads / templates used for docgen (not directly visible to other roles) | §9.3 | M5a | Shipped at M5a | Letterheads are DOCX templates (E-005); image-based merge primitive exists but not used with DOCX letterheads (TD-012 superseded by E-005); purpose-based download permission escalation |
-| Mental-health counsellor roster downloadable as DOCX (Director letterhead, AY-scoped) | §9.3 | M5b | Planned for M5b | Immutable on AY rollover |
-| Class teacher assignments auto-flow into faculty workload | §9.3 | M5b | Planned for M5b | Requires Faculty (M10) model |
-| UG timetable configured by Director, auto-projected to dept timetables | §9.3 | M5b | Planned for M5b | Requires Student (M12) model |
+| Mental-health counsellor roster downloadable as DOCX (Director letterhead, AY-scoped) | §9.3 | M5b | Shipped at M5b | AY-scoped; immutable on rollover; DOCX download with purpose-map gating |
+| Class teacher assignments auto-flow into faculty workload | §9.3 | M14 | Planned for M14 | Model at M5b (Option A); workload auto-flow requires Faculty (M10) model; rich UI at M14 |
+| UG timetable configured by Director, auto-projected to dept timetables | §9.3 | M5b | Shipped at M5b | Config UI shipped; auto-projection to dept timetables requires Student (M12) model → M14 |
 | Student category counts managed by Registrar/office per AY; read-only for non-Student roles | §9.3 | M4 | Shipped at M4 | AY-scoped singleton edit; immutable on rollover |
 | Vision/mission: update-only, no delete (university + department) | E-001 | M3 | Shipped at M3 | NotDeletableError in VisionMissionService |
 | Vision/mission: viewable by all authenticated users | E-001 | M3 | Shipped at M3 | /about/university + /about/departments + /about/departments/[code] — Session 7 |
 | Class timings and working-days config: singleton, configure action | §9.3, §12 M3 | M3 | Shipped at M3 | Singleton edit forms; configure-action guard; Session 7 |
 | "System admin will only deal with basic information of academic departments when adding, editing" | §9.3 | M3 | Shipped at M3 | department:write:* granted only to SYSTEM_ADMIN (fixed M3 Session 5c — Registrar had it incorrectly) |
 | Dean role bound to school via dean_role_code string reference | §8.2 | M3 | Shipped at M3 | OQ-M3-6 confirmed: plain string, no FK |
+
+---
+
+## Deferred Forward-Concerns (from M5b)
+
+| Concern | Source | Deferred to | Notes |
+|---|---|---|---|
+| UGTimetable rename + class-label refactor | §9.3 | Separate focused pass | Currently handles UG year 1/2 only |
+| Faculty dropdowns on assignment pages | §9.3 | M10 + M14 | Depends on Faculty model |
+| Student dropdowns on assignment pages | §9.3 | M12 + M14 | Depends on Student model |
+| Course dropdown on NonOwnedCourse | §9.3 | M14 | |
+| Faculty bulk import (CSV) | §9.3, §16 | M10 | Requires Faculty model |
+| Student bulk import (CSV) | §9.3, §16 | M12 | Requires Student model |
+| Bulk-add for campuses/depts/programs | §9.3 | M13 | |
+| Cross-entity search + filtering | §9.3 | M13 / dashboard | |
+| Viewability of basic info by all | §9.3 | Dashboard milestone | |
+| Sub-departments management | §8.2 | Future | |
+| Class teacher load → faculty workload | §9.3 | M10 | |
+| Non-owned-course faculty workload contribution | §9.3 | M10 | |
+| Class coordinator student picker | §9.3 | M12 | Needs Student model |
+| Course-code dropdown auto-fill | §9.3 | M14 | |
+| Announcement composer roster | §9.3 | M9 (RFP §12) | |
+| HoD picks next-level approver from candidate set | E-007 | M7 | E-007 R1 semantic |
+| Informational CC notification on approval | E-007 | M7 | informational_cc_role_codes field |
+| Non-regular faculty approval routing per case | E-003, E-007 | M7 | Current direct-approve placeholder |
+| Approval-process SLA enforcement | §9.5 | M7 | |
+| Purchase committee rank-preference enforcement | E-007 | M7 | Runtime concern: highest-rank-first selection from eligible_designations requires M10 Faculty model for who-exists/availability |
+| Purchase committee availability/fatigue check | E-007 | M7 | Runtime concern: reject faculty serving on too many concurrent committees; requires M10 Faculty model |
+| Purchase committee justification field | E-007 | M7 | Runtime concern: text justification when lower-ranked faculty selected; requires purchase-request artifact (M7) |
+| Project-fund link to PI | E-007 | M11 | Runtime concern: link project fund source to PI's faculty record; requires M10 Faculty + M11 Research |
+| ClassCoordinatorAssignment ownership transfer to class-teacher role | §9.3 | M14 | Requires M10 Faculty identity + M12 Student model for student-picker |
+| Committee member selection (rank-preference, availability) | E-007 | M10/M14 | Requires M10 Faculty model for who-exists/who's-available lookup |
+| Retrofit older config pages (M3/M4) with live-sourced role picker | UI Polish | UI Polish | M5b established `role_multi_select()` and `_load_role_options()` patterns |
+| Counsellor roster letterhead overlay polish | M5b | M14 docgen | Auto-fill campus/director/designation |
+| Faculty mentor roster letterhead overlay polish | M5b | M14 docgen | Auto-fill campus/director/designation |
+| Calendar entry conflict detection | M5b | M6 | |
+| Calendar email per-user notification preferences | M5b | M9 | |
+| Visiting/non-regular faculty contract term tracking | E-003 | M10 | |
+| Role-based dashboard widgets | §9.3 | M15 | |
+| Bulk assignment import (class teachers, coordinators) | §9.3 | M14 | |
+| Designation-based committee eligibility verification | E-007 | M10 | |
+| Test fixture isolation (db_session vs seeded_session) | TD-008 | Test infra | |
 
 ---
 
@@ -148,6 +196,60 @@ are reusable; the work is purely frontend.
 
 Calendar clash detection is deliberately NOT implemented — see `docs/milestones/M4.md`
 Session 5 design decision for rationale.
+
+---
+
+## M5b Forward-Concerns (from gate verification round 2)
+
+The following items were identified during M5b gate verification as requiring
+work in later milestones. They are not bugs or gaps — they are intentional
+deferred scope.
+
+1. **Committee member selection requires M10 Faculty model** — the purchase
+   committee assembly UI needs to know which faculty exist and their
+   designations. → M10/M14.
+2. **Rank-preference, availability/fatigue check, justification field** — M7
+   runtime purchase committee constraints that depend on M10 Faculty. → M7/M10.
+3. **Calendar email recipients: individual notification preferences** — currently
+   all users with the target role receive the email; per-user opt-out is a M9
+   concern. → M9.
+4. **Counsellor document generation with letterhead overlay** — the roster
+   export uses the Director letterhead as a DOCX template; generating formal
+   appointment letters with letterhead merge is M14 scope. → M14.
+5. **Purchase committee member identity verification** — verifying that the
+   named committee members actually hold the required designation at the time
+   of committee formation. → M10.
+6. **Approval process SLA enforcement** — tracking and enforcing time limits on
+   each step of an approval process. → M7.
+7. **Class coordinator student picker** — currently a text placeholder; needs
+   the Student model from M12 for a real student selector. → M12.
+8. **Non-regular faculty contract term tracking** — tracking formal contract dates,
+   renewal, and integration with HR. → M10.
+9. **Role-based dashboard widgets** — per-role landing page with relevant
+   quick-access panels. → M15.
+10. **Calendar entry conflict detection** — warning when a new entry overlaps
+    with existing entries in the same scope. → M6.
+11. **Bulk assignment import (class teachers, coordinators)** — CSV/Excel upload
+    for batch assignment of class teachers and coordinators. → M14.
+12. **Designation-based committee eligibility verification** — verifying
+    designation rank at committee-formation time requires the Faculty model. → M10.
+13. **Full routing customization for approval processes** — the current
+    channel_role_codes + informational_cc_role_codes cover the common case;
+    conditional branching (if amount > X, route to Y) is M7 runtime. → M7.
+14. **Counsellor roster letterhead-overlay rendering** — Jinja2 placeholders in
+    letterhead template for counsellor roster export. → M14.
+15. **Faculty mentor confirmation notification emails** — email notifications
+    when Director confirms a campus mentor roster. → M9.
+16. **Faculty mentor roster letterhead overlay** — basic DOCX-on-letterhead
+    (render_docx_template with Director letterhead) works at M5b. Rich auto-fill
+    polish (campus/director-name/designation from login scope) remains. → M14.
+17. **Non-regular faculty approval-request workflow** — current M5b direct-approve
+    (Director or Registrar family clicks Approve) is a simple admin action recording
+    `approved_at` and `approved_by_user_id`. At M7, the Approval Requests module
+    replaces this with proper case-by-case routing: configurable per-case selection
+    between Director and Registrar (and any other institutional approvers), with the
+    request artifact, channel, audit trail, and SLA. The direct-approve action
+    becomes either retired or an override-only mechanism. → M7.
 
 ---
 

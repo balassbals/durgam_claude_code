@@ -58,7 +58,6 @@ def _school(session, *, idx: str | None = None) -> School:
     s = School(
         code=f"S{uid}"[:10],
         name=f"Test School {uid}",
-        dean_role_code=f"DEAN_S{uid}"[:64],
     )
     session.add(s)
     session.flush()

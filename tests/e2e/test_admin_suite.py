@@ -27,7 +27,7 @@ Playwright + Reflex testing patterns (from CLAUDE.md "Patterns established at M2
   - page.get_by_role("heading", name="...") not page.get_by_heading() (no such API).
   - page.get_by_placeholder("...") for inputs; rx.text() labels are <p> not <label>.
   - page.get_by_role("link", name="Users", exact=True) not partial — "Users" is a
-    prefix of "Import Users"; partial matching triggers strict-mode violation.
+    prefix of "Bulk Import"; partial matching triggers strict-mode violation.
 
 E2E selector rule (CLAUDE.md): selectors verified against the rendered page;
 never write from memory. exact=True by default when another label is a superstring.
@@ -403,15 +403,14 @@ class TestBulkImport:
 
         Uses _wait_for_admin_page() to handle admin_page() rx.cond wrapper —
         content is hidden until reset_import() on_load guard fires via WebSocket.
+        The page defaults to the Users import type with its template link.
         """
         _login(page, _ADMIN_USER, _ADMIN_PASS)
         page.goto(f"{BASE_URL}/admin/import")
         page.wait_for_load_state("networkidle")
-        # Wait for admin_page() to show content after the on_load guard fires.
-        # "Step 1: Upload CSV" is the stable anchor on this page.
         _wait_for_admin_page(page, "Step 1: Upload CSV", timeout=15_000)
-        # Template link must be visible alongside the heading.
-        expect(page.get_by_text("users_import_template.csv")).to_be_visible(timeout=5_000)
+        expect(page.get_by_role("heading", name="Bulk Import")).to_be_visible(timeout=5_000)
+        expect(page.get_by_text("import_user_template.csv")).to_be_visible(timeout=5_000)
 
 
 # ── Basic-user access control ─────────────────────────────────────────────────

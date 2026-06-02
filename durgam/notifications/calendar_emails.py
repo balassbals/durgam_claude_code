@@ -7,30 +7,41 @@ from sqlmodel import select
 
 from durgam.config import settings
 from durgam.db import open_session
-from durgam.models.config_anchors import RoleEmail
+from durgam.models.identity import Role, User, UserRole
 from durgam.notifications.email import send_email
 
 log = structlog.get_logger(__name__)
 
 _IQAC_ROLES = frozenset({"IQAC_COORDINATOR"})
 
-_PHASE3_ROLES = frozenset({
-    "DIRECTOR", "DEPUTY_DIRECTOR", "DIRECTOR_OFFICE",
-    "DEAN_STUDENT_WELFARE",
-    "HOD", "AHOD", "HOD_OFFICE",
-    "DEAN", "DEAN_SCI", "DEAN_HSS", "DEAN_LL", "DEAN_MC",
-})
+_EXCLUDED_FROM_PHASE3 = frozenset({"STUDENT", "BASIC_USER", "SYSTEM_ADMIN"})
+
+
+def _get_phase3_roles(session) -> frozenset[str]:
+    """Compute phase-3 calendar notification target roles at runtime.
+
+    Excludes STUDENT (not a calendar stakeholder), BASIC_USER (base role for
+    scoped users — they receive notifications via their scoped role), and
+    SYSTEM_ADMIN (infrastructure role, not academic calendar stakeholder —
+    conscious exclusion choice).
+    """
+    all_codes = session.exec(select(Role.code)).all()
+    return frozenset(c for c in all_codes if c not in _EXCLUDED_FROM_PHASE3)
 
 
 def _get_role_emails(role_codes: frozenset[str]) -> list[str]:
     with open_session() as session:
         rows = session.exec(
-            select(RoleEmail).where(
-                RoleEmail.role_code.in_(role_codes),  # type: ignore[union-attr]
-                RoleEmail.is_deleted == False,  # noqa: E712
+            select(User.email)
+            .join(UserRole, UserRole.user_id == User.id)  # type: ignore[arg-type]
+            .join(Role, Role.id == UserRole.role_id)  # type: ignore[arg-type]
+            .where(
+                Role.code.in_(role_codes),  # type: ignore[union-attr]
+                User.is_active == True,  # noqa: E712
+                User.is_deleted == False,  # noqa: E712
             )
         ).all()
-        return list({r.email for r in rows})
+        return list(set(rows))
 
 
 async def send_registrar_confirmed_email(ay_code: str) -> None:
@@ -53,7 +64,9 @@ async def send_registrar_confirmed_email(ay_code: str) -> None:
 
 
 async def send_iqac_confirmed_email(ay_code: str) -> None:
-    recipients = _get_role_emails(_PHASE3_ROLES)
+    with open_session() as session:
+        phase3_roles = _get_phase3_roles(session)
+    recipients = _get_role_emails(phase3_roles)
     if not recipients:
         log.warning("calendar_email_no_phase3_recipients", ay_code=ay_code)
         return

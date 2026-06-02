@@ -1,4 +1,4 @@
-"""Property test: at most one active LetterheadAsset per (role_code, scope) pair.
+"""Property test: at most one active DocumentTemplate letterhead per role_code.
 
 Uses Hypothesis to generate sequences of upload/delete operations and asserts
 the invariant holds after each operation.
@@ -10,8 +10,8 @@ from uuid import uuid4
 from hypothesis import given, settings as hyp_settings
 from hypothesis import strategies as st
 
-from durgam.models.config_anchors import LetterheadAsset
-from durgam.services.letterhead_asset import LetterheadAssetService
+from durgam.models.config_anchors import DocumentTemplate
+from durgam.services.document_template import DocumentTemplateService
 
 
 def _make_svc():
@@ -19,19 +19,17 @@ def _make_svc():
     repo = MagicMock()
     upload_svc = MagicMock()
 
-    active: dict[tuple[str, str | None, str | None], LetterheadAsset] = {}
+    active: dict[str, DocumentTemplate] = {}
 
-    def get_active(role_code, scope_type=None, scope_id=None):
-        return active.get((role_code, scope_type, str(scope_id) if scope_id else None))
+    def get_lh(role_code):
+        return active.get(role_code)
 
     def save(row):
-        key = (row.role_code, row.scope_type, str(row.scope_id) if row.scope_id else None)
-        active[key] = row
+        active[row.role_code] = row
         return row
 
     def soft_delete(row, actor_id):
-        key = (row.role_code, row.scope_type, str(row.scope_id) if row.scope_id else None)
-        active.pop(key, None)
+        active.pop(row.role_code, None)
         row.is_deleted = True
         return row
 
@@ -41,7 +39,7 @@ def _make_svc():
                 return v
         return None
 
-    repo.get_active_by_role_and_scope = get_active
+    repo.get_letterhead_by_role = get_lh
     repo.save = save
     repo.soft_delete = soft_delete
     repo.get_by_id = get_by_id
@@ -50,7 +48,7 @@ def _make_svc():
     fa.id = uuid4()
     upload_svc.upload.return_value = fa
 
-    return LetterheadAssetService(repo=repo, upload_svc=upload_svc), active
+    return DocumentTemplateService(repo=repo, upload_svc=upload_svc), active
 
 
 _ROLE_CODES = st.sampled_from(["REGISTRAR", "DIRECTOR", "HOD", "DEAN"])
@@ -65,7 +63,7 @@ _ACTIONS = st.sampled_from(["upload", "delete"])
     )
 )
 @hyp_settings(max_examples=200)
-def test_at_most_one_active_per_role_scope(ops):
+def test_at_most_one_active_per_role(ops):
     svc, active = _make_svc()
     actor = uuid4()
 
@@ -77,11 +75,11 @@ def test_at_most_one_active_per_role_scope(ops):
                 actor,
             )
         elif action == "delete":
-            existing = active.get((role_code, None, None))
+            existing = active.get(role_code)
             if existing is not None:
                 svc.soft_delete(existing.id, actor)
 
-        counts: dict[tuple, int] = {}
+        counts: dict[str, int] = {}
         for key in active:
             counts[key] = counts.get(key, 0) + 1
         for key, count in counts.items():

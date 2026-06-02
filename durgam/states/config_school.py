@@ -26,7 +26,6 @@ class SchoolConfigState(BaseState):
     editing_id: str = ""
     form_code: str = ""
     form_name: str = ""
-    form_dean_role_code: str = ""
 
     confirm_open: bool = False
     confirm_school_id: str = ""
@@ -46,7 +45,6 @@ class SchoolConfigState(BaseState):
                     "id": str(s.id),
                     "code": s.code,
                     "name": s.name,
-                    "dean_role_code": s.dean_role_code,
                 })
         self._load_nav_entries()
         self.loading = False
@@ -57,26 +55,21 @@ class SchoolConfigState(BaseState):
     def set_form_name(self, value: str) -> None:
         self.form_name = value
 
-    def set_form_dean_role_code(self, value: str) -> None:
-        self.form_dean_role_code = value
-
     def open_create(self):
         self.flash = ""
         self.flash_type = "info"
         self.editing_id = ""
         self.form_code = ""
         self.form_name = ""
-        self.form_dean_role_code = ""
         self.show_form = True
         return rx.scroll_to("school-page-top")
 
-    def open_edit(self, school_id: str, code: str, name: str, dean_role_code: str):
+    def open_edit(self, school_id: str, code: str, name: str):
         self.flash = ""
         self.flash_type = "info"
         self.editing_id = school_id
         self.form_code = code
         self.form_name = name
-        self.form_dean_role_code = dean_role_code
         self.show_form = True
         return rx.scroll_to("school-page-top")
 
@@ -85,7 +78,6 @@ class SchoolConfigState(BaseState):
         self.editing_id = ""
         self.form_code = ""
         self.form_name = ""
-        self.form_dean_role_code = ""
         return rx.scroll_to("school-page-top")
 
     @require_role(action="write", resource="school")
@@ -93,18 +85,17 @@ class SchoolConfigState(BaseState):
     async def save_school(self, form_data: dict) -> None:
         code = form_data.get("form_code", "").strip()
         name = form_data.get("form_name", "").strip()
-        dean_role_code = form_data.get("form_dean_role_code", "").strip()
         editing_id = form_data.get("editing_id", "").strip()
         try:
             with open_session() as session:
                 svc = _svc(session)
                 actor_id = UUID(self.current_user_id)
                 if not editing_id:
-                    svc.create(code, name, dean_role_code, actor_id)
+                    svc.create(code, name, actor_id)
                 else:
                     svc.update(
                         UUID(editing_id),
-                        {"name": name, "dean_role_code": dean_role_code},
+                        {"name": name},
                         actor_id,
                     )
                 session.commit()  # open_session() does NOT auto-commit

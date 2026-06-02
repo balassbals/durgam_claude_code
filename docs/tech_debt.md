@@ -116,7 +116,13 @@ and `university_missions` tables.
 
 **Current workaround:** `_clean_university_vm()` deletes the leaked rows at
 the start of the two affected tests, inside their rolled-back
-transaction. Safe but symptom-level.
+transaction. Safe but symptom-level. At M5b Round 3, the same class
+manifested as TestResolveDeptScope failing when ordered before
+purchase-committee tests; fixed by rewriting to use db_session with
+inline data construction instead of seeded_session.
+
+**Preferred pattern for new tests:** Use db_session with inline data
+construction over seeded_session.
 
 **Why this is not a production issue:** It is purely a test-infrastructure
 isolation problem. Production code is unaffected — the vision/mission
@@ -245,6 +251,68 @@ on this single registration point.
 be re-verified after every upgrade (cross-reference the existing Reflex API churn
 risk and the version-pinning discipline in CLAUDE.md "Milestone discipline").
 (b) If Reflex ships a public custom-route API, migrate to it and close this entry.
+
+---
+
+### TD-014 — Per-entity bulk-import permission UI consistency
+
+**Location:** `durgam/pages/admin/import_users.py`, `durgam/states/admin_bulk_import.py`
+
+**What it is:** M5b added `program_import` / `course_import` permissions and gated tab
+visibility on them. The same per-entity permission pattern should be considered for other
+admin-panel tools that currently fall under a single coarse permission. Audit the admin
+panel for places where a user might see a tool they can't use; gate by the actual
+operation permission.
+
+**Trigger to re-open:** When adding new admin tools or import types, apply the same
+per-entity pattern. Audit existing tools at the UI Polish milestone.
+
+---
+
+### TD-015 — docxtpl no-placeholder fallback strategy
+
+**Location:** `durgam/docgen/merge.py` (`render_docx_template`)
+
+**What it is:** `render_docx_template` returns a warning list when the template has
+no `{{ }}` placeholders, surfaced to the user via flash on counsellor and faculty-mentor
+exports. The user gets the unmodified letterhead — functional but not ideal.
+
+**Better behavior at M14 docgen polish:** Consider appending a tabular data block after
+the letterhead content, or rendering to a fallback "data-only" template when the
+letterhead has no placeholders.
+
+**Trigger to re-open:** M14 docgen polish milestone.
+
+---
+
+### TD-016 — rx.download URL validation strictness
+
+**Location:** `durgam/pages/admin/config/counsellors.py`, `durgam/pages/admin/config/letterheads.py`
+
+**What it is:** `rx.download` in Reflex requires URLs starting with `/`. Cross-origin or
+full-URL downloads need to use `rx.redirect` or `rx.link`. M5b standardized on
+`rx.redirect(DOWNLOAD_PREFIX + "/api/files/" + file_id)` in kebab menus for file
+downloads (counsellor, letterhead, template — same pattern).
+
+**Trigger to re-open:** If Reflex relaxes URL validation in `rx.download`, or if a
+future download integration needs a different pattern.
+
+---
+
+### TD-017 — Permission count maintenance and implicit propagation
+
+**Location:** `scripts/seed.py` (`role_perm_map` and `_*_SPECIFIC` composition lists)
+
+**What it is:** The `role_perm_map` composition pattern (e.g. `"REGISTRAR_OFFICE":
+_PUBLIC_READ + _REGISTRAR_SPECIFIC`) works but is implicit. Adding a new permission to
+`_REGISTRAR_SPECIFIC` automatically propagates to all roles that compose it — good when
+intended, but easy to miss when an "inline" exception exists (HOD_OFFICE was such a case,
+caught in Round 3).
+
+**Proposed fix:** Add a one-time test that asserts each role's final permission set against
+an explicit expected list, catching unintended propagation in either direction.
+
+**Trigger to re-open:** Next permission-grant change, or proactively at M6.
 
 ---
 
