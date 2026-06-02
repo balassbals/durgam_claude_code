@@ -109,13 +109,13 @@ class BulkImportState(BaseState):
         )
 
     async def load_import(self) -> None:
-        guard = self._admin_guard()
+        guard = self._config_guard_any([
+            ("write", "user", None),
+            ("write", "program_import", None),
+            ("write", "course_import", None),
+        ])
         if guard is not None:
             return guard
-        with open_session() as session:
-            if not self._can_any_import(session):
-                self.flash = "You do not have permission to import data."
-                return rx.redirect("/login")
         self._reset_state()
         h = _COLUMN_HEADERS.get(self.import_type, _COLUMN_HEADERS["users"])
         self.col1_header, self.col2_header, self.col3_header = h
@@ -350,7 +350,11 @@ class BulkImportState(BaseState):
             return rx.download(data=content, filename="import_user_template.csv")
 
     def reset_import(self):
-        guard = self._admin_guard()
+        guard = self._config_guard_any([
+            ("write", "user", None),
+            ("write", "program_import", None),
+            ("write", "course_import", None),
+        ])
         if guard is not None:
             return guard
         self._reset_state()

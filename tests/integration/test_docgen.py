@@ -26,8 +26,9 @@ class TestDocgenIntegration:
             "date": "2025-10-15",
             "body": "Minutes of the meeting held on 2025-10-15.",
         }
-        result = render_docx_template(tpl_bytes, context)
+        result, warnings = render_docx_template(tpl_bytes, context)
         assert len(result) > 0
+        assert warnings == []
 
         doc = Document(io.BytesIO(result))
         all_text = " ".join(p.text for p in doc.paragraphs)
@@ -40,7 +41,7 @@ class TestDocgenIntegration:
         if not fixture_path.exists():
             return
         tpl_bytes = fixture_path.read_bytes()
-        result = render_docx_template(tpl_bytes, {
+        result, warnings = render_docx_template(tpl_bytes, {
             "title": "Integration Test",
             "name": "Test User",
             "date": "2026-01-01",

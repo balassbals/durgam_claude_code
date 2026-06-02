@@ -461,6 +461,8 @@ def seed(session: Session) -> dict[str, int]:
         ("ug_timetable",               "read",      "*"),
         ("ug_timetable",               "write",     "*"),
         ("ug_timetable",               "delete",    "*"),
+        # M5b — non-regular faculty approval (Director is institutional approver §7.1)
+        ("non_regular_faculty",        "approve",   "*"),
     ]
 
     # M4 — IQAC can read/write calendar, read student category

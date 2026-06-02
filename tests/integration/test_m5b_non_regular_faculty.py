@@ -269,12 +269,18 @@ class TestNonRegularFacultyApproval:
             actor_id=user.id,
         )
         assert created.is_admin_approved is False
+        assert created.approved_at is None
+        assert created.approved_by_user_id is None
 
         approved = svc.set_approval(created.id, True, user.id)
         assert approved.is_admin_approved is True
+        assert approved.approved_at is not None
+        assert approved.approved_by_user_id == user.id
 
         unapproved = svc.set_approval(created.id, False, user.id)
         assert unapproved.is_admin_approved is False
+        assert unapproved.approved_at is None
+        assert unapproved.approved_by_user_id is None
 
     def test_list_by_department_returns_active_only(self, db_session):
         campus = _campus(db_session)

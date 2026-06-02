@@ -266,6 +266,11 @@ class NonRegularFaculty(TimestampedSoftDelete, table=True):
 
     Date-windowed, not AY-locked — availability may straddle academic years.
     No academic_year_id; AY-lock machinery does not apply.
+
+    M7 forward-concern: when the approval-request module exists, non_regular_faculty
+    approval migrates from this direct-approve action to a proper request artifact
+    with channel, audit trail, and SLA. Current admin-approve is a simple direct
+    action — sufficient for M5b, replaced at M7.
     """
 
     __tablename__ = "non_regular_faculty"
@@ -282,6 +287,10 @@ class NonRegularFaculty(TimestampedSoftDelete, table=True):
     available_to: date = Field(nullable=False)
     is_admin_approved: bool = Field(default=False, nullable=False)
     non_regular_type: str = Field(max_length=32, default="visiting", nullable=False)
+    approved_at: datetime | None = Field(default=None, sa_type=_TIMESTAMPTZ)
+    approved_by_user_id: UUID | None = Field(
+        default=None, foreign_key="users.id",
+    )
 
 
 class NonOwnedCourse(TimestampedSoftDelete, table=True):

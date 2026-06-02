@@ -25,14 +25,17 @@ def _approval_cell(row: dict) -> rx.Component:
         rx.box(
             rx.cond(
                 row["approved"] == "yes",
-                rx.badge(
-                    "Approved",
-                    color_scheme="green",
-                    variant="soft",
-                    cursor="pointer",
-                    on_click=NonRegularFacultyConfigState.toggle_approval(  # type: ignore[call-arg, func-returns-value]
-                        row["id"], row["approved"]
+                rx.tooltip(
+                    rx.badge(
+                        "Approved",
+                        color_scheme="green",
+                        variant="soft",
+                        cursor="pointer",
+                        on_click=NonRegularFacultyConfigState.toggle_approval(  # type: ignore[call-arg, func-returns-value]
+                            row["id"], row["approved"]
+                        ),
                     ),
+                    content=row["approved_info"],
                 ),
                 rx.badge(
                     "Pending",
@@ -47,7 +50,10 @@ def _approval_cell(row: dict) -> rx.Component:
         ),
         rx.cond(
             row["approved"] == "yes",
-            rx.badge("Approved", color_scheme="green", variant="soft"),
+            rx.tooltip(
+                rx.badge("Approved", color_scheme="green", variant="soft"),
+                content=row["approved_info"],
+            ),
             rx.badge("Pending", color_scheme="amber", variant="soft"),
         ),
     )
@@ -227,6 +233,13 @@ def _inline_form() -> rx.Component:
                             type="button",
                         ),
                         gap="0.75rem",
+                    ),
+                    rx.text(
+                        "New entries appear as Pending. A Director must approve "
+                        "before the appointment is institutionally recognized.",
+                        font_size="0.75rem",
+                        color="var(--color-muted)",
+                        font_style="italic",
                     ),
                     gap="1rem",
                     align="start",

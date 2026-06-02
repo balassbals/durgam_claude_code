@@ -108,6 +108,12 @@ class NonRegularFacultyService:
         if record is None:
             raise NonRegularFacultyError("Non-regular faculty record not found.")
         record.is_admin_approved = approved
+        if approved:
+            record.approved_at = datetime.now(UTC)
+            record.approved_by_user_id = actor_id
+        else:
+            record.approved_at = None
+            record.approved_by_user_id = None
         record.updated_by = actor_id
         record = self._repo.save(record)
         log.info(

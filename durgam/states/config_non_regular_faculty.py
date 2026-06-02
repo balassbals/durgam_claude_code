@@ -9,6 +9,7 @@ from durgam.auth.decorators import audit_action, require_role
 from durgam.db import open_session
 from durgam.repositories.department import DepartmentRepository
 from durgam.repositories.non_regular_faculty import NonRegularFacultyRepository
+from durgam.repositories.user import UserRepository
 from durgam.services.non_regular_faculty import NonRegularFacultyError, NonRegularFacultyService
 from durgam.states.base import BaseState
 
@@ -94,7 +95,19 @@ class NonRegularFacultyConfigState(BaseState):
         if not self.selected_dept_id:
             return
         svc = _svc(session)
+        user_repo = UserRepository(session)
         for v in svc.list_by_department(UUID(self.selected_dept_id)):
+            approved_info = ""
+            if v.is_admin_approved and v.approved_at:
+                approver_name = ""
+                if v.approved_by_user_id:
+                    approver = user_repo.get_by_id(v.approved_by_user_id)
+                    if approver:
+                        approver_name = approver.full_name or approver.username
+                approved_info = (
+                    f"Approved by {approver_name} on "
+                    f"{v.approved_at.strftime('%b %-d, %Y')}"
+                )
             self.visitors.append({
                 "id": str(v.id),
                 "name": v.name,
@@ -104,6 +117,7 @@ class NonRegularFacultyConfigState(BaseState):
                 "available_from": str(v.available_from),
                 "available_to": str(v.available_to),
                 "approved": "yes" if v.is_admin_approved else "no",
+                "approved_info": approved_info,
                 "non_regular_type": v.non_regular_type,
             })
 

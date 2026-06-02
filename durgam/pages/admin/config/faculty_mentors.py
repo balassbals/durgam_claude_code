@@ -230,7 +230,8 @@ def admin_config_faculty_mentors() -> rx.Component:
                 rx.hstack(
                     rx.cond(
                         ~FacultyMentorConfigState.is_confirmed
-                        & ~FacultyMentorConfigState.ay_is_locked,
+                        & ~FacultyMentorConfigState.ay_is_locked
+                        & (FacultyMentorConfigState.mentors.length() > 0),
                         primary_btn(
                             "Confirm Roster",
                             on_click=FacultyMentorConfigState.confirm_roster,

@@ -22,20 +22,21 @@ def _make_template_docx(text_with_vars: str) -> bytes:
 class TestRenderDocxTemplate:
     def test_simple_variable_substitution(self):
         tpl = _make_template_docx("Hello {{ name }}!")
-        result = render_docx_template(tpl, {"name": "World"})
+        result, warnings = render_docx_template(tpl, {"name": "World"})
         doc = Document(io.BytesIO(result))
         assert any("Hello World!" in p.text for p in doc.paragraphs)
+        assert warnings == []
 
     def test_empty_context_leaves_blank(self):
         tpl = _make_template_docx("Hello {{ name }}!")
-        result = render_docx_template(tpl, {})
+        result, warnings = render_docx_template(tpl, {})
         doc = Document(io.BytesIO(result))
         texts = [p.text for p in doc.paragraphs]
         assert any("Hello" in t for t in texts)
 
     def test_multiple_variables(self):
         tpl = _make_template_docx("{{ title }} by {{ author }}")
-        result = render_docx_template(tpl, {"title": "Report", "author": "Admin"})
+        result, warnings = render_docx_template(tpl, {"title": "Report", "author": "Admin"})
         doc = Document(io.BytesIO(result))
         assert any("Report by Admin" in p.text for p in doc.paragraphs)
 
@@ -45,16 +46,23 @@ class TestRenderDocxTemplate:
 
     def test_returns_valid_docx_bytes(self):
         tpl = _make_template_docx("Test {{ x }}")
-        result = render_docx_template(tpl, {"x": "value"})
+        result, _ = render_docx_template(tpl, {"x": "value"})
         doc = Document(io.BytesIO(result))
         assert len(doc.paragraphs) >= 1
+
+    def test_no_placeholder_template_returns_warning(self):
+        tpl = _make_template_docx("Static text with no variables")
+        result, warnings = render_docx_template(tpl, {"key": "value"})
+        assert isinstance(result, bytes)
+        assert len(warnings) == 1
+        assert "no {{ }} placeholders" in warnings[0]
 
     def test_fixture_template(self):
         fixture_path = _FIXTURE_DIR / "sample_template.docx"
         if not fixture_path.exists():
             pytest.skip("sample_template.docx fixture not found")
         tpl_bytes = fixture_path.read_bytes()
-        result = render_docx_template(tpl_bytes, {
+        result, warnings = render_docx_template(tpl_bytes, {
             "title": "Test Report",
             "name": "John Doe",
             "date": "2026-05-26",

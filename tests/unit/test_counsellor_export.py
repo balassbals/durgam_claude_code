@@ -28,9 +28,10 @@ def _make_minimal_docx() -> bytes:
 class TestRenderDocxTemplate:
     def test_render_returns_bytes(self):
         template_bytes = _make_minimal_docx()
-        result = render_docx_template(template_bytes, {"academic_year": "2025-26"})
+        result, warnings = render_docx_template(template_bytes, {"academic_year": "2025-26"})
         assert isinstance(result, bytes)
         assert len(result) > 0
+        assert warnings == []
 
     def test_render_invalid_bytes_raises_docgen_error(self):
         with pytest.raises(DocgenError, match="rendering failed"):

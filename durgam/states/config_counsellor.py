@@ -407,7 +407,7 @@ class CounsellorConfigState(BaseState):
     async def download_document(self, file_id: str, filename: str):
         from durgam.api import DOWNLOAD_PREFIX
 
-        return rx.download(url=f"{DOWNLOAD_PREFIX}/files/{file_id}", filename=filename)
+        return rx.download(url=f"{DOWNLOAD_PREFIX}/api/files/{file_id}", filename=filename)
 
     # ── DOCX export ───────────────────────────────────────────────────────────
 
@@ -477,7 +477,7 @@ class CounsellorConfigState(BaseState):
                         for i, r in enumerate(rows)
                     ],
                 }
-                rendered = render_docx_template(template_bytes, context)
+                rendered, docgen_warnings = render_docx_template(template_bytes, context)
 
                 upload_svc = UploadService(
                     file_repo=file_asset_repo,
@@ -499,6 +499,10 @@ class CounsellorConfigState(BaseState):
             self.flash_type = "error"
             return
 
-        self.flash = "Roster exported."
-        self.flash_type = "success"
+        if docgen_warnings:
+            self.flash = docgen_warnings[0]
+            self.flash_type = "warning"
+        else:
+            self.flash = "Roster exported."
+            self.flash_type = "success"
         return rx.download(data=rendered, filename=roster_filename)
