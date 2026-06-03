@@ -85,6 +85,10 @@ def _exec_insert(session: Session, stmt: object) -> int:
 def seed(session: Session) -> dict[str, int]:
     counts: dict[str, int] = {}
 
+    # Dev-only: clear pre-M6a audit rows that have NULL diff_json.
+    # Production never runs seed; this keeps dev/CI audit data clean for M6b UI.
+    session.exec(sa.text("TRUNCATE audit_logs RESTART IDENTITY"))
+
     # ── AcademicYear ──────────────────────────────────────────────────────────
     ay_stmt = (
         pg_insert(AcademicYear)

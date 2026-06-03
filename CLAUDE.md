@@ -1235,6 +1235,74 @@ When implementing common shapes, follow the existing pattern rather than inventi
 - Live-sourced role picker: BaseState._load_role_options + RoleRepository.list_active
 - DOCX-on-letterhead generation: durgam/docgen/merge.py render_docx_template (returns tuple[bytes, list[str]] — destructure warnings)
 
+## Patterns established at M6a
+
+### Audit emission pattern — `_set_audit()` + `audit_snapshot()`
+
+Every `@audit_action`-decorated handler must call `self._set_audit()` to provide
+`resource_id` and `before`/`after` diffs. The decorator reads `_audit_pending`
+from the state after the handler returns and passes the data to `write_audit_row()`.
+
+```python
+@require_role(action="write", resource="campus")
+@audit_action(action="write", resource="campus")
+async def save_campus(self, form_data: dict) -> None:
+    with open_session() as session:
+        svc = _svc(session)
+        if not editing_id:
+            entity = svc.create(code, name, actor_id)
+            after_snap = audit_snapshot(entity)       # INSIDE session block
+            session.commit()
+            self._set_audit(resource_id=str(entity.id), after=after_snap)
+        else:
+            before_snap = audit_snapshot(svc.get(UUID(editing_id)))
+            entity = svc.update(UUID(editing_id), fields, actor_id)
+            after_snap = audit_snapshot(entity)
+            session.commit()
+            self._set_audit(resource_id=str(entity.id), before=before_snap, after=after_snap)
+```
+
+**Rules**:
+- `audit_snapshot(entity)` must be called INSIDE `with open_session()` (before session
+  closes and detaches the entity).
+- `_set_audit()` is called AFTER `session.commit()` succeeds — the snapshot dict is a
+  plain dict and is safe outside the session block.
+- For deletes: capture `before_snap` before the service delete call; no `after`.
+- On error paths (except blocks): do NOT call `_set_audit()` — the mutation didn't happen.
+- The decorator resets `_audit_pending = None` BEFORE calling the handler (prevents
+  leakage from a prior handler that raised).
+- Use `action="login_failed"` override for the login failure split:
+  `self._set_audit(action="login_failed", resource_id=normalized_username, after={...})`.
+
+### `audit_snapshot()` — automatic sensitive-field redaction
+
+`audit_snapshot(entity)` serializes all column attributes of a SQLModel entity.
+Fields listed in the entity class's `_audit_redact_fields: ClassVar[set[str]]`
+are replaced with `"<redacted>"`. Currently only `User` has this:
+
+```python
+_audit_redact_fields: ClassVar[set[str]] = {"password_hash", "aadhaar_enc", "pan_enc"}
+```
+
+Any new model that stores sensitive data must define `_audit_redact_fields`.
+
+### `_current_user_roles` — actor role snapshot at session resolve time
+
+`BaseState._current_user_roles` is populated once per page navigation inside
+`_resolve_session()` and `AuthState._resolve_session_state()`. The decorator
+reads it without a per-action DB query and passes it as `actor_roles_json` to
+the audit row. The column is JSONB with a GIN index for M6b scope-filter queries.
+
+### `AuthError.reason` — machine-readable failure codes
+
+`AuthError` now carries a `reason` keyword argument for audit trail differentiation:
+- `not_found` — username not in DB
+- `inactive` — account deactivated
+- `locked` — account temporarily locked
+- `invalid_credentials` — wrong password
+
+Handlers use `exc.reason` in `_set_audit(after={"reason": exc.reason, ...})`.
+
 ## Current milestone
 **M5b — Configuration — Assignments & Approval Config.**
 
