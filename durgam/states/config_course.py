@@ -14,6 +14,7 @@ from uuid import UUID
 
 import reflex as rx
 
+from durgam.audit.snapshot import audit_snapshot
 from durgam.auth.decorators import audit_action, require_role
 from durgam.db import open_session
 from durgam.repositories.course import CourseRepository
@@ -282,14 +283,18 @@ class AdminCoursesState(BaseState):
                 actor_id = UUID(self.current_user_id)
                 svc = _svc(session)
                 if not editing_id:
-                    svc.create(
+                    entity = svc.create(
                         code, name,
                         UUID(program_id_str), UUID(department_id_str),
                         credits, lecture, tutorial, practical, evaluation,
                         actor_id,
                     )
+                    after_snap = audit_snapshot(entity)
+                    session.commit()
+                    self._set_audit(resource_id=str(entity.id), after=after_snap)
                 else:
-                    svc.update(
+                    before_snap = audit_snapshot(svc.get(UUID(editing_id)))
+                    entity = svc.update(
                         UUID(editing_id),
                         {
                             "name": name,
@@ -303,7 +308,9 @@ class AdminCoursesState(BaseState):
                         },
                         actor_id,
                     )
-                session.commit()  # open_session() does NOT auto-commit
+                    after_snap = audit_snapshot(entity)
+                    session.commit()
+                    self._set_audit(resource_id=str(entity.id), before=before_snap, after=after_snap)
         except CourseError as e:
             self.flash = e.message
             self.flash_type = "error"
@@ -330,10 +337,14 @@ class AdminCoursesState(BaseState):
     async def soft_delete_course(self) -> None:
         try:
             with open_session() as session:
-                _svc(session).soft_delete(
+                svc = _svc(session)
+                entity = svc.get(UUID(self.confirm_course_id))
+                before_snap = audit_snapshot(entity)
+                svc.soft_delete(
                     UUID(self.confirm_course_id), UUID(self.current_user_id)
                 )
-                session.commit()  # open_session() does NOT auto-commit
+                session.commit()
+                self._set_audit(resource_id=str(entity.id), before=before_snap)
         except (CourseError, HardDeleteBlockedError) as e:
             self.flash = e.message
             self.flash_type = "error"

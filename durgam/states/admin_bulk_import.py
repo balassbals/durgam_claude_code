@@ -243,6 +243,15 @@ class BulkImportState(BaseState):
 
         self.total_rows = len(self.preview_valid) + len(self.preview_invalid)
         self.preview_ready = True
+        self._set_audit(
+            resource_id=upload_file.filename or "unknown",
+            after={
+                "import_type": self.import_type,
+                "row_count": self.total_rows,
+                "valid_count": len(self.preview_valid),
+                "invalid_count": len(self.preview_invalid),
+            },
+        )
 
         if invalid:
             self._build_error_report(invalid, [])
@@ -326,6 +335,14 @@ class BulkImportState(BaseState):
         ]
         self.import_complete = True
         self.preview_ready = False
+        self._set_audit(
+            resource_id=self.import_type,
+            after={
+                "import_type": self.import_type,
+                "committed_count": result.success_count,
+                "error_count": len(result.errors),
+            },
+        )
 
         if result.errors:
             self._build_error_report([], result.errors)

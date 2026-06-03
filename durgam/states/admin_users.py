@@ -7,6 +7,7 @@ from uuid import UUID
 
 import reflex as rx
 
+from durgam.audit.snapshot import audit_snapshot
 from durgam.auth.decorators import audit_action, require_role
 from durgam.db import open_session
 from durgam.notifications.admin_emails import (
@@ -59,6 +60,10 @@ class AdminUsersState(BaseState):
         self.search_query = form_data.get("search", "").strip()
         self.current_page = 1
         await self.load_users()
+        self._set_audit(
+            resource_id=None,
+            after={"query": self.search_query, "result_count": self.total_users},
+        )
 
     async def load_users(self) -> None:
         """on_load for /admin/users — guards session then loads user list.
@@ -124,10 +129,12 @@ class AdminUsersState(BaseState):
                 user, temp_pw = svc.create_user(username, email, UUID(self.current_user_id),
                                                  role_ids=role_ids or None,
                                                  full_name=full_name)
+                after_snap = audit_snapshot(user)
                 user_id = str(user.id)
                 user_email = user.email
                 session.commit()
 
+            self._set_audit(resource_id=user_id, after=after_snap)
             self.generated_password = temp_pw
             self.flash = f"User '{username}' created. Temporary password shown below."
             asyncio.create_task(
@@ -158,8 +165,10 @@ class AdminUsersState(BaseState):
                 user = svc.get_user(UUID(user_id))
                 username = user.username if user else "unknown"
                 email = user.email if user else ""
+                before_snap = audit_snapshot(user) if user else None
                 svc.soft_delete_user(UUID(user_id), UUID(self.current_user_id))
                 session.commit()
+            self._set_audit(resource_id=user_id, before=before_snap)
             self.flash = f"User '{username}' deactivated."
             if email:
                 asyncio.create_task(
@@ -183,6 +192,7 @@ class AdminUsersState(BaseState):
                 svc = _svc(session)
                 svc.hard_delete_user(UUID(user_id), UUID(self.current_user_id))
                 session.commit()
+            self._set_audit(resource_id=user_id, before={"hard_deleted": True})
             self.flash = "User permanently deleted."
             await self.load_users()
         except HardDeleteBlockedError as exc:
@@ -215,6 +225,7 @@ class AdminUsersState(BaseState):
                 email = user.email
                 session.commit()
 
+            self._set_audit(resource_id=user_id, after={"password_reset": True})
             self.generated_password = temp_pw
             # Re-open dialog in success mode so the password is shown at the
             # admin's scroll position (dialog overlays regardless of scroll).

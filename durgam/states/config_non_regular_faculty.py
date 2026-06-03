@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date
 from uuid import UUID
 
+from durgam.audit.snapshot import audit_snapshot
 from durgam.auth.decorators import audit_action, require_role
 from durgam.db import open_session
 from durgam.repositories.department import DepartmentRepository
@@ -213,9 +214,10 @@ class NonRegularFacultyConfigState(BaseState):
         try:
             with open_session() as session:
                 svc = _svc(session)
+                repo = NonRegularFacultyRepository(session)
                 actor_id = UUID(self.current_user_id)
                 if not editing_id:
-                    svc.create(
+                    entity = svc.create(
                         department_id=UUID(self.selected_dept_id),
                         name=name,
                         designation=designation,
@@ -226,8 +228,12 @@ class NonRegularFacultyConfigState(BaseState):
                         actor_id=actor_id,
                         non_regular_type=self.form_type,
                     )
+                    after_snap = audit_snapshot(entity)
+                    session.commit()
+                    self._set_audit(resource_id=str(entity.id), after=after_snap)
                 else:
-                    svc.update(
+                    before_snap = audit_snapshot(repo.get_by_id(UUID(editing_id)))
+                    entity = svc.update(
                         UUID(editing_id),
                         {
                             "name": name,
@@ -240,7 +246,9 @@ class NonRegularFacultyConfigState(BaseState):
                         },
                         actor_id,
                     )
-                session.commit()
+                    after_snap = audit_snapshot(entity)
+                    session.commit()
+                    self._set_audit(resource_id=str(entity.id), before=before_snap, after=after_snap)
         except NonRegularFacultyError as e:
             self.flash = e.message if hasattr(e, "message") else str(e)
             self.flash_type = "error"
@@ -264,10 +272,14 @@ class NonRegularFacultyConfigState(BaseState):
     async def soft_delete_visitor(self) -> None:
         try:
             with open_session() as session:
+                repo = NonRegularFacultyRepository(session)
+                entity = repo.get_by_id(UUID(self.confirm_id))
+                before_snap = audit_snapshot(entity)
                 _svc(session).soft_delete(
                     UUID(self.confirm_id), UUID(self.current_user_id),
                 )
                 session.commit()
+                self._set_audit(resource_id=str(entity.id), before=before_snap)
         except NonRegularFacultyError as e:
             self.flash = e.message if hasattr(e, "message") else str(e)
             self.flash_type = "error"
@@ -290,10 +302,14 @@ class NonRegularFacultyConfigState(BaseState):
         new_approved = current_status != "yes"
         try:
             with open_session() as session:
-                _svc(session).set_approval(
+                repo = NonRegularFacultyRepository(session)
+                before_snap = audit_snapshot(repo.get_by_id(UUID(record_id)))
+                entity = _svc(session).set_approval(
                     UUID(record_id), new_approved, UUID(self.current_user_id),
                 )
+                after_snap = audit_snapshot(entity)
                 session.commit()
+                self._set_audit(resource_id=record_id, before=before_snap, after=after_snap)
         except NonRegularFacultyError as e:
             self.flash = e.message if hasattr(e, "message") else str(e)
             self.flash_type = "error"

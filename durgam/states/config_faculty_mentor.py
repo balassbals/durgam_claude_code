@@ -7,6 +7,7 @@ from uuid import UUID
 
 import reflex as rx
 
+from durgam.audit.snapshot import audit_snapshot
 from durgam.auth.decorators import audit_action, require_role
 from durgam.db import open_session
 from durgam.models.config_anchors import (
@@ -201,9 +202,10 @@ class FacultyMentorConfigState(BaseState):
         try:
             with open_session() as session:
                 svc = _svc(session)
+                repo = AssignmentRepository(FacultyMentorAssignment, session)
                 actor_id = UUID(self.current_user_id)
                 if not editing_id:
-                    svc.create(
+                    entity = svc.create(
                         academic_year_id=UUID(self.selected_ay_id),
                         campus_id=UUID(self.selected_campus_id),
                         faculty_id_placeholder=faculty,
@@ -211,8 +213,12 @@ class FacultyMentorConfigState(BaseState):
                         actor_id=actor_id,
                         notes=notes,
                     )
+                    after_snap = audit_snapshot(entity)
+                    session.commit()
+                    self._set_audit(resource_id=str(entity.id), after=after_snap)
                 else:
-                    svc.update(
+                    before_snap = audit_snapshot(repo.get_by_id(UUID(editing_id)))
+                    entity = svc.update(
                         UUID(editing_id),
                         {
                             "faculty_id_placeholder": faculty,
@@ -221,7 +227,9 @@ class FacultyMentorConfigState(BaseState):
                         },
                         actor_id,
                     )
-                session.commit()
+                    after_snap = audit_snapshot(entity)
+                    session.commit()
+                    self._set_audit(resource_id=str(entity.id), before=before_snap, after=after_snap)
         except (AssignmentError, AcademicYearLockedError) as e:
             self.flash = e.message if hasattr(e, "message") else str(e)
             self.flash_type = "error"
@@ -247,10 +255,14 @@ class FacultyMentorConfigState(BaseState):
     async def soft_delete_mentor(self) -> None:
         try:
             with open_session() as session:
+                repo = AssignmentRepository(FacultyMentorAssignment, session)
+                entity = repo.get_by_id(UUID(self.confirm_id))
+                before_snap = audit_snapshot(entity)
                 _svc(session).soft_delete(
                     UUID(self.confirm_id), UUID(self.current_user_id),
                 )
                 session.commit()
+                self._set_audit(resource_id=str(entity.id), before=before_snap)
         except (AssignmentError, AcademicYearLockedError) as e:
             self.flash = e.message if hasattr(e, "message") else str(e)
             self.flash_type = "error"
@@ -287,7 +299,11 @@ class FacultyMentorConfigState(BaseState):
                     updated_by=UUID(self.current_user_id),
                 )
                 session.add(confirmation)
+                session.flush()
+                after_snap = audit_snapshot(confirmation)
+                confirmation_id = str(confirmation.id)
                 session.commit()
+                self._set_audit(resource_id=confirmation_id, after=after_snap)
         except Exception as e:
             self.flash = f"Confirmation failed: {e}"
             self.flash_type = "error"
@@ -346,18 +362,20 @@ class FacultyMentorConfigState(BaseState):
                         campus_label = opt["label"]
                         break
 
+                mentor_list = [
+                    {
+                        "sno": i + 1,
+                        "faculty": m.faculty_id_placeholder,
+                        "student": m.student_id_placeholder,
+                        "notes": m.notes or "",
+                    }
+                    for i, m in enumerate(rows)
+                ]
+                record_count = len(mentor_list)
                 context = {
                     "academic_year": ay_label,
                     "campus": campus_label,
-                    "mentors": [
-                        {
-                            "sno": i + 1,
-                            "faculty": m.faculty_id_placeholder,
-                            "student": m.student_id_placeholder,
-                            "notes": m.notes or "",
-                        }
-                        for i, m in enumerate(rows)
-                    ],
+                    "mentors": mentor_list,
                 }
                 rendered, docgen_warnings = render_docx_template(template_bytes, context)
 
@@ -371,6 +389,10 @@ class FacultyMentorConfigState(BaseState):
             return
 
         roster_filename = f"faculty_mentor_roster_{ay_label}_{campus_label}.docx"
+        self._set_audit(
+            resource_id=self.selected_ay_id,
+            after={"format": "docx", "record_count": record_count},
+        )
         if docgen_warnings:
             self.flash = docgen_warnings[0]
             self.flash_type = "warning"

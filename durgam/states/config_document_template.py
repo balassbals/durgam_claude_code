@@ -13,6 +13,7 @@ from uuid import UUID
 
 import reflex as rx
 
+from durgam.audit.snapshot import audit_snapshot
 from durgam.auth.decorators import audit_action, require_role
 from durgam.db import open_session
 from durgam.repositories.document_template import DocumentTemplateRepository
@@ -93,14 +94,16 @@ class LetterheadConfigState(BaseState):
 
         try:
             with open_session() as session:
-                _svc(session).upload_letterhead(
+                entity = _svc(session).upload_letterhead(
                     role_code,
                     file_bytes,
                     original_name,
                     content_type,
                     UUID(self.current_user_id),
                 )
+                after_snap = audit_snapshot(entity)
                 session.commit()
+                self._set_audit(resource_id=str(entity.id), after=after_snap)
             self.show_form = False
             await self.load_letterheads()
             self.flash = "Letterhead uploaded."
@@ -126,10 +129,13 @@ class LetterheadConfigState(BaseState):
     async def soft_delete_letterhead(self) -> None:
         try:
             with open_session() as session:
+                entity = DocumentTemplateRepository(session).get_by_id(UUID(self.confirm_id))
+                before_snap = audit_snapshot(entity)
                 _svc(session).soft_delete(
                     UUID(self.confirm_id), UUID(self.current_user_id)
                 )
                 session.commit()
+                self._set_audit(resource_id=str(entity.id), before=before_snap)
             self.confirm_open = False
             self.confirm_id = ""
             await self.load_letterheads()
@@ -207,14 +213,16 @@ class TemplateConfigState(BaseState):
 
         try:
             with open_session() as session:
-                _svc(session).upload_template(
+                entity = _svc(session).upload_template(
                     template_type,
                     file_bytes,
                     original_name,
                     content_type,
                     UUID(self.current_user_id),
                 )
+                after_snap = audit_snapshot(entity)
                 session.commit()
+                self._set_audit(resource_id=str(entity.id), after=after_snap)
             self.show_form = False
             await self.load_templates()
             self.flash = "Template uploaded."
@@ -240,10 +248,13 @@ class TemplateConfigState(BaseState):
     async def soft_delete_template(self) -> None:
         try:
             with open_session() as session:
+                entity = DocumentTemplateRepository(session).get_by_id(UUID(self.confirm_id))
+                before_snap = audit_snapshot(entity)
                 _svc(session).soft_delete(
                     UUID(self.confirm_id), UUID(self.current_user_id)
                 )
                 session.commit()
+                self._set_audit(resource_id=str(entity.id), before=before_snap)
             self.confirm_open = False
             self.confirm_id = ""
             await self.load_templates()

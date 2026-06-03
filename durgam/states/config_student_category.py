@@ -6,6 +6,7 @@ from uuid import UUID
 
 import reflex as rx
 
+from durgam.audit.snapshot import audit_snapshot
 from durgam.auth.decorators import audit_action, require_role
 from durgam.db import open_session
 from durgam.repositories.academic_year import AcademicYearRepository
@@ -136,8 +137,12 @@ class StudentCategoryConfigState(BaseState):
         try:
             with open_session() as session:
                 svc = _svc(session)
-                svc.update(UUID(self.scc_id), fields, UUID(self.current_user_id))
+                scc_repo = StudentCategoryCountRepository(session)
+                before_snap = audit_snapshot(scc_repo.get_by_id(UUID(self.scc_id)))
+                entity = svc.update(UUID(self.scc_id), fields, UUID(self.current_user_id))
+                after_snap = audit_snapshot(entity)
                 session.commit()
+                self._set_audit(resource_id=str(entity.id), before=before_snap, after=after_snap)
         except (StudentCategoryCountError, AcademicYearLockedError) as e:
             self.flash = e.message if hasattr(e, "message") else str(e)
             self.flash_type = "error"

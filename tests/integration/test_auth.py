@@ -114,3 +114,44 @@ class TestWriteAuditRow:
             session=db_session,
         )
         assert row.diff_json == {}
+
+    def test_actor_roles_json_stored(self, db_session):
+        actor = uuid4()
+        roles = [
+            {"role_code": "HOD", "scope_type": "department", "scope_id": str(uuid4())},
+            {"role_code": "BASIC_USER", "scope_type": None, "scope_id": None},
+        ]
+        row = write_audit_row(
+            actor_user_id=actor,
+            actor_role_code="HOD",
+            action="write",
+            resource="department_vision_mission",
+            resource_id="dept-1",
+            request_id="req-2",
+            ip="10.0.0.1",
+            user_agent="pytest",
+            before=None,
+            after={"vision": "new"},
+            actor_roles_json=roles,
+            session=db_session,
+        )
+        assert row.actor_roles_json == roles
+        assert len(row.actor_roles_json) == 2
+        assert row.actor_roles_json[0]["role_code"] == "HOD"
+
+    def test_actor_roles_json_null_for_unauthenticated(self, db_session):
+        row = write_audit_row(
+            actor_user_id=None,
+            actor_role_code=None,
+            action="login_failed",
+            resource="session",
+            resource_id="baduser",
+            request_id=None,
+            ip="1.2.3.4",
+            user_agent="browser",
+            before=None,
+            after={"reason": "invalid_credentials"},
+            actor_roles_json=None,
+            session=db_session,
+        )
+        assert row.actor_roles_json is None

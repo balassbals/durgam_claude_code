@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from durgam.audit.snapshot import audit_snapshot
 from durgam.auth.decorators import audit_action, require_role
 from durgam.db import open_session
 from durgam.models.config_anchors import ClassTeacherAssignment
@@ -170,9 +171,10 @@ class ClassTeacherConfigState(BaseState):
         try:
             with open_session() as session:
                 svc = _svc(session)
+                repo = AssignmentRepository(ClassTeacherAssignment, session)
                 actor_id = UUID(self.current_user_id)
                 if not editing_id:
-                    svc.create(
+                    entity = svc.create(
                         academic_year_id=UUID(self.selected_ay_id),
                         department_id=UUID(self.selected_dept_id),
                         faculty_id_placeholder=faculty,
@@ -180,8 +182,12 @@ class ClassTeacherConfigState(BaseState):
                         actor_id=actor_id,
                         notes=notes,
                     )
+                    after_snap = audit_snapshot(entity)
+                    session.commit()
+                    self._set_audit(resource_id=str(entity.id), after=after_snap)
                 else:
-                    svc.update(
+                    before_snap = audit_snapshot(repo.get_by_id(UUID(editing_id)))
+                    entity = svc.update(
                         UUID(editing_id),
                         {
                             "faculty_id_placeholder": faculty,
@@ -190,7 +196,9 @@ class ClassTeacherConfigState(BaseState):
                         },
                         actor_id,
                     )
-                session.commit()
+                    after_snap = audit_snapshot(entity)
+                    session.commit()
+                    self._set_audit(resource_id=str(entity.id), before=before_snap, after=after_snap)
         except (AssignmentError, AcademicYearLockedError) as e:
             self.flash = e.message if hasattr(e, "message") else str(e)
             self.flash_type = "error"
@@ -214,10 +222,14 @@ class ClassTeacherConfigState(BaseState):
     async def soft_delete_teacher(self) -> None:
         try:
             with open_session() as session:
+                repo = AssignmentRepository(ClassTeacherAssignment, session)
+                entity = repo.get_by_id(UUID(self.confirm_id))
+                before_snap = audit_snapshot(entity)
                 _svc(session).soft_delete(
                     UUID(self.confirm_id), UUID(self.current_user_id),
                 )
                 session.commit()
+                self._set_audit(resource_id=str(entity.id), before=before_snap)
         except (AssignmentError, AcademicYearLockedError) as e:
             self.flash = e.message if hasattr(e, "message") else str(e)
             self.flash_type = "error"

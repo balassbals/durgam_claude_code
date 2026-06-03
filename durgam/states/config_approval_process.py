@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from durgam.audit.snapshot import audit_snapshot
 from durgam.auth.decorators import audit_action, require_role
 from durgam.db import open_session
 from durgam.repositories.approval_process import ApprovalProcessRepository
@@ -141,7 +142,7 @@ class ApprovalProcessConfigState(BaseState):
                 svc = _svc(session)
                 actor_id = UUID(self.current_user_id)
                 if not editing_id:
-                    svc.create(
+                    entity = svc.create(
                         code=code,
                         title=title,
                         requestor_role_codes=requestors,
@@ -150,8 +151,14 @@ class ApprovalProcessConfigState(BaseState):
                         informational_cc_role_codes=cc,
                         actor_id=actor_id,
                     )
+                    after_snap = audit_snapshot(entity)
+                    session.commit()
+                    self._set_audit(resource_id=str(entity.id), after=after_snap)
                 else:
-                    svc.update(
+                    before_snap = audit_snapshot(
+                        ApprovalProcessRepository(session).get_by_id(UUID(editing_id))
+                    )
+                    entity = svc.update(
                         UUID(editing_id),
                         {
                             "code": code,
@@ -163,7 +170,9 @@ class ApprovalProcessConfigState(BaseState):
                         },
                         actor_id,
                     )
-                session.commit()
+                    after_snap = audit_snapshot(entity)
+                    session.commit()
+                    self._set_audit(resource_id=str(entity.id), before=before_snap, after=after_snap)
         except ApprovalProcessError as e:
             self.flash = e.message
             self.flash_type = "error"
@@ -187,10 +196,13 @@ class ApprovalProcessConfigState(BaseState):
     async def soft_delete_process(self) -> None:
         try:
             with open_session() as session:
+                entity = ApprovalProcessRepository(session).get_by_id(UUID(self.confirm_id))
+                before_snap = audit_snapshot(entity)
                 _svc(session).soft_delete(
                     UUID(self.confirm_id), UUID(self.current_user_id),
                 )
                 session.commit()
+                self._set_audit(resource_id=str(entity.id), before=before_snap)
         except ApprovalProcessError as e:
             self.flash = e.message
             self.flash_type = "error"

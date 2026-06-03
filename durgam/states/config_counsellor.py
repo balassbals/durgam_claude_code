@@ -6,6 +6,7 @@ from uuid import UUID
 
 import reflex as rx
 
+from durgam.audit.snapshot import audit_snapshot
 from durgam.auth.decorators import audit_action, require_role
 from durgam.db import open_session
 from durgam.repositories.academic_year import AcademicYearRepository
@@ -301,7 +302,7 @@ class CounsellorConfigState(BaseState):
                     qual_file_id = asset.id
 
                 if not editing_id:
-                    svc.create(
+                    entity = svc.create(
                         academic_year_id=UUID(self.selected_ay_id),
                         campus_id=UUID(self.selected_campus_id),
                         name=name,
@@ -317,7 +318,12 @@ class CounsellorConfigState(BaseState):
                         appointment_letter_file_id=appt_file_id,
                         qualification_proof_file_id=qual_file_id,
                     )
+                    after_snap = audit_snapshot(entity)
+                    session.commit()
+                    self._set_audit(resource_id=str(entity.id), after=after_snap)
                 else:
+                    repo = MentalHealthCounsellorRepository(session)
+                    before_snap = audit_snapshot(repo.get_by_id(UUID(editing_id)))
                     fields: dict = {
                         "name": name,
                         "qualification": qualification,
@@ -333,9 +339,10 @@ class CounsellorConfigState(BaseState):
                         fields["appointment_letter_file_id"] = appt_file_id
                     if qual_file_id is not None:
                         fields["qualification_proof_file_id"] = qual_file_id
-                    svc.update(UUID(editing_id), fields, actor_id)
-
-                session.commit()
+                    entity = svc.update(UUID(editing_id), fields, actor_id)
+                    after_snap = audit_snapshot(entity)
+                    session.commit()
+                    self._set_audit(resource_id=str(entity.id), before=before_snap, after=after_snap)
                 self.staged_appt_letter = b""
                 self.staged_appt_letter_name = ""
                 self.staged_qual_proof = b""
@@ -386,10 +393,14 @@ class CounsellorConfigState(BaseState):
     async def soft_delete_counsellor(self) -> None:
         try:
             with open_session() as session:
+                repo = MentalHealthCounsellorRepository(session)
+                entity = repo.get_by_id(UUID(self.confirm_id))
+                before_snap = audit_snapshot(entity)
                 _svc(session).soft_delete(
                     UUID(self.confirm_id), UUID(self.current_user_id),
                 )
                 session.commit()
+                self._set_audit(resource_id=str(entity.id), before=before_snap)
         except (CounsellorError, AcademicYearLockedError) as e:
             self.flash = e.message if hasattr(e, "message") else str(e)
             self.flash_type = "error"
@@ -456,23 +467,25 @@ class CounsellorConfigState(BaseState):
                         campus_label = opt["label"]
                         break
 
+                counsellor_list = [
+                    {
+                        "sno": i + 1,
+                        "name": r.name,
+                        "qualification": r.qualification,
+                        "specialisation": r.specialisation,
+                        "mode_of_appointment": r.mode_of_appointment,
+                        "appointment_start": str(r.appointment_start),
+                        "appointment_end": str(r.appointment_end),
+                        "phone": r.phone or "",
+                        "email": r.email or "",
+                    }
+                    for i, r in enumerate(rows)
+                ]
+                record_count = len(counsellor_list)
                 context = {
                     "academic_year": ay_label,
                     "campus": campus_label,
-                    "counsellors": [
-                        {
-                            "sno": i + 1,
-                            "name": r.name,
-                            "qualification": r.qualification,
-                            "specialisation": r.specialisation,
-                            "mode_of_appointment": r.mode_of_appointment,
-                            "appointment_start": str(r.appointment_start),
-                            "appointment_end": str(r.appointment_end),
-                            "phone": r.phone or "",
-                            "email": r.email or "",
-                        }
-                        for i, r in enumerate(rows)
-                    ],
+                    "counsellors": counsellor_list,
                 }
                 rendered, docgen_warnings = render_docx_template(template_bytes, context)
 
@@ -496,6 +509,10 @@ class CounsellorConfigState(BaseState):
             self.flash_type = "error"
             return
 
+        self._set_audit(
+            resource_id=self.selected_ay_id,
+            after={"format": "docx", "record_count": record_count},
+        )
         if docgen_warnings:
             self.flash = docgen_warnings[0]
             self.flash_type = "warning"

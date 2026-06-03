@@ -24,6 +24,7 @@ def write_audit_row(
     user_agent: str | None,
     before: dict[str, Any] | None,
     after: dict[str, Any] | None,
+    actor_roles_json: list[dict[str, Any]] | None = None,
     session: Session,
 ) -> AuditLog:
     """Insert one row into audit_logs and return it.
@@ -55,6 +56,7 @@ def write_audit_row(
         ip=ip,
         user_agent=user_agent,
         diff_json=diff,
+        actor_roles_json=actor_roles_json,
     )
     session.add(row)
     session.flush()

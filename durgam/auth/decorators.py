@@ -148,10 +148,14 @@ def audit_action(
     Reads actor context from args[0] (the State instance):
     - current_user_id → actor_user_id
     - current_role_code → actor_role_code (optional)
+    - _current_user_roles → actor_roles_json (full role snapshot)
     - request_id, client_ip, client_user_agent → audit metadata
 
-    The decorated handler may return a dict with "resource_id", "before",
-    "after" keys to populate the diff. If it raises, no audit row is written.
+    Handlers populate audit data by calling self._set_audit() which sets
+    _audit_pending on the state. The decorator reads _audit_pending after
+    the handler returns and resets it to None. _audit_pending is also reset
+    BEFORE the handler call to prevent leakage from a prior handler that
+    raised an exception before _set_audit() could run.
     """
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -162,16 +166,23 @@ def audit_action(
             actor_role = getattr(state, "current_role_code", None)
             request_id, ip, user_agent = _extract_context(state)
 
+            # Reset before handler call — prevents stale data from a prior
+            # handler that raised before calling _set_audit() (risk h).
+            state._audit_pending = None
+
             result = await func(*args, **kwargs)
 
-            # Audit write runs in a thread-pool executor so it never blocks
-            # the asyncio event loop.  Blocking here would prevent Reflex from
-            # dispatching the second socket.io message that carries rx.redirect.
-            audit_data: dict[str, Any] = result if isinstance(result, dict) else {}
+            audit_data: dict[str, Any] = state._audit_pending or {}
+            state._audit_pending = None  # clear after read
+
+            audit_action_name = audit_data.get("action_override", action)
+
+            actor_roles = getattr(state, "_current_user_roles", None) or None
+
             _audit_kwargs = dict(
                 actor_user_id=user_id,
                 actor_role_code=actor_role,
-                action=action,
+                action=audit_action_name,
                 resource=resource,
                 resource_id=audit_data.get("resource_id"),
                 request_id=request_id,
@@ -179,6 +190,7 @@ def audit_action(
                 user_agent=user_agent,
                 before=audit_data.get("before"),
                 after=audit_data.get("after"),
+                actor_roles_json=actor_roles if actor_roles else None,
             )
 
             def _do_audit() -> None:
@@ -187,13 +199,13 @@ def audit_action(
                         write_audit_row(**_audit_kwargs, session=session)
                         session.commit()
                 except Exception:
-                    log.error("audit_write_failed", action=action, resource=resource)
+                    log.error("audit_write_failed", action=audit_action_name, resource=resource)
 
             try:
                 loop = asyncio.get_event_loop()
                 loop.run_in_executor(None, _do_audit)
             except Exception:
-                log.error("audit_executor_failed", action=action, resource=resource)
+                log.error("audit_executor_failed", action=audit_action_name, resource=resource)
 
             return result
 

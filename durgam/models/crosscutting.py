@@ -21,6 +21,7 @@ class AuditLog(SQLModel, table=True):
         sa.Index("ix_audit_logs_actor_occurred_at", "actor_user_id", "occurred_at"),
         sa.Index("ix_audit_logs_resource", "resource", "resource_id"),
         sa.Index("ix_audit_logs_diff_json", "diff_json", postgresql_using="gin"),
+        sa.Index("ix_audit_logs_actor_roles_gin", "actor_roles_json", postgresql_using="gin"),
     )
 
     id: int = Field(default=None, primary_key=True)
@@ -38,6 +39,9 @@ class AuditLog(SQLModel, table=True):
     ip: str | None = Field(default=None, max_length=45)
     user_agent: str | None = Field(default=None, max_length=512)
     diff_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB, nullable=True))
+    actor_roles_json: list[dict[str, Any]] | None = Field(
+        default=None, sa_column=Column(JSONB, nullable=True)
+    )
 
 
 class FileAsset(TimestampedSoftDelete, table=True):

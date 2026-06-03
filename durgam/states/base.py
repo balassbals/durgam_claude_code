@@ -1,3 +1,4 @@
+from typing import Any
 from uuid import UUID
 
 import reflex as rx
@@ -9,6 +10,10 @@ from durgam.nav.registry import get_visible_entries
 
 class BaseState(rx.State):
     """Shared state inherited by all page states."""
+
+    # Audit context — backend vars (prefixed _), not sent to frontend.
+    _audit_pending: dict[str, Any] | None = None
+    _current_user_roles: list[dict[str, str | None]] = []
 
     # Opaque session token stored in the browser cookie (SD-001).
     # rx.Cookie is JS-set; see docs/security_decisions.md for HttpOnly gap analysis.
@@ -63,6 +68,27 @@ class BaseState(rx.State):
         self.flash = ""
         self.flash_type = "info"
 
+    def _set_audit(
+        self,
+        *,
+        resource_id: str | None = None,
+        before: dict[str, Any] | None = None,
+        after: dict[str, Any] | None = None,
+        action: str | None = None,
+    ) -> None:
+        """Set audit emission data for the current handler invocation.
+
+        The @audit_action decorator reads _audit_pending after the handler returns.
+        Call AFTER session.commit() succeeds, never before.
+        """
+        self._audit_pending = {
+            "resource_id": resource_id,
+            "before": before,
+            "after": after,
+        }
+        if action is not None:
+            self._audit_pending["action_override"] = action
+
     def _resolve_session(self) -> None:
         """Resolve session cookie and populate current_user_id / current_username.
 
@@ -74,9 +100,11 @@ class BaseState(rx.State):
         if not self.session_token:
             self.current_user_id = ""
             self.current_username = ""
+            self._current_user_roles = []
             return
         from durgam.repositories.auth import UserSessionRepository
         from durgam.repositories.user import UserRepository
+        from durgam.repositories.user_role import UserRoleRepository
         from durgam.services.auth import AuthService
 
         with open_session() as session:
@@ -89,9 +117,20 @@ class BaseState(rx.State):
                 self.session_token = ""
                 self.current_user_id = ""
                 self.current_username = ""
+                self._current_user_roles = []
             else:
                 self.current_user_id = str(user.id)
                 self.current_username = user.username
+                ur_repo = UserRoleRepository(session)
+                user_role_pairs = ur_repo.get_user_roles_with_role(user.id)
+                self._current_user_roles = [
+                    {
+                        "role_code": role.code,
+                        "scope_type": ur.scope_type,
+                        "scope_id": str(ur.scope_id) if ur.scope_id else None,
+                    }
+                    for ur, role in user_role_pairs
+                ]
 
     def _admin_guard(self):
         """Resolve session and verify admin (user:read:*) permission.

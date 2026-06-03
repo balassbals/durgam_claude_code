@@ -29,6 +29,8 @@ def _make_state(user_id: str = "", role_code: str | None = None) -> MagicMock:
     state.client_ip = "127.0.0.1"
     state.client_user_agent = "pytest"
     state.scope_id = None
+    state._audit_pending = None
+    state._current_user_roles = []
 
     db_session = MagicMock()
     db_session.__enter__ = lambda s: MagicMock()
@@ -132,7 +134,11 @@ class TestAuditActionDecorator:
 
         @audit_action(action="create", resource="thing")
         async def handler(state_obj):
-            return {"resource_id": "t-1", "before": None, "after": {"x": 1}}
+            state_obj._audit_pending = {
+                "resource_id": "t-1",
+                "before": None,
+                "after": {"x": 1},
+            }
 
         with patch("durgam.auth.decorators.write_audit_row") as mock_write:
             await handler(state)
@@ -166,7 +172,7 @@ class TestAuditActionDecorator:
 
         @audit_action(action="login_attempt", resource="session")
         async def handler(state_obj):
-            return {}
+            pass
 
         with patch("durgam.auth.decorators.write_audit_row") as mock_write:
             await handler(state)
@@ -177,7 +183,7 @@ class TestAuditActionDecorator:
     def test_decorator_marks_function_with_metadata(self):
         @audit_action(action="update", resource="profile")
         async def handler(state_obj):
-            return {}
+            pass
 
         assert hasattr(handler, "_audit_action")
         assert handler._audit_action == ("update", "profile")
