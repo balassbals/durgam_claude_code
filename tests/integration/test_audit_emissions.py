@@ -183,6 +183,31 @@ class TestAuthEmissions:
         assert len(row.diff_json["token_hash"][1]) == 64  # SHA-256 hex
 
 
+class TestPermissionCheckEmission:
+    """Census #69: check_permission|user — permission widget audit."""
+
+    def test_check_permission_user(self, db_session):
+        """#69: check_permission|user — resource_id is target user, after has verdict."""
+        target_user = _make_user(db_session)
+        row = _write_and_check(
+            db_session,
+            action="check_permission", resource="user",
+            resource_id=str(target_user.id),
+            before=None,
+            after={
+                "permission_action": "read",
+                "permission_resource": "user",
+                "scope_type": None,
+                "scope_id": None,
+                "verdict": True,
+            },
+        )
+        assert row.resource_id == str(target_user.id)
+        assert row.diff_json is not None
+        assert "verdict" in row.diff_json
+        assert row.diff_json["verdict"] == [None, True]
+
+
 class TestUserEmissions:
     """Census #7-11: user action/resource pairs."""
 
