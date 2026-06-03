@@ -7,6 +7,7 @@ from uuid import UUID
 
 import reflex as rx
 
+from durgam.audit.snapshot import audit_snapshot
 from durgam.auth.decorators import audit_action, require_role
 from durgam.db import open_session
 from durgam.repositories.campus import CampusRepository
@@ -241,8 +242,12 @@ class AdminDepartmentsState(BaseState):
                     # counts DepartmentCampus rows; without this the campus
                     # count shows 0 immediately after create (Bug 1).
                     svc.add_campus(new_dept.id, UUID(main_campus_id_str), actor_id)
+                    after_snap = audit_snapshot(new_dept)
+                    session.commit()
+                    self._set_audit(resource_id=str(new_dept.id), after=after_snap)
                 else:
-                    svc.update(
+                    before_snap = audit_snapshot(svc.get(UUID(editing_id)))
+                    entity = svc.update(
                         UUID(editing_id),
                         {
                             "name": name,
@@ -251,7 +256,9 @@ class AdminDepartmentsState(BaseState):
                         },
                         actor_id,
                     )
-                session.commit()  # open_session() does NOT auto-commit
+                    after_snap = audit_snapshot(entity)
+                    session.commit()
+                    self._set_audit(resource_id=str(entity.id), before=before_snap, after=after_snap)
             success_msg = "Department saved."
         except DepartmentError as e:
             self.flash = e.message
@@ -285,10 +292,14 @@ class AdminDepartmentsState(BaseState):
     async def soft_delete_department(self) -> None:
         try:
             with open_session() as session:
-                _dept_svc(session).soft_delete(
+                svc = _dept_svc(session)
+                entity = svc.get(UUID(self.confirm_dept_id))
+                before_snap = audit_snapshot(entity)
+                svc.soft_delete(
                     UUID(self.confirm_dept_id), UUID(self.current_user_id)
                 )
-                session.commit()  # open_session() does NOT auto-commit
+                session.commit()
+                self._set_audit(resource_id=str(entity.id), before=before_snap)
         except (DepartmentError, HardDeleteBlockedError) as e:
             self.flash = e.message
             self.flash_type = "error"
@@ -374,6 +385,10 @@ class AdminDepartmentsState(BaseState):
                     UUID(self.current_user_id),
                 )
                 session.commit()
+                self._set_audit(
+                    resource_id=self.detail_dept_id,
+                    after={"campus_id": self.add_campus_id},
+                )
         except DepartmentError as e:
             self.flash = e.message
             self.flash_type = "error"
@@ -436,6 +451,10 @@ class AdminDepartmentsState(BaseState):
                     UUID(self.current_user_id),
                 )
                 session.commit()
+                self._set_audit(
+                    resource_id=self.detail_dept_id,
+                    before={"campus_id": self.confirm_remove_campus_id},
+                )
         except (DepartmentError, CannotRemoveMainCampusError) as e:
             self.flash = e.message
             self.flash_type = "error"
@@ -469,6 +488,11 @@ class AdminDepartmentsState(BaseState):
                     actor_id=UUID(self.current_user_id),
                 )
                 session.commit()
+                self._set_audit(
+                    resource_id=self.detail_dept_id,
+                    before={"main_campus_id": self.confirm_remove_campus_id},
+                    after={"main_campus_id": self.promote_new_campus_id},
+                )
         except DepartmentError as e:
             self.flash = e.message
             self.flash_type = "error"

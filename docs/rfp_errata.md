@@ -492,3 +492,23 @@ import UIs.
   - Calendar entries created by a Dean carry `owner_role_code="DEAN"` and
     resolve the scope label via the shared scope-label resolver.
   - This aligns with the M5a decision that letterhead is per-role, no scope.
+
+---
+
+## E-011 — docker-compose includes app as a service
+
+- **Status**: Acknowledged. Not blocking.
+- **Source**: Discovered between M5b and M6a during dev-environment setup.
+- **Gap**: Between M5b and M6a, `docker-compose.yml` was extended to run the
+  Reflex app as a container service alongside the dependency containers (db,
+  redis, mailpit, minio). The app container's `uv run reflex run` creates
+  `.venv/` on the shared host-mount volume as root, conflicting with the
+  host-Reflex fresh-clone workflow documented in CLAUDE.md (cleanup protocol
+  references "kill Reflex PIDs," indicating a host process). The M6a gate was
+  completed by bringing up only the dependency services
+  (`docker compose up -d db redis mailpit minio`) and running Reflex on the
+  host as before.
+- **Disposition**: Decide in a future milestone whether to (a) remove the app
+  service from `docker-compose.yml`, or (b) split into
+  `docker-compose.deps.yml` (dev fresh-clone workflow) and
+  `docker-compose.full.yml` (container end-to-end testing).

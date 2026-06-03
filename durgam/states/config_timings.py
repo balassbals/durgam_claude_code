@@ -6,6 +6,7 @@ from uuid import UUID
 
 import reflex as rx
 
+from durgam.audit.snapshot import audit_snapshot
 from durgam.auth.decorators import audit_action, require_role
 from durgam.db import open_session
 from durgam.repositories.config_singleton import ConfigSingletonRepository
@@ -105,7 +106,8 @@ class ClassTimingsConfigState(BaseState):
             with open_session() as session:
                 svc = _svc(session)
                 ctc = svc.get_class_timings()
-                svc.save_class_timings(
+                before_snap = audit_snapshot(ctc)
+                ctc = svc.save_class_timings(
                     ctc,
                     UUID(self.current_user_id),
                     periods_per_day=ppd,
@@ -114,7 +116,9 @@ class ClassTimingsConfigState(BaseState):
                     break_after_period=bap,
                     break_duration_minutes=bdm,
                 )
+                after_snap = audit_snapshot(ctc)
                 session.commit()
+                self._set_audit(resource_id=str(ctc.id), before=before_snap, after=after_snap)
         except ConfigError as e:
             self.flash = e.message
             self.flash_type = "error"
@@ -158,8 +162,11 @@ class WorkingDaysConfigState(BaseState):
             with open_session() as session:
                 svc = _svc(session)
                 wdc = svc.get_working_days()
-                svc.save_working_days(wdc, UUID(self.current_user_id), days_per_week=dpw)
+                before_snap = audit_snapshot(wdc)
+                wdc = svc.save_working_days(wdc, UUID(self.current_user_id), days_per_week=dpw)
+                after_snap = audit_snapshot(wdc)
                 session.commit()
+                self._set_audit(resource_id=str(wdc.id), before=before_snap, after=after_snap)
         except ConfigError as e:
             self.flash = e.message
             self.flash_type = "error"

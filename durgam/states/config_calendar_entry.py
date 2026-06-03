@@ -12,6 +12,7 @@ from sqlmodel import select
 
 log = structlog.get_logger(__name__)
 
+from durgam.audit.snapshot import audit_snapshot
 from durgam.auth.decorators import audit_action, require_role
 from durgam.db import open_session
 from durgam.models.identity import Role, UserRole
@@ -460,7 +461,7 @@ class CalendarEntryConfigState(BaseState):
                 svc = _svc(session)
                 actor_id = UUID(self.current_user_id)
                 if not editing_id:
-                    svc.create(
+                    entity = svc.create(
                         academic_year_id=UUID(self.selected_ay_id),
                         title=title,
                         entry_type=entry_type,
@@ -473,14 +474,21 @@ class CalendarEntryConfigState(BaseState):
                         scope_id=scope_id,
                         notes=notes,
                     )
+                    after_snap = audit_snapshot(entity)
+                    session.commit()
+                    self._set_audit(resource_id=str(entity.id), after=after_snap)
                 else:
-                    svc.update(
+                    entry_repo = CalendarEntryRepository(session)
+                    before_snap = audit_snapshot(entry_repo.get_by_id(UUID(editing_id)))
+                    entity = svc.update(
                         UUID(editing_id),
                         {"title": title, "starts_at": starts_at, "ends_at": ends_at, "notes": notes},
                         actor_user_id=actor_id,
                         actor_id=actor_id,
                     )
-                session.commit()
+                    after_snap = audit_snapshot(entity)
+                    session.commit()
+                    self._set_audit(resource_id=str(entity.id), before=before_snap, after=after_snap)
         except (CalendarEntryError, AcademicYearLockedError) as e:
             self.flash = e.message if hasattr(e, "message") else str(e)
             self.flash_type = "error"
@@ -506,12 +514,16 @@ class CalendarEntryConfigState(BaseState):
     async def soft_delete_entry(self) -> None:
         try:
             with open_session() as session:
+                entry_repo = CalendarEntryRepository(session)
+                entity = entry_repo.get_by_id(UUID(self.confirm_entry_id))
+                before_snap = audit_snapshot(entity)
                 _svc(session).soft_delete(
                     UUID(self.confirm_entry_id),
                     actor_user_id=UUID(self.current_user_id),
                     actor_id=UUID(self.current_user_id),
                 )
                 session.commit()
+                self._set_audit(resource_id=str(entity.id), before=before_snap)
         except (CalendarEntryError, AcademicYearLockedError) as e:
             self.flash = e.message if hasattr(e, "message") else str(e)
             self.flash_type = "error"
@@ -608,10 +620,13 @@ class CalendarEntryConfigState(BaseState):
                 ay_repo = AcademicYearRepository(session)
                 from durgam.services.academic_year import AcademicYearService
                 ay_svc = AcademicYearService(ay_repo=ay_repo)
-                ay_svc.lock_master_calendar(
+                before_snap = audit_snapshot(ay_svc.get(UUID(self.selected_ay_id)))
+                ay = ay_svc.lock_master_calendar(
                     UUID(self.selected_ay_id), UUID(self.current_user_id)
                 )
+                after_snap = audit_snapshot(ay)
                 session.commit()
+                self._set_audit(resource_id=str(ay.id), before=before_snap, after=after_snap)
         except Exception as e:
             self.flash = str(e)
             self.flash_type = "error"
@@ -651,10 +666,13 @@ class CalendarEntryConfigState(BaseState):
                 ay_repo = AcademicYearRepository(session)
                 from durgam.services.academic_year import AcademicYearService
                 ay_svc = AcademicYearService(ay_repo=ay_repo)
-                ay_svc.confirm_iqac(
+                before_snap = audit_snapshot(ay_svc.get(UUID(self.selected_ay_id)))
+                ay = ay_svc.confirm_iqac(
                     UUID(self.selected_ay_id), UUID(self.current_user_id)
                 )
+                after_snap = audit_snapshot(ay)
                 session.commit()
+                self._set_audit(resource_id=str(ay.id), before=before_snap, after=after_snap)
         except Exception as e:
             self.flash = str(e)
             self.flash_type = "error"

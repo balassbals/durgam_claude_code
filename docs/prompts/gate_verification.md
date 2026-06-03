@@ -305,6 +305,78 @@ For M6 onward: every binding decision goes into an authority file (errata, miles
 
 ---
 
+## Lessons from M6a — audit emission hardening
+
+M6a hardened 82 `@audit_action`-decorated handlers across 28 state files so every
+state-changing operation produces a complete audit row with `resource_id`,
+`diff_json` (before/after diffs), `actor_roles_json` (full role snapshot at action
+time), and sensitive-field redaction. Standard ritual results:
+
+- **Unit tests**: 511 passed (including 31 new audit unit tests) ✓
+- **M6a-specific integration tests**: 82 passed (70 emissions + 5 scope + 6 redaction + 1 check_permission) ✓
+- **Full integration suite**: 325 passed, 0 failed ✓
+- **Migration forward/reverse/forward**: clean ✓
+- **E2E 3× green**: ✓
+- **Manual UI walkthrough**: ✓
+- **DB spot-checks**: zero empty diffs for state-changing actions, schema columns and GIN index verified ✓
+
+### 1. Build the census from grep, not from memory
+
+`check_permission|user` (the permission check widget in
+`durgam/pages/shared/permission_check_widget.py`) was missed in the initial census of
+68 action/resource pairs. It was caught only by the post-walkthrough SQL spot-check
+query (`SELECT count(*) ... WHERE diff_json IS NULL`), not by any test — because no
+test existed for a pair that wasn't in the census.
+
+**Pattern for future milestones**: build the emission census from a fresh
+`grep -r "@audit_action" durgam/` enumeration of all decorated handlers, not from
+memory or from the plan's initial list. Cross-reference the grep output against the
+test file's test names before declaring coverage complete.
+
+### 2. GIN containment query psycopg3 syntax collision
+
+The SQL `WHERE actor_roles_json @> :pattern::jsonb` fails with psycopg3 because
+`::` in `::jsonb` collides with the `:pattern` named-parameter prefix. The fix is
+`cast(:pattern AS jsonb)` — standard SQL cast syntax that avoids the PostgreSQL
+shorthand entirely. Caught at gate step 7 (M6a-specific tests).
+
+**Rule**: in any `text()` query that uses psycopg3 named parameters, never use
+PostgreSQL `::type` cast syntax. Use `cast(:param AS type)` instead.
+
+### 3. Per-pair test scope, not per-category
+
+The initial plan called for ~40 per-category emission tests. RFP §13.2 requires
+per-operation audit coverage, not per-category. Caught at plan review and corrected
+before build — the final suite has one test per (action, resource) pair (71 tests
+covering 68 emitting pairs plus 4 login_failed reason codes).
+
+### 4. docker-compose app container conflicts with host-Reflex workflow
+
+`docker-compose.yml` includes a `web` service that runs the Reflex app in a
+container. Its `uv run reflex run` creates `.venv/` on the shared host-mount volume
+as root, conflicting with the host-Reflex fresh-clone workflow. Worked around by
+starting only dependency services (`docker compose up -d db redis mailpit minio`).
+Captured as E-011 in `docs/rfp_errata.md` and TD-018 in `docs/tech_debt.md`.
+
+### 5. No-op saves produce legitimately empty diffs
+
+When a user opens an edit form and saves without changing any value, `before == after`
+and the diff function produces `{}`. This is correct behavior — the audit row records
+that the action was attempted and authorized; the empty diff correctly communicates
+"no fields changed." Gate criterion clarified: "Zero empty diffs for state-changing
+actions, excluding no-op saves where before == after." Documented as Risk Register
+item (i) in the plan doc.
+
+### 6. Verify claims by naming each artifact
+
+The agent initially claimed "all 4 login_failed reason-code tests exist." Asking
+"name each test" revealed only 1 existed (`invalid_credentials`); the other 3
+(`not_found`, `inactive`, `locked`) were added in response. The discipline of
+requiring the agent to enumerate each artifact by name — not just assert a count —
+catches gaps that aggregate claims hide.
+
+---
+
 ## Why this ritual exists
 
 Tests verify what is tested. Manual use verifies what users actually

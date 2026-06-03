@@ -18,6 +18,7 @@ from durgam.config import settings
 from durgam.db import open_session
 from durgam.repositories.auth import PasswordResetTokenRepository, UserSessionRepository
 from durgam.repositories.user import UserRepository
+from durgam.repositories.user_role import UserRoleRepository
 from durgam.services.auth import AuthError, AuthService, InvalidTokenError, PasswordService
 from durgam.services.password import WeakPasswordError
 from durgam.states.base import BaseState
@@ -56,6 +57,7 @@ class AuthState(BaseState):
             self.current_user_id = ""
             self.current_username = ""
             self.must_change_password = False
+            self._current_user_roles = []
             return
         with open_session() as session:
             user = _auth_svc(session).resolve_session(self.session_token)
@@ -64,11 +66,22 @@ class AuthState(BaseState):
                 self.current_user_id = ""
                 self.current_username = ""
                 self.must_change_password = False
+                self._current_user_roles = []
             else:
                 self.current_user_id = str(user.id)
                 self.current_username = user.username
                 self.must_change_password = user.must_change_password
                 self.profile_incomplete = not user.profile_completed
+                ur_repo = UserRoleRepository(session)
+                user_role_pairs = ur_repo.get_user_roles_with_role(user.id)
+                self._current_user_roles = [
+                    {
+                        "role_code": role.code,
+                        "scope_type": ur.scope_type,
+                        "scope_id": str(ur.scope_id) if ur.scope_id else None,
+                    }
+                    for ur, role in user_role_pairs
+                ]
 
     def resolve_session(self) -> None:
         """on_load for pages that show auth-aware UI but do NOT require login.
@@ -151,8 +164,6 @@ class AuthState(BaseState):
                     raise
                 # Read all user attributes BEFORE commit expires them and BEFORE
                 # the session context closes and detaches the object.
-                # Accessing expired attributes on a detached User raises
-                # DetachedInstanceError, which would silently swallow the redirect.
                 user_id = str(user.id)
                 login_username = user.username
                 must_change = user.must_change_password
@@ -163,10 +174,17 @@ class AuthState(BaseState):
             self.current_username = login_username
             self.must_change_password = must_change
             self.profile_incomplete = not profile_done
+            self._set_audit(resource_id=user_id)
             if self.must_change_password:
                 return rx.redirect("/change-password")  # type: ignore[return-value]
             return rx.redirect("/")  # type: ignore[return-value]
         except AuthError as exc:
+            normalized = username.strip().lower()
+            self._set_audit(
+                action="login_failed",
+                resource_id=normalized,
+                after={"reason": exc.reason, "ip": self.client_ip or None},
+            )
             self.flash = exc.message
             self.flash_type = "error"
         finally:
@@ -176,10 +194,12 @@ class AuthState(BaseState):
     @audit_action(action="logout", resource="session")
     async def logout(self) -> None:
         token = self.session_token
+        logout_user_id = self.current_user_id
         if token:
             with open_session() as session:
                 _auth_svc(session).logout(token)
                 session.commit()
+        self._set_audit(resource_id=logout_user_id)
         self.session_token = ""
         self.current_user_id = ""
         self.current_username = ""
@@ -205,6 +225,10 @@ class AuthState(BaseState):
                     UUID(self.current_user_id), current, new_pw
                 )
                 session.commit()
+            self._set_audit(
+                resource_id=self.current_user_id,
+                after={"changed": True},
+            )
             self.must_change_password = False
             self.pending_success = "Password changed successfully."
             return rx.redirect("/")  # type: ignore[return-value]
@@ -229,6 +253,7 @@ class AuthState(BaseState):
                     reset_url_base=settings.app_base_url,
                 )
                 session.commit()
+            self._set_audit(resource_id=email, after={"email": email})
             self.flash = (
                 "If that email is registered, a reset link has been sent. "
                 "Check your inbox (or Mailpit in dev)."
@@ -239,6 +264,8 @@ class AuthState(BaseState):
     @public_handler
     @audit_action(action="reset_password", resource="session")
     async def reset_password(self, form_data: dict) -> None:
+        import hashlib
+
         new_pw = form_data.get("new_password", "")
         confirm = form_data.get("confirm_password", "")
         self.flash = ""
@@ -247,12 +274,19 @@ class AuthState(BaseState):
             return
         try:
             with open_session() as session:
-                _pw_svc(session).consume_reset_token(self.reset_token, new_pw)
+                user = _pw_svc(session).consume_reset_token(self.reset_token, new_pw)
+                reset_user_id = str(user.id)
                 session.commit()
+            token_hash = hashlib.sha256(self.reset_token.encode()).hexdigest()
+            self._set_audit(
+                resource_id=reset_user_id,
+                after={"token_hash": token_hash, "token_consumed": True},
+            )
             self.flash = "Password reset successfully. You can now log in."
             self.reset_token = ""
             return rx.redirect("/login")  # type: ignore[return-value]
         except InvalidTokenError as exc:
+            self._set_audit(resource_id="<invalid_token>")
             self.flash = str(exc)
         except WeakPasswordError as exc:
             self.flash = exc.reason

@@ -6,6 +6,7 @@ from uuid import UUID
 
 import reflex as rx
 
+from durgam.audit.snapshot import audit_snapshot
 from durgam.auth.decorators import audit_action, require_role
 from durgam.db import open_session
 from durgam.repositories.permission import PermissionRepository
@@ -88,8 +89,10 @@ class AdminRolesState(BaseState):
                 svc = _svc(session)
                 role = svc.create_role(code, name, level, description,
                                        UUID(self.current_user_id))
+                after_snap = audit_snapshot(role)
                 role_id = str(role.id)
                 session.commit()
+            self._set_audit(resource_id=role_id, after=after_snap)
             self.flash = f"Role '{code}' created."
             return rx.redirect(f"/admin/roles/{role_id}")  # type: ignore[return-value]
         except RoleAdminError as exc:
@@ -119,9 +122,18 @@ class AdminRolesState(BaseState):
         try:
             with open_session() as session:
                 svc = _svc(session)
-                svc.update_permissions(UUID(self.current_role_id_str), perm_ids,
+                role_uuid = UUID(self.current_role_id_str)
+                old_perms = svc.get_role_permissions(role_uuid)
+                before_perm_ids = sorted(str(p.id) for p in old_perms)
+                svc.update_permissions(role_uuid, perm_ids,
                                        UUID(self.current_user_id))
                 session.commit()
+            after_perm_ids = sorted(self.role_perm_ids_checked)
+            self._set_audit(
+                resource_id=self.current_role_id_str,
+                before={"perm_ids": before_perm_ids},
+                after={"perm_ids": after_perm_ids},
+            )
             self.flash = "Permissions updated."
         except RoleAdminError as exc:
             self.flash = exc.message
@@ -136,8 +148,11 @@ class AdminRolesState(BaseState):
         try:
             with open_session() as session:
                 svc = _svc(session)
+                role = svc.get_role(UUID(role_id))
+                before_snap = audit_snapshot(role) if role else None
                 svc.soft_delete_role(UUID(role_id), UUID(self.current_user_id))
                 session.commit()
+            self._set_audit(resource_id=role_id, before=before_snap)
             self.flash = "Role deleted."
             await self.load_roles()
             return rx.redirect("/admin/roles")  # type: ignore[return-value]

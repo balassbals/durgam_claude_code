@@ -6,6 +6,7 @@ from uuid import UUID
 
 import reflex as rx
 
+from durgam.audit.snapshot import audit_snapshot
 from durgam.auth.decorators import audit_action, require_role
 from durgam.db import open_session
 from durgam.repositories.school import SchoolRepository
@@ -91,14 +92,20 @@ class SchoolConfigState(BaseState):
                 svc = _svc(session)
                 actor_id = UUID(self.current_user_id)
                 if not editing_id:
-                    svc.create(code, name, actor_id)
+                    entity = svc.create(code, name, actor_id)
+                    after_snap = audit_snapshot(entity)
+                    session.commit()
+                    self._set_audit(resource_id=str(entity.id), after=after_snap)
                 else:
-                    svc.update(
+                    before_snap = audit_snapshot(svc.get(UUID(editing_id)))
+                    entity = svc.update(
                         UUID(editing_id),
                         {"name": name},
                         actor_id,
                     )
-                session.commit()  # open_session() does NOT auto-commit
+                    after_snap = audit_snapshot(entity)
+                    session.commit()
+                    self._set_audit(resource_id=str(entity.id), before=before_snap, after=after_snap)
             self.flash = "School saved."
             self.flash_type = "success"
         except SchoolError as e:
@@ -119,10 +126,14 @@ class SchoolConfigState(BaseState):
     async def soft_delete_school(self) -> None:
         try:
             with open_session() as session:
-                _svc(session).soft_delete(
+                svc = _svc(session)
+                entity = svc.get(UUID(self.confirm_school_id))
+                before_snap = audit_snapshot(entity)
+                svc.soft_delete(
                     UUID(self.confirm_school_id), UUID(self.current_user_id)
                 )
-                session.commit()  # open_session() does NOT auto-commit
+                session.commit()
+                self._set_audit(resource_id=str(entity.id), before=before_snap)
             self.flash = "School deactivated."
             self.flash_type = "success"
         except (SchoolError, HardDeleteBlockedError) as e:

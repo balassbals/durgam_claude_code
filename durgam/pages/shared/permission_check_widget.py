@@ -145,7 +145,18 @@ class PermissionCheckState(BaseState):
                 session=session,
             )
 
-        self.pc_result = "granted" if result else "denied"
+        verdict = bool(result)
+        self.pc_result = "granted" if verdict else "denied"
+        self._set_audit(
+            resource_id=str(user_id),
+            after={
+                "permission_action": action,
+                "permission_resource": resource,
+                "scope_type": scope_type,
+                "scope_id": str(scope_id) if scope_id else None,
+                "verdict": verdict,
+            },
+        )
 
 
 def permission_check_widget() -> rx.Component:

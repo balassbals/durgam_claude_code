@@ -6,6 +6,7 @@ from uuid import UUID
 
 from sqlalchemy.exc import IntegrityError
 
+from durgam.audit.snapshot import audit_snapshot
 from durgam.auth.decorators import audit_action, require_role
 from durgam.db import open_session
 from durgam.repositories.academic_year import AcademicYearRepository
@@ -204,7 +205,7 @@ class UGTimetableConfigState(BaseState):
                 svc = _svc(session)
                 actor_id = UUID(self.current_user_id)
                 if not editing_id:
-                    svc.create(
+                    entity = svc.create(
                         academic_year_id=UUID(self.selected_ay_id),
                         semester=self.selected_semester,
                         year_of_study=year_of_study,
@@ -217,8 +218,14 @@ class UGTimetableConfigState(BaseState):
                         room=room,
                         notes=notes,
                     )
+                    after_snap = audit_snapshot(entity)
+                    session.commit()
+                    self._set_audit(resource_id=str(entity.id), after=after_snap)
                 else:
-                    svc.update(
+                    before_snap = audit_snapshot(
+                        UGTimetableRepository(session).get_by_id(UUID(editing_id))
+                    )
+                    entity = svc.update(
                         UUID(editing_id),
                         {
                             "year_of_study": year_of_study,
@@ -232,7 +239,9 @@ class UGTimetableConfigState(BaseState):
                         },
                         actor_id,
                     )
-                session.commit()
+                    after_snap = audit_snapshot(entity)
+                    session.commit()
+                    self._set_audit(resource_id=str(entity.id), before=before_snap, after=after_snap)
         except IntegrityError:
             self.flash = "A slot already exists for this day/period/year."
             self.flash_type = "error"
@@ -262,10 +271,13 @@ class UGTimetableConfigState(BaseState):
     async def soft_delete_slot(self) -> None:
         try:
             with open_session() as session:
+                entity = UGTimetableRepository(session).get_by_id(UUID(self.confirm_id))
+                before_snap = audit_snapshot(entity)
                 _svc(session).soft_delete(
                     UUID(self.confirm_id), UUID(self.current_user_id),
                 )
                 session.commit()
+                self._set_audit(resource_id=str(entity.id), before=before_snap)
         except (UGTimetableError, AcademicYearLockedError) as e:
             self.flash = e.message if hasattr(e, "message") else str(e)
             self.flash_type = "error"

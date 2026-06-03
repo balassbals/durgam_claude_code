@@ -8,6 +8,7 @@ import reflex as rx
 
 from sqlalchemy.exc import IntegrityError
 
+from durgam.audit.snapshot import audit_snapshot
 from durgam.auth.decorators import audit_action, require_role
 from durgam.db import open_session
 from durgam.repositories.permission import PermissionRepository
@@ -158,18 +159,25 @@ class RoleEmailConfigState(BaseState):
                 svc = _svc(session)
                 actor_id = UUID(self.current_user_id)
                 if not editing_id:
-                    svc.create(
+                    entity = svc.create(
                         role_code, email, actor_id,
                         scope_type=scope_type, scope_id=scope_id,
                     )
+                    after_snap = audit_snapshot(entity)
+                    session.commit()
+                    self._set_audit(resource_id=str(entity.id), after=after_snap)
                 else:
-                    svc.update(
+                    repo = RoleEmailRepository(session)
+                    before_snap = audit_snapshot(repo.get_by_id(UUID(editing_id)))
+                    entity = svc.update(
                         UUID(editing_id),
                         {"role_code": role_code, "email": email,
                          "scope_type": scope_type, "scope_id": scope_id},
                         actor_id,
                     )
-                session.commit()
+                    after_snap = audit_snapshot(entity)
+                    session.commit()
+                    self._set_audit(resource_id=str(entity.id), before=before_snap, after=after_snap)
             self.show_form = False
             self.editing_id = ""
             await self.load_role_emails()
@@ -196,10 +204,14 @@ class RoleEmailConfigState(BaseState):
     async def soft_delete_role_email(self) -> None:
         try:
             with open_session() as session:
+                repo = RoleEmailRepository(session)
+                entity = repo.get_by_id(UUID(self.confirm_id))
+                before_snap = audit_snapshot(entity)
                 _svc(session).soft_delete(
                     UUID(self.confirm_id), UUID(self.current_user_id)
                 )
                 session.commit()
+                self._set_audit(resource_id=str(entity.id), before=before_snap)
             self.confirm_open = False
             self.confirm_id = ""
             await self.load_role_emails()

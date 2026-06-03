@@ -1,7 +1,7 @@
 """Identity, roles, and permission models (§8.1)."""
 
 from datetime import datetime
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -18,6 +18,8 @@ class User(TimestampedSoftDelete, table=True):
         sa.Index("ix_users_email_lower", sa.func.lower(sa.text("email")), unique=False),
         sa.UniqueConstraint("email", name="uq_users_email"),
     )
+
+    _audit_redact_fields: ClassVar[set[str]] = {"password_hash", "aadhaar_enc", "pan_enc"}
 
     username: str = Field(max_length=64, nullable=False)
     full_name: str | None = Field(default=None, max_length=256, nullable=True)

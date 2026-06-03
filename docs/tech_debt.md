@@ -316,6 +316,31 @@ an explicit expected list, catching unintended propagation in either direction.
 
 ---
 
+### TD-018 — docker-compose app service conflicts with host-Reflex dev workflow
+
+**Location:** `docker-compose.yml` (the `web` service)
+
+**What it is:** Between M5b and M6a, `docker-compose.yml` was extended with a `web`
+service that runs `uv run reflex run` inside a container. The container creates
+`.venv/` on the shared host-mount volume as root, breaking the host-Reflex workflow
+(where `uv sync` and `uv run reflex run` expect host-owned `.venv/`). The M6a gate
+was completed by starting only dependency services
+(`docker compose up -d db redis mailpit minio`) and running Reflex on the host.
+
+**Proposed fix:** Either (a) remove the `web` service from `docker-compose.yml`
+entirely, keeping it as a dependency-only compose file for the standard dev workflow;
+or (b) split into `docker-compose.deps.yml` (dev fresh-clone) and
+`docker-compose.full.yml` (containerized end-to-end testing). Option (a) is simpler
+and matches the documented workflow; option (b) preserves the container-based testing
+path for CI.
+
+**Cross-reference:** E-011 in `docs/rfp_errata.md`.
+
+**Trigger to re-open:** Next time docker-compose configuration is touched, or when
+CI pipeline is formalized.
+
+---
+
 ### TD-012 — Docgen merge assumes image letterheads; letterheads are now DOCX
 
 **Status:** Superseded by E-005.

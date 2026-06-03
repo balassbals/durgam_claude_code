@@ -20,6 +20,7 @@ import reflex as rx
 from durgam.auth.decorators import audit_action, require_role
 from durgam.auth.permissions import can
 from durgam.db import open_session
+from durgam.models.vision_mission import DepartmentMission
 from durgam.repositories.department import DepartmentRepository
 from durgam.repositories.vision_mission import VisionMissionRepository
 from durgam.services.vision_mission import VisionMissionError, VisionMissionService
@@ -174,10 +175,19 @@ class DeptVMConfigState(BaseState):
         dept_id = form_data.get("dept_id", self.dept_id).strip()
         try:
             with open_session() as session:
-                _svc(session).update_department_vision(
+                svc = _svc(session)
+                dvm = svc.get_or_create_department_vm(UUID(dept_id))
+                before_snap = {"vision_statement": dvm.vision}
+                dvm_id = str(dvm.id)
+                svc.update_department_vision(
                     UUID(dept_id), vision, UUID(self.current_user_id)
                 )
                 session.commit()
+            self._set_audit(
+                resource_id=dvm_id,
+                before=before_snap,
+                after={"vision_statement": vision},
+            )
         except VisionMissionError as e:
             self.flash = e.message
             self.flash_type = "error"
@@ -226,10 +236,21 @@ class DeptVMConfigState(BaseState):
                 svc = _svc(session)
                 actor_id = UUID(self.current_user_id)
                 if not editing_id:
-                    svc.add_department_mission(UUID(dept_id), statement, actor_id)
+                    mission = svc.add_department_mission(UUID(dept_id), statement, actor_id)
+                    mission_id = str(mission.id)
+                    after_snap = {"statement": statement, "order_index": mission.display_order}
+                    session.commit()
+                    self._set_audit(resource_id=mission_id, after=after_snap)
                 else:
+                    old = session.get(DepartmentMission, UUID(editing_id))
+                    before_snap = {"statement": old.statement} if old else {}
                     svc.update_department_mission(UUID(editing_id), statement, actor_id)
-                session.commit()
+                    session.commit()
+                    self._set_audit(
+                        resource_id=editing_id,
+                        before=before_snap,
+                        after={"statement": statement},
+                    )
         except VisionMissionError as e:
             self.flash = e.message
             self.flash_type = "error"
@@ -251,10 +272,18 @@ class DeptVMConfigState(BaseState):
             return
         try:
             with open_session() as session:
+                mission = session.get(DepartmentMission, UUID(mission_id))
+                old_order = mission.display_order if mission else None
                 _svc(session).move_department_mission(
                     UUID(mission_id), "up", UUID(self.current_user_id)
                 )
+                new_order = mission.display_order if mission else None
                 session.commit()
+            self._set_audit(
+                resource_id=mission_id,
+                before={"order_index": old_order},
+                after={"order_index": new_order},
+            )
         except VisionMissionError as e:
             self.flash = e.message
             self.flash_type = "error"
@@ -270,10 +299,18 @@ class DeptVMConfigState(BaseState):
             return
         try:
             with open_session() as session:
+                mission = session.get(DepartmentMission, UUID(mission_id))
+                old_order = mission.display_order if mission else None
                 _svc(session).move_department_mission(
                     UUID(mission_id), "down", UUID(self.current_user_id)
                 )
+                new_order = mission.display_order if mission else None
                 session.commit()
+            self._set_audit(
+                resource_id=mission_id,
+                before={"order_index": old_order},
+                after={"order_index": new_order},
+            )
         except VisionMissionError as e:
             self.flash = e.message
             self.flash_type = "error"
@@ -289,10 +326,17 @@ class DeptVMConfigState(BaseState):
             return
         try:
             with open_session() as session:
+                mission = session.get(DepartmentMission, UUID(mission_id))
+                before_snap = (
+                    {"statement": mission.statement, "order_index": mission.display_order}
+                    if mission
+                    else {}
+                )
                 _svc(session).remove_department_mission(
                     UUID(mission_id), UUID(self.current_user_id)
                 )
                 session.commit()
+            self._set_audit(resource_id=mission_id, before=before_snap)
         except VisionMissionError as e:
             self.flash = e.message
             self.flash_type = "error"

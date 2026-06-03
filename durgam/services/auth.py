@@ -27,9 +27,10 @@ log = structlog.get_logger(__name__)
 class AuthError(Exception):
     """Raised for user-visible auth failures (invalid credentials, lockout, etc.)."""
 
-    def __init__(self, message: str) -> None:
+    def __init__(self, message: str, *, reason: str = "unknown") -> None:
         super().__init__(message)
         self.message = message
+        self.reason = reason
 
 
 class InvalidTokenError(Exception):
@@ -76,11 +77,11 @@ class AuthService:
         if user is None:
             # Do not reveal whether the user exists.
             log.info("login_failed_unknown_user", username=username, ip=ip)
-            raise AuthError("Invalid username or password.")
+            raise AuthError("Invalid username or password.", reason="not_found")
 
         if not user.is_active:
             log.info("login_failed_inactive", user_id=str(user.id), ip=ip)
-            raise AuthError("Account is inactive. Contact the administrator.")
+            raise AuthError("Account is inactive. Contact the administrator.", reason="inactive")
 
         if user.locked_until is not None:
             from datetime import UTC, datetime
@@ -89,7 +90,8 @@ class AuthService:
                 log.info("login_blocked_lockout", user_id=str(user.id), ip=ip)
                 remaining = int((user.locked_until - datetime.now(UTC)).total_seconds() // 60)
                 raise AuthError(
-                    f"Account temporarily locked. Try again in {remaining + 1} minute(s)."
+                    f"Account temporarily locked. Try again in {remaining + 1} minute(s).",
+                    reason="locked",
                 )
 
         if not verify_password(password, user.password_hash):
@@ -101,10 +103,11 @@ class AuthService:
                 log.info("account_locked", user_id=str(user.id), ip=ip)
                 raise AuthError(
                     f"Too many failed attempts. Account locked for "
-                    f"{settings.auth_user_lockout_minutes} minute(s)."
+                    f"{settings.auth_user_lockout_minutes} minute(s).",
+                    reason="locked",
                 )
             log.info("login_failed_bad_password", user_id=str(user.id), ip=ip)
-            raise AuthError("Invalid username or password.")
+            raise AuthError("Invalid username or password.", reason="invalid_credentials")
 
         # Successful authentication — clear counters and create session.
         self._users.clear_failed_logins(user)
