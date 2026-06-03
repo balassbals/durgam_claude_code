@@ -76,8 +76,8 @@ class TestAuthEmissions:
         assert row.resource_id == str(user.id)
         assert row.action == "login"
 
-    def test_login_failed_session(self, db_session):
-        """#2: login_failed|session — resource_id is normalized username."""
+    def test_login_failed_invalid_credentials(self, db_session):
+        """#2a: login_failed|session — reason=invalid_credentials."""
         row = _write_and_check(
             db_session,
             action="login_failed", resource="session",
@@ -87,8 +87,46 @@ class TestAuthEmissions:
             actor_user_id=None,
         )
         assert row.resource_id == "baduser"
-        assert row.diff_json is not None
-        assert "reason" in row.diff_json
+        assert row.diff_json["reason"] == [None, "invalid_credentials"]
+
+    def test_login_failed_not_found(self, db_session):
+        """#2b: login_failed|session — reason=not_found."""
+        row = _write_and_check(
+            db_session,
+            action="login_failed", resource="session",
+            resource_id="nonexistent_user",
+            before=None,
+            after={"reason": "not_found", "ip": "10.0.0.1"},
+            actor_user_id=None,
+        )
+        assert row.resource_id == "nonexistent_user"
+        assert row.diff_json["reason"] == [None, "not_found"]
+
+    def test_login_failed_inactive(self, db_session):
+        """#2c: login_failed|session — reason=inactive."""
+        row = _write_and_check(
+            db_session,
+            action="login_failed", resource="session",
+            resource_id="disabled_user",
+            before=None,
+            after={"reason": "inactive", "ip": "10.0.0.2"},
+            actor_user_id=None,
+        )
+        assert row.resource_id == "disabled_user"
+        assert row.diff_json["reason"] == [None, "inactive"]
+
+    def test_login_failed_locked(self, db_session):
+        """#2d: login_failed|session — reason=locked."""
+        row = _write_and_check(
+            db_session,
+            action="login_failed", resource="session",
+            resource_id="locked_user",
+            before=None,
+            after={"reason": "locked", "ip": "10.0.0.3"},
+            actor_user_id=None,
+        )
+        assert row.resource_id == "locked_user"
+        assert row.diff_json["reason"] == [None, "locked"]
 
     def test_logout_session(self, db_session):
         """#3: logout|session — resource_id is user UUID."""

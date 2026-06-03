@@ -191,7 +191,7 @@ class TestActorRolesJsonScope:
         result = db_session.execute(
             text(
                 "SELECT id FROM audit_logs "
-                "WHERE actor_roles_json @> :pattern::jsonb "
+                "WHERE actor_roles_json @> cast(:pattern AS jsonb) "
                 "AND id IN (:id1, :id2)"
             ),
             {
