@@ -107,6 +107,7 @@ E-004 (RoleEmail) bind to this split.
 | Class timings and working-days config: singleton, configure action | §9.3, §12 M3 | M3 | Shipped at M3 | Singleton edit forms; configure-action guard; Session 7 |
 | "System admin will only deal with basic information of academic departments when adding, editing" | §9.3 | M3 | Shipped at M3 | department:write:* granted only to SYSTEM_ADMIN (fixed M3 Session 5c — Registrar had it incorrectly) |
 | Dean role bound to school via dean_role_code string reference | §8.2 | M3 | Shipped at M3 | OQ-M3-6 confirmed: plain string, no FK |
+| Audit log read UI (sys-admin-only viewer with filters, pagination, detail drawer, CSV export) | §8.4, §12 M6 | M6b | Shipped at M6b | Resource label resolver; JSONB scope filter; 10K-row CSV cap; diff table with FK-label resolution |
 
 ---
 

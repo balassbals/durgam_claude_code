@@ -4,6 +4,7 @@ from durgam.config import settings
 from durgam.logging import configure_logging
 from durgam.pages.admin import index as _admin_nav_register  # noqa: F401 — registers nav entries
 from durgam.pages.admin.config import __init__ as _config_nav_register  # noqa: F401 — registers config nav entries
+from durgam.pages.audit import __init__ as _audit_nav_register  # noqa: F401 — registers audit nav entry
 from durgam.pages.admin.import_users import admin_import_users
 from durgam.pages.admin.index import admin_index
 from durgam.pages.admin.permissions import AdminPermissionsState, admin_permissions
