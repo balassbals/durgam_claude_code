@@ -91,6 +91,13 @@ class TestQueryScopeFilterUsesJsonbContainment:
         sql_str = str(compiled)
         assert "@>" in sql_str
 
+    def test_scope_id_all_sentinel_skips_filter(self):
+        """scope_id_filter='all' must not add @> containment clause."""
+        from pathlib import Path
+
+        src = Path("durgam/pages/audit/index.py").read_text()
+        assert 'self.scope_id_filter != "all"' in src
+
 
 # ── Failed login toggle ─────────────────────────────────────────────────────
 

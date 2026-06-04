@@ -33,7 +33,7 @@ class AuditLogState(BaseState):
     resource_filter: str = "all"
     action_filter: str = "all"
     scope_type_filter: str = "all"
-    scope_id_filter: str = ""
+    scope_id_filter: str = "all"
     include_failed_login: bool = False
     page: int = 1
     page_size: int = 50
@@ -113,7 +113,7 @@ class AuditLogState(BaseState):
         self.resource_filter = "all"
         self.action_filter = "all"
         self.scope_type_filter = "all"
-        self.scope_id_filter = ""
+        self.scope_id_filter = "all"
         self.include_failed_login = False
         self.page = 1
         self._run_query()
@@ -135,7 +135,7 @@ class AuditLogState(BaseState):
 
     def on_scope_type_change(self, value: str) -> None:
         self.scope_type_filter = value
-        self.scope_id_filter = ""
+        self.scope_id_filter = "all"
         self.scope_options = []
         if value != "all":
             with open_session() as session:
@@ -303,6 +303,7 @@ class AuditLogState(BaseState):
             self.scope_type_filter
             and self.scope_type_filter != "all"
             and self.scope_id_filter
+            and self.scope_id_filter != "all"
         ):
             containment = [{"scope_type": self.scope_type_filter, "scope_id": self.scope_id_filter}]
             conditions.append(
@@ -572,13 +573,14 @@ def _filter_strip() -> rx.Component:
                 AuditLogState.scope_filter_disabled,
                 rx.select.root(
                     rx.select.trigger(placeholder="Select scope first"),
-                    rx.select.content(rx.select.item("—", value="")),
+                    rx.select.content(rx.select.item("All scopes", value="all")),
                     disabled=True,
                     width="160px",
                 ),
                 rx.select.root(
                     rx.select.trigger(placeholder="Select entity"),
                     rx.select.content(
+                        rx.select.item("All scopes", value="all"),
                         rx.foreach(
                             AuditLogState.scope_options,
                             lambda o: rx.select.item(

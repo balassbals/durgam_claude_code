@@ -1365,6 +1365,13 @@ Diff entries are pre-processed by `_build_diff_entries()` into a flat list for
 added by `_add_detail_fields()`, separate from `_add_display_fields()`, to avoid
 inflating list-row dicts.
 
+### Radix Select.Item rejects `value=""`
+
+`rx.select.item("...", value="")` crashes at compile time — Radix reserves empty
+string as the "clear selection" sentinel. Use `value="all"` with a descriptive label
+(e.g. "All scopes") for "no filter" items. All filter state vars that feed a
+`rx.select` must default to `"all"`, not `""`.
+
 ## Current milestone
 **M5b — Configuration — Assignments & Approval Config.**
 
