@@ -48,6 +48,12 @@ class AuditLogState(BaseState):
     detail_open: bool = False
     loading: bool = True
 
+    # ── Detail drawer typed vars (for rx.foreach / rx.code_block) ───────────
+    detail_roles: list[dict[str, str]] = []
+    detail_diff_entries: list[dict[str, str]] = []
+    detail_diff_json_pretty: str = "null"
+    detail_actor_roles_json_pretty: str = "null"
+
     # ── Computed vars ────────────────────────────────────────────────────────
 
     @rx.var
@@ -177,13 +183,28 @@ class AuditLogState(BaseState):
             if self.selected_row is not None:
                 _add_display_fields(self.selected_row)
                 _add_detail_fields(self.selected_row)
+                self.detail_roles = [
+                    {k: str(v) if v is not None else "" for k, v in r.items()}
+                    for r in (self.selected_row.get("actor_roles_resolved") or [])
+                ]
+                self.detail_diff_entries = self.selected_row.get("diff_entries", [])
+                self.detail_diff_json_pretty = self.selected_row.get(
+                    "diff_json_pretty", "null"
+                )
+                self.detail_actor_roles_json_pretty = self.selected_row.get(
+                    "actor_roles_json_pretty", "null"
+                )
             self.detail_open = True
 
     def close_detail(self) -> None:
         self.selected_row = None
         self.detail_open = False
+        self.detail_roles = []
+        self.detail_diff_entries = []
+        self.detail_diff_json_pretty = "null"
+        self.detail_actor_roles_json_pretty = "null"
 
-    def _on_drawer_open_change(self, is_open: bool) -> None:
+    def on_drawer_open_change(self, is_open: bool) -> None:
         if not is_open:
             self.close_detail()
 
@@ -592,9 +613,15 @@ def _filter_strip() -> rx.Component:
             rx.hstack(
                 primary_btn("Apply", on_click=AuditLogState.apply_filters),
                 secondary_btn("Reset", on_click=AuditLogState.reset_filters),
-                secondary_btn(
+                rx.button(
                     "↻", on_click=AuditLogState.refresh,
+                    background="transparent",
+                    color="var(--color-primary)",
+                    border="1px solid var(--color-primary)",
                     padding="0.5rem 0.75rem",
+                    border_radius="4px",
+                    cursor="pointer",
+                    font_family="var(--font-sans)",
                 ),
                 secondary_btn(
                     "Export CSV",
@@ -839,7 +866,7 @@ def _section_a(row: rx.Var) -> rx.Component:
             ),
             rx.flex(
                 rx.foreach(
-                    row["actor_roles_resolved"],  # type: ignore[index]
+                    AuditLogState.detail_roles,
                     _role_chip,
                 ),
                 wrap="wrap",
@@ -864,7 +891,7 @@ def _section_a(row: rx.Var) -> rx.Component:
 def _section_b(row: rx.Var) -> rx.Component:
     """Diff table."""
     return rx.cond(
-        row["diff_entries"],  # type: ignore[index]
+        AuditLogState.detail_diff_entries.length() > 0,
         rx.vstack(
             rx.text(
                 "Changes",
@@ -887,7 +914,7 @@ def _section_b(row: rx.Var) -> rx.Component:
                     ),
                 ),
                 rx.table.body(
-                    rx.foreach(row["diff_entries"], _diff_entry_row),  # type: ignore[index]
+                    rx.foreach(AuditLogState.detail_diff_entries, _diff_entry_row),
                 ),
                 width="100%",
             ),
@@ -928,7 +955,7 @@ def _code_block_with_copy(label: str, content: rx.Var) -> rx.Component:
     )
 
 
-def _section_c(row: rx.Var) -> rx.Component:
+def _section_c(_row: rx.Var) -> rx.Component:
     """Raw JSON — collapsible."""
     return rx.accordion.root(
         rx.accordion.item(
@@ -946,11 +973,11 @@ def _section_c(row: rx.Var) -> rx.Component:
                 rx.vstack(
                     _code_block_with_copy(
                         "diff_json",
-                        row["diff_json_pretty"],  # type: ignore[index]
+                        AuditLogState.detail_diff_json_pretty,
                     ),
                     _code_block_with_copy(
                         "actor_roles_json",
-                        row["actor_roles_json_pretty"],  # type: ignore[index]
+                        AuditLogState.detail_actor_roles_json_pretty,
                     ),
                     gap="1rem",
                     width="100%",
@@ -1016,7 +1043,7 @@ def _detail_drawer() -> rx.Component:
             ),
         ),
         open=AuditLogState.detail_open,
-        on_open_change=AuditLogState._on_drawer_open_change,
+        on_open_change=AuditLogState.on_drawer_open_change,
         direction="right",
     )
 
