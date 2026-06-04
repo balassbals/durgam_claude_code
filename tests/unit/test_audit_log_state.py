@@ -189,3 +189,114 @@ class TestLoadAuditPopulatesOptions:
         assert "write" in actions
         assert "create" in actions
         assert "delete" in actions
+
+
+# ── Display field formatting ────────────────────────────────────────────────
+
+
+class TestAddDisplayFields:
+    def test_occurred_at_display_from_datetime(self):
+        from durgam.pages.audit.index import _add_display_fields
+        row: dict[str, Any] = {"occurred_at": datetime(2026, 3, 15, 14, 30, tzinfo=UTC)}
+        _add_display_fields(row)
+        assert row["occurred_at_display"] == "2026-03-15 14:30"
+
+    def test_occurred_at_display_from_iso_string(self):
+        from durgam.pages.audit.index import _add_display_fields
+        row: dict[str, Any] = {"occurred_at": "2026-03-15T14:30:00+00:00"}
+        _add_display_fields(row)
+        assert row["occurred_at_display"] == "2026-03-15 14:30"
+
+    def test_occurred_at_display_missing(self):
+        from durgam.pages.audit.index import _add_display_fields
+        row: dict[str, Any] = {}
+        _add_display_fields(row)
+        assert row["occurred_at_display"] == "—"
+
+    def test_actor_display_from_label(self):
+        from durgam.pages.audit.index import _add_display_fields
+        row: dict[str, Any] = {"actor_label": "alice — Alice Admin"}
+        _add_display_fields(row)
+        assert row["actor_display"] == "alice — Alice Admin"
+
+    def test_actor_display_none(self):
+        from durgam.pages.audit.index import _add_display_fields
+        row: dict[str, Any] = {"actor_label": None}
+        _add_display_fields(row)
+        assert row["actor_display"] == "—"
+
+    def test_resource_display_with_label(self):
+        from durgam.pages.audit.index import _add_display_fields
+        row: dict[str, Any] = {"resource": "campus", "resource_label": "PP — Prasanthi",
+                               "resource_id": "abc-123"}
+        _add_display_fields(row)
+        assert row["resource_display"] == "campus / PP — Prasanthi"
+
+    def test_resource_display_with_id_only(self):
+        from durgam.pages.audit.index import _add_display_fields
+        row: dict[str, Any] = {"resource": "session", "resource_id": "alice_admin",
+                               "resource_label": None}
+        _add_display_fields(row)
+        assert row["resource_display"] == "session / alice_admin"
+
+    def test_resource_display_no_id(self):
+        from durgam.pages.audit.index import _add_display_fields
+        row: dict[str, Any] = {"resource": "session"}
+        _add_display_fields(row)
+        assert row["resource_display"] == "session"
+
+    def test_scope_display_single_role(self):
+        from durgam.pages.audit.index import _add_display_fields
+        row: dict[str, Any] = {
+            "actor_roles_resolved": [
+                {"role_code": "SYSTEM_ADMIN", "scope_label": "universitywide"},
+            ],
+        }
+        _add_display_fields(row)
+        assert row["scope_display"] == "SYSTEM_ADMIN (universitywide)"
+
+    def test_scope_display_multiple_roles_truncated(self):
+        from durgam.pages.audit.index import _add_display_fields
+        row: dict[str, Any] = {
+            "actor_roles_resolved": [
+                {"role_code": "HOD", "scope_label": "DMACS"},
+                {"role_code": "FACULTY", "scope_label": "DMACS"},
+                {"role_code": "BASIC_USER", "scope_label": "universitywide"},
+            ],
+        }
+        _add_display_fields(row)
+        assert "HOD (DMACS)" in row["scope_display"]
+        assert "FACULTY (DMACS)" in row["scope_display"]
+        assert "+1" in row["scope_display"]
+
+    def test_scope_display_empty(self):
+        from durgam.pages.audit.index import _add_display_fields
+        row: dict[str, Any] = {"actor_roles_resolved": []}
+        _add_display_fields(row)
+        assert row["scope_display"] == "—"
+
+    def test_diff_summary_with_fields(self):
+        from durgam.pages.audit.index import _add_display_fields
+        row: dict[str, Any] = {"diff_json": {"name": ["a", "b"], "code": ["X", "Y"]}}
+        _add_display_fields(row)
+        assert row["diff_summary"] == "2 fields"
+
+    def test_diff_summary_single_field(self):
+        from durgam.pages.audit.index import _add_display_fields
+        row: dict[str, Any] = {"diff_json": {"name": ["a", "b"]}}
+        _add_display_fields(row)
+        assert row["diff_summary"] == "1 field"
+
+    def test_diff_summary_none(self):
+        from durgam.pages.audit.index import _add_display_fields
+        row: dict[str, Any] = {"diff_json": None}
+        _add_display_fields(row)
+        assert row["diff_summary"] == "—"
+
+    def test_computed_vars_exist(self):
+        """Verify AuditLogState has the expected computed vars."""
+        from pathlib import Path
+        src = Path("durgam/pages/audit/index.py").read_text()
+        for name in ("total_pages", "range_start", "range_end",
+                      "has_prev", "has_next", "scope_filter_disabled"):
+            assert f"def {name}(self)" in src
