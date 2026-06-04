@@ -4,7 +4,7 @@
 **Spec**: `docs/durgam_rfp_v3.pdf` — all section references (§8, §12, etc.) point to this file.
 **Python**: 3.13 (pinned via `.python-version`).
 **Theme**: Puttaparthi Saffron–Indigo–Ivory (§15.1). Single committed theme; no alternatives in v3.
-**Current milestone**: M5b — Configuration — Assignments & Approval Config.
+**Current milestone**: M7 — Approval Requests.
 
 ## Authority files (binding, in priority order)
 
@@ -1373,7 +1373,7 @@ string as the "clear selection" sentinel. Use `value="all"` with a descriptive l
 `rx.select` must default to `"all"`, not `""`.
 
 ## Current milestone
-**M5b — Configuration — Assignments & Approval Config.**
+**M7 — Approval Requests.**
 
 This line is the source of truth for "where are we." Before opening a milestone-completing PR, Claude Code MUST:
 1. Grep this file for "Current milestone" and update both occurrences (the top status line and this section).

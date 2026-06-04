@@ -383,6 +383,28 @@ project adopts one.
 
 ---
 
+### TD-020 — Reflex RouterData.page deprecation
+
+**Location:** Multiple state files in `durgam/states/`.
+
+**What it is:** Several state files reference `RouterData.page`, which was deprecated
+in Reflex 0.8.1 and is scheduled for removal at Reflex 1.0. The attribute still works
+on the pinned Reflex 0.9.2 but will break on any upgrade past 1.0.
+
+**Blast radius command:** `grep -rn "RouterData.page" durgam/states/`
+
+**Why this is not a blocker now:** Reflex is version-pinned at 0.9.2. The attribute
+functions correctly and is not in a hot path. No upgrade is planned within the current
+milestone sequence.
+
+**Fix:** Migrate all `RouterData.page` references to `RouterData.url` (the non-deprecated
+equivalent). This is a mechanical find-and-replace but must be verified against the full
+test suite after migration.
+
+**Trigger to re-open:** Any Reflex version bump, or proactively before M20.
+
+---
+
 ## Resolved
 
 ### TD-002 — SAWarning: transaction already deassociated from connection (resolved in m0-cleanup)
