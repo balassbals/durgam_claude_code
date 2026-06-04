@@ -135,6 +135,29 @@ class AuditLogState(BaseState):
             with open_session() as session:
                 self.scope_options = load_scope_objects(value, session)
 
+    # ── Explicit setters (state_auto_setters=False in Reflex 0.9.2) ─────────
+
+    def set_date_from(self, v: str) -> None:
+        self.date_from = v
+
+    def set_date_to(self, v: str) -> None:
+        self.date_to = v
+
+    def set_actor_search(self, v: str) -> None:
+        self.actor_search = v
+
+    def set_resource_filter(self, v: str) -> None:
+        self.resource_filter = v
+
+    def set_action_filter(self, v: str) -> None:
+        self.action_filter = v
+
+    def set_scope_id_filter(self, v: str) -> None:
+        self.scope_id_filter = v
+
+    def set_include_failed_login(self, v: bool) -> None:
+        self.include_failed_login = v
+
     def refresh(self) -> None:
         self._run_query()
 
