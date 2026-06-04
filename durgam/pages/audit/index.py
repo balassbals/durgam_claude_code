@@ -342,9 +342,9 @@ def _add_display_fields(row_dict: dict[str, Any]) -> None:
         row_dict["diff_summary"] = "—"
 
 
-def _fmt_diff_val(val: Any) -> str:
+def _fmt_diff_val(val: Any, *, null_label: str = "") -> str:
     if val is None:
-        return "(none)"
+        return null_label
     if val == "<redacted>":
         return "<redacted>"
     if isinstance(val, (dict, list)):
@@ -384,8 +384,8 @@ def _build_diff_entries(row_dict: dict[str, Any]) -> list[dict[str, str]]:
         else:
             entries.append({
                 "field": field,
-                "before_text": _fmt_diff_val(before),
-                "after_text": _fmt_diff_val(after),
+                "before_text": _fmt_diff_val(before, null_label="(new)"),
+                "after_text": _fmt_diff_val(after, null_label="(deleted)"),
                 "sub_display": "",
             })
 
@@ -730,13 +730,14 @@ def _redacted_pill() -> rx.Component:
 
 
 def _diff_val_render(text: rx.Var) -> rx.Component:
+    _muted = rx.text(text, font_size="0.85rem", color="var(--color-muted)",
+                     font_style="italic")
     return rx.cond(
         text == "<redacted>",
         _redacted_pill(),
         rx.cond(
-            text == "(none)",
-            rx.text(text, font_size="0.85rem", color="var(--color-muted)",
-                    font_style="italic"),
+            (text == "(new)") | (text == "(deleted)"),
+            _muted,
             rx.text(text, font_size="0.85rem"),
         ),
     )

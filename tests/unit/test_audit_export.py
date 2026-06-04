@@ -198,8 +198,18 @@ class TestBuildDiffEntries:
             "diff_labels": {},
         }
         entries = _build_diff_entries(row)
-        assert entries[0]["before_text"] == "(none)"
+        assert entries[0]["before_text"] == "(new)"
         assert entries[0]["after_text"] == "New Name"
+
+    def test_deleted_field(self):
+        from durgam.pages.audit.index import _build_diff_entries
+        row: dict[str, Any] = {
+            "diff_json": {"name": ["Old Name", None]},
+            "diff_labels": {},
+        }
+        entries = _build_diff_entries(row)
+        assert entries[0]["before_text"] == "Old Name"
+        assert entries[0]["after_text"] == "(deleted)"
 
     def test_empty_diff_json_returns_empty(self):
         from durgam.pages.audit.index import _build_diff_entries
