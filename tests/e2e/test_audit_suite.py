@@ -27,7 +27,7 @@ import os
 import pytest
 from playwright.sync_api import Page, expect
 
-from tests.e2e._helpers import BASE_URL, _login, _wait_for_admin_page
+from tests.e2e._helpers import BASE_URL, _login
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("DURGAM_E2E") != "1",
@@ -57,10 +57,9 @@ class TestAuditLogAccess:
         _login(page, _ADMIN_USER, _ADMIN_PASS)
         page.goto(f"{BASE_URL}/audit")
         page.wait_for_load_state("networkidle")
-        _wait_for_admin_page(page, "Audit Log", timeout=15_000)
         expect(
-            page.get_by_role("heading", name="Audit Log")
-        ).to_be_visible(timeout=10_000)
+            page.get_by_role("heading", name="Audit Log", exact=True)
+        ).to_be_visible(timeout=15_000)
 
 
 class TestAuditLogDefaultView:
@@ -69,10 +68,10 @@ class TestAuditLogDefaultView:
         _login(page, _ADMIN_USER, _ADMIN_PASS)
         page.goto(f"{BASE_URL}/audit")
         page.wait_for_load_state("networkidle")
-        _wait_for_admin_page(page, "Audit Log", timeout=15_000)
+        expect(page.get_by_role("heading", name="Audit Log", exact=True)).to_be_visible(timeout=15_000)
         # The page renders either "Showing X–Y of Z" or "No matching audit entries."
         summary = page.locator("text=/Showing \\d/").or_(
-            page.get_by_text("No matching audit entries.")
+            page.get_by_text("No matching audit entries.", exact=True)
         )
         expect(summary.first).to_be_visible(timeout=10_000)
         # Column header "When" — DOM text is original-case; CSS text_transform
@@ -88,10 +87,10 @@ class TestAuditLogFilters:
         _login(page, _ADMIN_USER, _ADMIN_PASS)
         page.goto(f"{BASE_URL}/audit")
         page.wait_for_load_state("networkidle")
-        _wait_for_admin_page(page, "Audit Log", timeout=15_000)
+        expect(page.get_by_role("heading", name="Audit Log", exact=True)).to_be_visible(timeout=15_000)
         # Wait for the summary to render before applying filters
         summary = page.locator("text=/Showing \\d/").or_(
-            page.get_by_text("No matching audit entries.")
+            page.get_by_text("No matching audit entries.", exact=True)
         )
         expect(summary.first).to_be_visible(timeout=10_000)
         # Click Apply — round-trip filter without changing values.
@@ -109,7 +108,7 @@ class TestAuditLogPagination:
         _login(page, _ADMIN_USER, _ADMIN_PASS)
         page.goto(f"{BASE_URL}/audit")
         page.wait_for_load_state("networkidle")
-        _wait_for_admin_page(page, "Audit Log", timeout=15_000)
+        expect(page.get_by_role("heading", name="Audit Log", exact=True)).to_be_visible(timeout=15_000)
         # Wait for pagination to render.
         # Button text is "← Prev" / "Next →" (secondary_btn at index.py:678,693).
         prev_btn = page.get_by_role("button", name="← Prev", exact=True)
@@ -127,20 +126,20 @@ class TestAuditLogDetailDrawer:
         _login(page, _ADMIN_USER, _ADMIN_PASS)
         page.goto(f"{BASE_URL}/audit")
         page.wait_for_load_state("networkidle")
-        _wait_for_admin_page(page, "Audit Log", timeout=15_000)
+        expect(page.get_by_role("heading", name="Audit Log", exact=True)).to_be_visible(timeout=15_000)
         # Wait for at least one row to render
         summary = page.locator("text=/Showing \\d/")
         expect(summary.first).to_be_visible(timeout=10_000)
         # Click the first kebab menu trigger (aria_label="View audit details",
         # index.py:469).
-        kebab = page.get_by_role("button", name="View audit details").first
+        kebab = page.get_by_role("button", name="View audit details", exact=True).first
         expect(kebab).to_be_visible(timeout=5_000)
         kebab.click()
         # Click "View Details" in the dropdown menu
         page.get_by_text("View Details", exact=True).click()
         # Wait for drawer to open — heading "Audit Entry" visible
         expect(
-            page.get_by_role("heading", name="Audit Entry")
+            page.get_by_role("heading", name="Audit Entry", exact=True)
         ).to_be_visible(timeout=10_000)
         # Verify an expected field label is present inside the drawer.
         # DOM text is "Occurred at"; CSS text_transform uppercases visually.
@@ -150,7 +149,7 @@ class TestAuditLogDetailDrawer:
         # Close the drawer via ✕ button (aria_label="Close drawer", index.py:1021).
         page.get_by_role("button", name="Close drawer", exact=True).click()
         expect(
-            page.get_by_role("heading", name="Audit Entry")
+            page.get_by_role("heading", name="Audit Entry", exact=True)
         ).not_to_be_visible(timeout=5_000)
 
 
@@ -160,7 +159,7 @@ class TestAuditLogCsvExport:
         _login(page, _ADMIN_USER, _ADMIN_PASS)
         page.goto(f"{BASE_URL}/audit")
         page.wait_for_load_state("networkidle")
-        _wait_for_admin_page(page, "Audit Log", timeout=15_000)
+        expect(page.get_by_role("heading", name="Audit Log", exact=True)).to_be_visible(timeout=15_000)
         # Wait for data to load so export button is enabled
         summary = page.locator("text=/Showing \\d/")
         expect(summary.first).to_be_visible(timeout=10_000)
