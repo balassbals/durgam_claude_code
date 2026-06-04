@@ -1303,6 +1303,68 @@ the audit row. The column is JSONB with a GIN index for M6b scope-filter queries
 
 Handlers use `exc.reason` in `_set_audit(after={"reason": exc.reason, ...})`.
 
+## Patterns established at M6b
+
+### Resource label resolver — registry + batch resolution
+
+`durgam/audit/labels.py` provides `bulk_resolve_labels(rows, session)` which
+enriches raw AuditLog dicts with human-readable labels for actor, resource,
+FK fields in diff_json, and actor_roles_json scope entries. Each resource type
+registers a resolver via `@register_resolver("resource_name")`; resolvers share
+a `_simple_resolver(Model, label_fn)` factory. FK fields are mapped via `FK_FIELDS`
+constant. The list-page post-processor `_add_display_fields()` at
+`durgam/pages/audit/index.py` converts enriched dicts into display-ready fields
+(occurred_at_display, actor_display, resource_display, scope_display, diff_summary).
+
+### Sys-admin-only read page pattern
+
+Pages visible only to SYSTEM_ADMIN use `_config_guard("resource", "read")` in
+on_load (not `"write"` or `"configure"`). The nav entry uses the same gate:
+`permission_action="read", permission_resource="resource"`. The audit log
+(`/audit`) is the canonical example: `_config_guard("audit_log", "read")` +
+nav entry gated by `audit_log:read`.
+
+### JSONB containment for actor-role-scope filtering
+
+Scope filtering queries `actor_roles_json` using the PostgreSQL `@>` containment
+operator with a JSONB cast:
+
+```python
+from sqlalchemy import cast
+from sqlalchemy.dialects.postgresql import JSONB
+
+stmt = stmt.where(
+    AuditLog.actor_roles_json.op("@>")(
+        cast([{"scope_type": stype, "scope_id": sid}], JSONB)
+    )
+)
+```
+
+See `durgam/pages/audit/index.py` `_build_filtered_stmt()`. The `actor_roles_json`
+column has a GIN index (`ix_audit_logs_actor_roles_json_gin`) for query performance.
+
+### CSV export with row cap
+
+`durgam/services/audit_export.py` — `AuditCsvExportService.export()` produces
+RFC 4180 CSV with `csv.QUOTE_ALL` (all fields quoted) and a UTF-8 BOM prefix
+for Excel compatibility. The handler applies a 10,000-row LIMIT and flashes a
+warning when the unfiltered count exceeds the cap. Download is triggered via
+`rx.download(data=bytes, filename=str)`.
+
+### Drawer body three-section convention
+
+The audit detail drawer (`durgam/pages/audit/index.py`) establishes the pattern
+for read-only forensic detail views:
+- **Section A** — header key-value grid (actor, role, resource, IDs with copy)
+- **Section B** — diff table with FK-label resolution, `(new)`/`(deleted)` null
+  semantics, `<redacted>` pill rendering
+- **Section C** — collapsible raw JSON accordion with code blocks and copy buttons
+
+Diff entries are pre-processed by `_build_diff_entries()` into a flat list for
+`rx.foreach` (Reflex cannot iterate `Var[dict]` keys). Detail-only fields are
+added by `_add_detail_fields()`, separate from `_add_display_fields()`, to avoid
+inflating list-row dicts.
+
 ## Current milestone
 **M5b — Configuration — Assignments & Approval Config.**
 

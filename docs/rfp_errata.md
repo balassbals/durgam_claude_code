@@ -512,3 +512,21 @@ import UIs.
   service from `docker-compose.yml`, or (b) split into
   `docker-compose.deps.yml` (dev fresh-clone workflow) and
   `docker-compose.full.yml` (container end-to-end testing).
+
+---
+
+## E-012 — Audit log read UI: access restricted to SYSTEM_ADMIN
+
+- **Status**: Resolved-at-M6b.
+- **Source**: M6b implementation — §8.4 specifies audit logging but does not
+  specify which roles may view the audit log UI.
+- **Gap in v3 RFP**: §8.4 states "all system activities shall be logged for
+  audit trail" but is silent on who reads the trail. Options considered:
+  (a) all authenticated users see their own actions, (b) scoped access per
+  role/department, (c) SYSTEM_ADMIN-only full view.
+- **Resolution**: Option (c) chosen at M6b. `audit_log:read:*` is granted
+  only to SYSTEM_ADMIN in `scripts/seed.py`. The audit page guards via
+  `_config_guard("audit_log", "read")`. If future milestones require
+  role-scoped views (e.g. HoD seeing only their department's audit entries),
+  new permission triples and scope-filtered queries can be added without
+  changing the existing SYSTEM_ADMIN path.

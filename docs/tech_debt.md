@@ -359,6 +359,30 @@ unifying LetterheadAsset and TemplateAsset into a single model.
 
 ---
 
+### TD-019 — Source-reading unit tests in audit suite
+
+**Location:** `tests/unit/test_audit_export.py` (TestCsvExport10kCapViaQueryLimit,
+TestCsvExportFlashWhenOverCap), `tests/unit/test_audit_log_state.py`
+(TestLoadAuditGuard, TestQueryDefaultDateWindow)
+
+**What it is:** Several audit unit tests verify behaviour by reading the Python
+source file (`Path("durgam/pages/audit/index.py").read_text()`) and asserting on
+string presence (e.g. `"stmt.limit(10_000)" in src`). This works but is fragile:
+a refactor that changes the string form without changing the semantics silently
+breaks the test. The pattern was adopted because the handlers under test require
+a running Reflex state machine (WebSocket, session cookie) that cannot be
+instantiated in a unit test without a full server.
+
+**Proposed fix:** When a state-handler test harness exists (either via Reflex's
+own test utilities or a lightweight mock), replace source-reading assertions with
+actual handler invocations. Until then, the source-reading pattern is acceptable
+but should not proliferate beyond the audit module.
+
+**Trigger to re-open:** Reflex ships a test harness for state handlers, or the
+project adopts one.
+
+---
+
 ## Resolved
 
 ### TD-002 — SAWarning: transaction already deassociated from connection (resolved in m0-cleanup)
