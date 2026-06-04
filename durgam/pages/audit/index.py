@@ -1001,6 +1001,7 @@ def _detail_drawer() -> rx.Component:
 _AUDIT_COLUMNS = [
     TableColumn(key="occurred_at_display", label="When"),
     TableColumn(key="actor_display", label="Who"),
+    TableColumn(key="actor_role_code", label="Role", hidden_on_card=True),
     TableColumn(key="action", label="Action"),
     TableColumn(key="resource_display", label="Resource"),
     TableColumn(key="scope_display", label="Scope", hidden_on_card=True),
