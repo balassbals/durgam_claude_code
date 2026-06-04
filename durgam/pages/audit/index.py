@@ -466,6 +466,7 @@ def _row_actions(row: rx.Var) -> rx.Component:
                 font_size="1.2rem",
                 color="var(--color-muted)",
                 padding="0.1rem 0.4rem",
+                aria_label="View audit details",
             )
         ),
         rx.menu.content(
@@ -1018,6 +1019,7 @@ def _detail_drawer() -> rx.Component:
                                 font_size="1.1rem",
                                 color="var(--color-muted)",
                                 padding="0.25rem",
+                                aria_label="Close drawer",
                             ),
                             align="center",
                             width="100%",
