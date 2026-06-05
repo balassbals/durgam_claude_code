@@ -267,15 +267,17 @@ class NonRegularFaculty(TimestampedSoftDelete, table=True):
     Date-windowed, not AY-locked — availability may straddle academic years.
     No academic_year_id; AY-lock machinery does not apply.
 
-    M7 forward-concern: when the approval-request module exists, non_regular_faculty
-    approval migrates from this direct-approve action to a proper request artifact
-    with channel, audit trail, and SLA. Current admin-approve is a simple direct
-    action — sufficient for M5b, replaced at M7.
+    M7: NRF approval now routes through ApprovalRequest engine (NRF_APPROVAL process).
+    On terminal approval, the post-approval callback creates this record with
+    approval_request_id linking back to the request. Historical rows (pre-M7) have
+    NULL approval_request_id. The legacy is_admin_approved/approved_at/approved_by
+    columns remain populated for both old and new rows.
     """
 
     __tablename__ = "non_regular_faculty"
     __table_args__ = (
         sa.Index("ix_nrf_department_id", "department_id"),
+        sa.Index("ix_nrf_approval_request_id", "approval_request_id"),
     )
 
     department_id: UUID = Field(foreign_key="departments.id", nullable=False)
@@ -290,6 +292,9 @@ class NonRegularFaculty(TimestampedSoftDelete, table=True):
     approved_at: datetime | None = Field(default=None, sa_type=_TIMESTAMPTZ)
     approved_by_user_id: UUID | None = Field(
         default=None, foreign_key="users.id",
+    )
+    approval_request_id: UUID | None = Field(
+        default=None, foreign_key="approval_requests.id",
     )
 
 

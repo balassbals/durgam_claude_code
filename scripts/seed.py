@@ -540,7 +540,9 @@ def seed(session: Session) -> dict[str, int]:
         "DEPUTY_DIRECTOR":      _PUBLIC_READ + _DIRECTOR_SPECIFIC,
         "DIRECTOR_OFFICE":      _PUBLIC_READ + _DIRECTOR_SPECIFIC,
         "IQAC_COORDINATOR":     _PUBLIC_READ + _IQAC_SPECIFIC,
-        "DEAN":                 _PUBLIC_READ + _DEAN_SPECIFIC,
+        "DEAN":                 _PUBLIC_READ + _DEAN_SPECIFIC + [
+            ("approval_request",           "approve",   "*"),
+        ],
         "DEAN_STUDENT_WELFARE": _PUBLIC_READ + _DEAN_SW_SPECIFIC,
         "DEAN_STUDENT_WELFARE_OFFICE": _PUBLIC_READ + _DEAN_SW_SPECIFIC,
         "DEAN_ACADEMIC_AFFAIRS": _PUBLIC_READ + _DEAN_AA_SPECIFIC,
@@ -2068,6 +2070,25 @@ def seed(session: Session) -> dict[str, int]:
         .on_conflict_do_nothing(constraint="uq_approval_processes_code"),
     )
     counts["approval_processes"] = cpc_inserted
+
+    # ── ApprovalProcess — NRF_APPROVAL ──────────────────────────────────────
+    nrf_inserted = _exec_insert(
+        session,
+        pg_insert(ApprovalProcess)
+        .values(
+            code="NRF_APPROVAL",
+            title="Non-Regular Faculty Approval",
+            requestor_role_codes=["HOD", "AHOD"],
+            channel_role_codes=["DEAN", "REGISTRAR"],
+            requires_upward_attachments=True,
+            max_upward_attachments=5,
+            requires_downward_attachments=False,
+            max_downward_attachments=3,
+            is_finance=False,
+        )
+        .on_conflict_do_nothing(constraint="uq_approval_processes_code"),
+    )
+    counts["approval_processes"] += nrf_inserted
 
     session.commit()
     return counts
