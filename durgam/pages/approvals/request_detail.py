@@ -1,4 +1,4 @@
-"""Approval request detail with decision controls (/approvals/request/[request_id])."""
+"""Approval request detail with decision controls (/approvals/request/[approval_request_id])."""
 
 import reflex as rx
 

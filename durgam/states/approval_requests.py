@@ -484,7 +484,7 @@ class RequestDetailState(BaseState):
         self.process_requires_downward = False
         self.process_max_downward = 0
 
-        request_id_str = self.router.page.params.get("request_id", "")
+        request_id_str = self.router.page.params.get("approval_request_id", "")
         if not request_id_str:
             self.error = "Request not found."
             self.loading = False
