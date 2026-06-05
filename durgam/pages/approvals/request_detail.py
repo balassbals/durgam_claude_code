@@ -1,4 +1,4 @@
-"""Approval request detail — read-only for Phase 2 (/approvals/request/[request_id])."""
+"""Approval request detail with decision controls (/approvals/request/[request_id])."""
 
 import reflex as rx
 
@@ -7,9 +7,11 @@ from durgam.pages.components import (
     flash_error,
     nav_shell,
     page_footer,
+    primary_btn,
     secondary_btn,
 )
 from durgam.pages.shared.confirmation_dialog import confirmation_dialog
+from durgam.pages.shared.file_upload import file_upload_zone
 from durgam.states.approval_requests import RequestDetailState
 from durgam.states.auth import AuthState
 
@@ -231,7 +233,315 @@ def _steps_section() -> rx.Component:
     )
 
 
-# Phase 3 adds approver decision controls here.
+def _decision_file_item(file_id: rx.Var) -> rx.Component:
+    return rx.hstack(
+        rx.icon("file", size=14, color="var(--color-muted)"),
+        rx.text(file_id, font_size="0.85rem", color="var(--color-body)"),
+        rx.icon_button(
+            rx.icon("x", size=12),
+            aria_label="Remove file",
+            on_click=RequestDetailState.remove_decision_file(file_id),
+            variant="ghost",
+            size="1",
+            cursor="pointer",
+            color="var(--color-muted)",
+        ),
+        align="center",
+        gap="0.5rem",
+        padding="0.25rem 0",
+    )
+
+
+def _downward_upload_section() -> rx.Component:
+    return rx.cond(
+        (RequestDetailState.process_max_downward > 0) | RequestDetailState.process_requires_downward,
+        rx.vstack(
+            rx.text(
+                "Attachments",
+                font_weight="600",
+                font_size="0.85rem",
+                font_family="var(--font-sans)",
+            ),
+            rx.cond(
+                RequestDetailState.process_requires_downward,
+                rx.text(
+                    "At least 1 attachment is required.",
+                    font_size="0.8rem",
+                    color="var(--color-muted)",
+                ),
+                rx.text(
+                    "Attachments are optional.",
+                    font_size="0.8rem",
+                    color="var(--color-muted)",
+                ),
+            ),
+            rx.cond(
+                RequestDetailState.decision_downward_file_ids.length() > 0,  # type: ignore[attr-defined]
+                rx.vstack(
+                    rx.foreach(
+                        RequestDetailState.decision_downward_file_ids,
+                        _decision_file_item,
+                    ),
+                    align="start",
+                    gap="0",
+                    width="100%",
+                ),
+                rx.fragment(),
+            ),
+            file_upload_zone(
+                on_drop=RequestDetailState.handle_decision_upload(rx.upload_files()),  # type: ignore[arg-type]
+                label="Drag & drop files, or click to browse",
+            ),
+            align="start",
+            gap="0.5rem",
+            width="100%",
+        ),
+        rx.fragment(),
+    )
+
+
+def _dialog_overlay(
+    *,
+    is_open: rx.Var,
+    title: str | rx.Component,
+    body_content: rx.Component,
+    footer_content: rx.Component,
+    error_var: rx.Var,
+) -> rx.Component:
+    return rx.cond(
+        is_open,
+        rx.box(
+            rx.box(
+                rx.box(
+                    rx.heading(title, size="4", color="var(--color-body)"),
+                    rx.cond(
+                        error_var != "",
+                        flash_error(error_var),
+                        rx.fragment(),
+                    ),
+                    body_content,
+                    footer_content,
+                    background="white",
+                    border_radius="8px",
+                    padding="1.5rem",
+                    width="min(560px, 90vw)",
+                    box_shadow="0 8px 32px rgba(0,0,0,0.18)",
+                ),
+                display="flex",
+                align_items="center",
+                justify_content="center",
+                position="fixed",
+                top="0",
+                left="0",
+                width="100vw",
+                height="100vh",
+                z_index="1000",
+            ),
+            position="fixed",
+            top="0",
+            left="0",
+            width="100vw",
+            height="100vh",
+            background="rgba(0,0,0,0.45)",
+            z_index="999",
+        ),
+        rx.fragment(),
+    )
+
+
+def _approve_dialog() -> rx.Component:
+    body = rx.vstack(
+        rx.text(
+            "Comment (optional)",
+            font_weight="600",
+            font_size="0.85rem",
+            font_family="var(--font-sans)",
+            margin_top="0.75rem",
+        ),
+        rx.text_area(
+            placeholder="Add a comment for the requestor…",
+            value=RequestDetailState.decision_comment,
+            on_change=RequestDetailState.set_decision_comment,
+            width="100%",
+            rows="3",
+        ),
+        _downward_upload_section(),
+        align="start",
+        gap="0.5rem",
+        width="100%",
+    )
+
+    footer = rx.hstack(
+        rx.button(
+            "Cancel",
+            on_click=RequestDetailState.close_approve_dialog,
+            background="transparent",
+            border="1px solid var(--color-rule)",
+            color="var(--color-body)",
+            padding="0.4rem 1rem",
+            border_radius="4px",
+            cursor="pointer",
+            font_family="var(--font-sans)",
+        ),
+        rx.cond(
+            RequestDetailState.decision_submitting,
+            primary_btn(
+                rx.hstack(
+                    rx.spinner(size="1"),
+                    rx.text("Approving…"),
+                    align="center",
+                    gap="0.5rem",
+                ),
+                disabled=True,
+            ),
+            primary_btn(
+                "Confirm Approve",
+                on_click=RequestDetailState.submit_approve,
+            ),
+        ),
+        justify="end",
+        gap="0.75rem",
+        margin_top="1.5rem",
+        width="100%",
+    )
+
+    return _dialog_overlay(
+        is_open=RequestDetailState.approve_dialog_open,
+        title=rx.cond(
+            RequestDetailState.is_terminal_stage,
+            "Approve this request",
+            "Approve and forward to next stage",
+        ),
+        body_content=body,
+        footer_content=footer,
+        error_var=RequestDetailState.decision_error,
+    )
+
+
+def _reject_dialog() -> rx.Component:
+    body = rx.vstack(
+        rx.text(
+            "Reason for rejection (required) *",
+            font_weight="600",
+            font_size="0.85rem",
+            font_family="var(--font-sans)",
+            margin_top="0.75rem",
+        ),
+        rx.text_area(
+            placeholder="Explain why this request is being rejected…",
+            value=RequestDetailState.decision_comment,
+            on_change=RequestDetailState.set_decision_comment,
+            width="100%",
+            rows="3",
+        ),
+        _downward_upload_section(),
+        align="start",
+        gap="0.5rem",
+        width="100%",
+    )
+
+    footer = rx.hstack(
+        rx.button(
+            "Cancel",
+            on_click=RequestDetailState.close_reject_dialog,
+            background="transparent",
+            border="1px solid var(--color-rule)",
+            color="var(--color-body)",
+            padding="0.4rem 1rem",
+            border_radius="4px",
+            cursor="pointer",
+            font_family="var(--font-sans)",
+        ),
+        destructive_btn(
+            rx.cond(
+                RequestDetailState.decision_submitting,
+                rx.hstack(
+                    rx.spinner(size="1"),
+                    rx.text("Rejecting…"),
+                    align="center",
+                    gap="0.5rem",
+                ),
+                rx.text("Confirm Reject"),
+            ),
+            on_click=RequestDetailState.submit_reject,
+            disabled=RequestDetailState.decision_submitting,
+        ),
+        justify="end",
+        gap="0.75rem",
+        margin_top="1.5rem",
+        width="100%",
+    )
+
+    return _dialog_overlay(
+        is_open=RequestDetailState.reject_dialog_open,
+        title="Reject this request",
+        body_content=body,
+        footer_content=footer,
+        error_var=RequestDetailState.decision_error,
+    )
+
+
+def _decision_section() -> rx.Component:
+    approve_label = rx.cond(
+        RequestDetailState.is_terminal_stage,
+        "Approve",
+        rx.cond(
+            RequestDetailState.next_stage_approvers_preview.length() > 0,  # type: ignore[attr-defined]
+            rx.text(
+                "Approve & forward to ",
+                rx.text(
+                    RequestDetailState.next_stage_approvers_preview.join(", "),  # type: ignore[attr-defined]
+                    font_weight="600",
+                ),
+            ),
+            "Approve & Forward",
+        ),
+    )
+
+    return rx.cond(
+        RequestDetailState.can_decide,
+        rx.vstack(
+            rx.text(
+                "Your Decision",
+                font_weight="700",
+                font_size="1rem",
+                color="var(--color-primary)",
+                font_family="var(--font-sans)",
+            ),
+            rx.text(
+                rx.text("Acting as "),
+                rx.text(
+                    RequestDetailState.current_stage_role_code,
+                    font_weight="600",
+                ),
+                font_size="0.85rem",
+                color="var(--color-muted)",
+                font_family="var(--font-sans)",
+            ),
+            rx.hstack(
+                primary_btn(
+                    approve_label,
+                    on_click=RequestDetailState.open_approve_dialog,
+                ),
+                destructive_btn(
+                    "Reject",
+                    on_click=RequestDetailState.open_reject_dialog,
+                ),
+                gap="0.75rem",
+                flex_wrap="wrap",
+            ),
+            align="start",
+            gap="0.75rem",
+            width="100%",
+            padding="1.25rem",
+            background="white",
+            border="2px solid var(--color-primary)",
+            border_radius="6px",
+        ),
+        rx.fragment(),
+    )
+
+
 def _action_row() -> rx.Component:
     return rx.cond(
         RequestDetailState.can_withdraw,
@@ -286,6 +596,7 @@ def request_detail_page() -> rx.Component:
                             "Approver Attachments",
                             RequestDetailState.downward_attachments,
                         ),
+                        _decision_section(),
                         _action_row(),
                         align="start",
                         gap="1rem",
@@ -294,6 +605,9 @@ def request_detail_page() -> rx.Component:
                     rx.fragment(),
                 ),
             ),
+            # Decision dialogs
+            _approve_dialog(),
+            _reject_dialog(),
             # Withdraw confirmation dialog
             confirmation_dialog(
                 is_open=RequestDetailState.confirm_withdraw_open,

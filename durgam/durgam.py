@@ -230,12 +230,14 @@ app.add_page(about_departments, route="/about/departments",
 app.add_page(about_dept_detail, route="/about/departments/[dept_code]",
              on_load=AboutDeptDetailState.load_dept_detail)
 
-# ── M7 Approval Requests (Phase 2 — requestor UI) ─────────────────────────────
+# ── M7 Approval Requests (Phases 2–3) ─────────────────────────────────────────
 from durgam.pages.approvals import __init__ as _approvals_nav_register  # noqa: F401
 from durgam.pages.approvals.my_requests import my_requests_page
 from durgam.pages.approvals.submit import submit_page
 from durgam.pages.approvals.request_detail import request_detail_page
+from durgam.pages.approvals.inbox import inbox_page
 from durgam.states.approval_requests import (
+    ApproverInboxState,
     MyRequestsState,
     RequestDetailState,
     SubmitRequestState,
@@ -247,3 +249,5 @@ app.add_page(submit_page, route="/approvals/submit",
              on_load=SubmitRequestState.load_submit)
 app.add_page(request_detail_page, route="/approvals/request/[request_id]",
              on_load=RequestDetailState.load_detail)
+app.add_page(inbox_page, route="/approvals/inbox",
+             on_load=ApproverInboxState.load_inbox)

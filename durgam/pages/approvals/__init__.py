@@ -7,3 +7,11 @@ register(NavEntry(
     group="Approvals",
     permission_action=None,
 ))
+
+register(NavEntry(
+    label="Approvals",
+    href="/approvals/inbox",
+    icon="inbox",
+    group="Approvals",
+    permission_action=None,
+))

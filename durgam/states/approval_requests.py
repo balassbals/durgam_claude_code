@@ -1,4 +1,4 @@
-"""States for requestor-facing approval pages (M7 Phase 2).
+"""States for approval pages (M7 Phases 2–3).
 
 Accessible to all authenticated users. No admin permission required.
 """
@@ -101,6 +101,79 @@ class MyRequestsState(BaseState):
         await self.load_my_requests()
 
     def open_detail(self, request_id: str) -> rx.Component:
+        return rx.redirect(f"/approvals/request/{request_id}")
+
+
+# ── Approver Inbox ────────────────────────────────────────────────────
+
+
+class ApproverInboxState(BaseState):
+    rows: list[dict[str, Any]] = []
+    loading: bool = True
+
+    async def load_inbox(self) -> None:
+        redirect = _resolve_or_redirect(self)
+        if redirect is not None:
+            return redirect
+
+        self.loading = True
+        self.rows = []
+
+        from durgam.models.identity import User
+        from durgam.repositories.approval_process import ApprovalProcessRepository
+        from durgam.repositories.approval_request import ApprovalRequestRepository
+        from durgam.services.approval_routing import resolve_stage_approvers
+
+        with open_session() as session:
+            req_repo = ApprovalRequestRepository(session)
+            proc_repo = ApprovalProcessRepository(session)
+
+            pending = req_repo.list_by_states(["submitted", "in_review"])
+
+            viewer_id = UUID(self.current_user_id)
+            proc_cache: dict[UUID, Any] = {}
+            enriched: list[dict[str, Any]] = []
+
+            for r in pending:
+                if r.process_id not in proc_cache:
+                    proc_cache[r.process_id] = proc_repo.get_by_id(r.process_id)
+                proc = proc_cache[r.process_id]
+                if proc is None:
+                    continue
+
+                try:
+                    approvers = resolve_stage_approvers(
+                        request=r, process=proc, session=session,
+                    )
+                except Exception:
+                    continue
+
+                approver_ids = {u.id for u in approvers}
+                if viewer_id not in approver_ids:
+                    continue
+
+                channel_len = len(proc.channel_role_codes) if proc.channel_role_codes else 0
+                requestor = session.get(User, r.requestor_user_id)
+                requestor_display = (
+                    (requestor.full_name or requestor.username) if requestor else "Unknown"
+                )
+
+                enriched.append({
+                    "id": str(r.id),
+                    "title": r.title,
+                    "process_code": proc.code,
+                    "process_title": proc.title,
+                    "requestor_display": requestor_display,
+                    "current_stage_label": _stage_label(r.current_stage, channel_len, r.state),
+                    "submitted_at_display": _format_dt(r.created_at),
+                    "state": r.state,
+                })
+            self.rows = enriched
+
+        self.loading = False
+        self._load_nav_entries()
+
+    def open_request(self, request_id: str) -> rx.Component:
         return rx.redirect(f"/approvals/request/{request_id}")
 
 
@@ -285,6 +358,22 @@ class RequestDetailState(BaseState):
     error: str = ""
     confirm_withdraw_open: bool = False
 
+    # Phase 3 — approver decision state
+    viewer_is_current_stage_approver: bool = False
+    can_decide: bool = False
+    next_stage_approvers_preview: list[str] = []
+    is_terminal_stage: bool = False
+    current_stage_role_code: str = ""
+    approve_dialog_open: bool = False
+    reject_dialog_open: bool = False
+    decision_comment: str = ""
+    decision_downward_file_ids: list[str] = []
+    decision_submitting: bool = False
+    decision_error: str = ""
+    process_allows_downward: bool = False
+    process_requires_downward: bool = False
+    process_max_downward: int = 0
+
     async def load_detail(self) -> None:
         redirect = _resolve_or_redirect(self)
         if redirect is not None:
@@ -300,6 +389,20 @@ class RequestDetailState(BaseState):
         self.viewer_is_requestor = False
         self.can_withdraw = False
         self.confirm_withdraw_open = False
+        self.viewer_is_current_stage_approver = False
+        self.can_decide = False
+        self.next_stage_approvers_preview = []
+        self.is_terminal_stage = False
+        self.current_stage_role_code = ""
+        self.approve_dialog_open = False
+        self.reject_dialog_open = False
+        self.decision_comment = ""
+        self.decision_downward_file_ids = []
+        self.decision_submitting = False
+        self.decision_error = ""
+        self.process_allows_downward = False
+        self.process_requires_downward = False
+        self.process_max_downward = 0
 
         request_id_str = self.router.page.params.get("request_id", "")
         if not request_id_str:
@@ -426,6 +529,60 @@ class RequestDetailState(BaseState):
                 self.viewer_is_requestor and req.state == "submitted"
             )
 
+            # Phase 3: approver decision state
+            from durgam.services.approval_routing import resolve_stage_approvers
+
+            channel = proc.channel_role_codes or [] if proc else []
+            self.is_terminal_stage = req.current_stage >= len(channel)
+
+            if req.state in ("submitted", "in_review") and proc and channel:
+                stage_idx = req.current_stage - 1
+                if 0 <= stage_idx < len(channel):
+                    self.current_stage_role_code = channel[stage_idx]
+
+                try:
+                    approvers = resolve_stage_approvers(
+                        request=req, process=proc, session=session,
+                    )
+                    approver_ids = {u.id for u in approvers}
+                    self.viewer_is_current_stage_approver = viewer_id in approver_ids
+                except Exception:
+                    self.viewer_is_current_stage_approver = False
+
+                self.can_decide = self.viewer_is_current_stage_approver
+
+                # Preview next-stage approvers for non-terminal stages
+                if self.can_decide and not self.is_terminal_stage:
+                    try:
+                        next_stage = req.current_stage + 1
+                        next_idx = next_stage - 1
+                        if next_idx < len(channel):
+                            simulated_req = type(req).model_validate(req)
+                            simulated_req.current_stage = next_stage
+                            next_approvers = resolve_stage_approvers(
+                                request=simulated_req,
+                                process=proc,
+                                session=session,
+                            )
+                            names = [
+                                a.full_name or a.username
+                                for a in next_approvers[:3]
+                            ]
+                            if len(next_approvers) > 3:
+                                names.append(f"and {len(next_approvers) - 3} more")
+                            self.next_stage_approvers_preview = names
+                    except Exception:
+                        self.next_stage_approvers_preview = []
+
+                # Downward attachment config
+                if proc:
+                    self.process_allows_downward = (
+                        proc.max_downward_attachments > 0
+                        or not proc.requires_downward_attachments
+                    )
+                    self.process_requires_downward = proc.requires_downward_attachments
+                    self.process_max_downward = proc.max_downward_attachments
+
         self.loading = False
         self._load_nav_entries()
 
@@ -462,4 +619,155 @@ class RequestDetailState(BaseState):
             self.error = str(e)
             return
 
+        await self.load_detail()
+
+    # Phase 3 — decision dialog handlers
+
+    def open_approve_dialog(self) -> None:
+        self.approve_dialog_open = True
+        self.decision_error = ""
+
+    def close_approve_dialog(self) -> None:
+        self.approve_dialog_open = False
+        self.decision_comment = ""
+        self.decision_downward_file_ids = []
+        self.decision_error = ""
+
+    def open_reject_dialog(self) -> None:
+        self.reject_dialog_open = True
+        self.decision_error = ""
+
+    def close_reject_dialog(self) -> None:
+        self.reject_dialog_open = False
+        self.decision_comment = ""
+        self.decision_downward_file_ids = []
+        self.decision_error = ""
+
+    def set_decision_comment(self, value: str) -> None:
+        self.decision_comment = value
+
+    async def handle_decision_upload(self, files: list[rx.UploadFile]) -> None:
+        from durgam.repositories.file_asset import FileAssetRepository
+        from durgam.services.upload import UploadService
+        from durgam.storage import get_storage_backend
+
+        if not files:
+            return
+
+        with open_session() as session:
+            svc = UploadService(
+                file_repo=FileAssetRepository(session),
+                backend=get_storage_backend(),
+            )
+            for f in files:
+                content = await f.read()
+                if not content:
+                    continue
+                asset = svc.upload(
+                    data=content,
+                    original_name=f.filename or "attachment",
+                    mime_type=f.content_type or "application/octet-stream",
+                    actor_id=UUID(self.current_user_id),
+                    purpose="approval_downward",
+                )
+                self.decision_downward_file_ids = [
+                    *self.decision_downward_file_ids,
+                    str(asset.id),
+                ]
+            session.commit()
+
+    def remove_decision_file(self, file_id: str) -> None:
+        self.decision_downward_file_ids = [
+            fid for fid in self.decision_downward_file_ids if fid != file_id
+        ]
+
+    async def submit_approve(self) -> None:
+        if not self.can_decide:
+            self.decision_error = "You cannot approve this request."
+            return
+
+        self.decision_submitting = True
+        self.decision_error = ""
+
+        from durgam.services.approval_request import (
+            ApprovalRequestError,
+            ApprovalRequestService,
+        )
+
+        request_id_str = self.request.get("id", "")
+        if not request_id_str:
+            self.decision_submitting = False
+            return
+
+        try:
+            with open_session() as session:
+                svc = ApprovalRequestService(session)
+                svc.approve(
+                    request_id=UUID(request_id_str),
+                    approver_user_id=UUID(self.current_user_id),
+                    comment=self.decision_comment.strip() or None,
+                    downward_attachment_file_ids=(
+                        [UUID(fid) for fid in self.decision_downward_file_ids]
+                        if self.decision_downward_file_ids
+                        else None
+                    ),
+                )
+                session.commit()
+        except ApprovalRequestError as e:
+            self.decision_error = str(e)
+            self.decision_submitting = False
+            return
+        except Exception:
+            log.exception("submit_approve_failed")
+            self.decision_error = "An unexpected error occurred."
+            self.decision_submitting = False
+            return
+
+        self.approve_dialog_open = False
+        self.decision_submitting = False
+        await self.load_detail()
+
+    async def submit_reject(self) -> None:
+        if not self.can_decide:
+            self.decision_error = "You cannot reject this request."
+            return
+
+        if not self.decision_comment.strip():
+            self.decision_error = "A reason for rejection is required."
+            return
+
+        self.decision_submitting = True
+        self.decision_error = ""
+
+        from durgam.services.approval_request import (
+            ApprovalRequestError,
+            ApprovalRequestService,
+        )
+
+        request_id_str = self.request.get("id", "")
+        if not request_id_str:
+            self.decision_submitting = False
+            return
+
+        try:
+            with open_session() as session:
+                svc = ApprovalRequestService(session)
+                svc.reject(
+                    request_id=UUID(request_id_str),
+                    approver_user_id=UUID(self.current_user_id),
+                    comment=self.decision_comment.strip(),
+                )
+                session.commit()
+        except ApprovalRequestError as e:
+            self.decision_error = str(e)
+            self.decision_submitting = False
+            return
+        except Exception:
+            log.exception("submit_reject_failed")
+            self.decision_error = "An unexpected error occurred."
+            self.decision_submitting = False
+            return
+
+        self.reject_dialog_open = False
+        self.decision_submitting = False
         await self.load_detail()
