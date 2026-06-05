@@ -2,10 +2,9 @@
 
 import reflex as rx
 
-from durgam.pages.components import nav_shell, page_footer
+from durgam.pages.components import admin_page, nav_shell, page_footer
 from durgam.pages.shared.data_table import TableColumn, data_table
 from durgam.states.approval_requests import ApproverInboxState
-from durgam.states.auth import AuthState
 
 _INBOX_COLUMNS: list[TableColumn] = [
     TableColumn(key="title", label="Title"),
@@ -75,8 +74,4 @@ def inbox_page() -> rx.Component:
         background="var(--color-background, #f5f0eb)",
     )
 
-    return rx.cond(
-        AuthState.current_user_id != "",
-        content,
-        rx.fragment(),
-    )
+    return admin_page(content)

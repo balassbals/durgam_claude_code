@@ -112,9 +112,9 @@ class ApproverInboxState(BaseState):
     loading: bool = True
 
     async def load_inbox(self) -> None:
-        redirect = _resolve_or_redirect(self)
-        if redirect is not None:
-            return redirect
+        guard = self._config_guard("approval_request", "approve")
+        if guard is not None:
+            return guard
 
         self.loading = True
         self.rows = []
@@ -521,6 +521,42 @@ class RequestDetailState(BaseState):
             viewer_id = UUID(self.current_user_id)
             self.viewer_is_requestor = req.requestor_user_id == viewer_id
 
+            proc = proc_repo.get_by_id(req.process_id)
+
+            # Access gate: viewer must be requestor, a channel approver
+            # (current or prior stage), or hold approval_request:approve:*.
+            if not self.viewer_is_requestor:
+                from durgam.services.approval_routing import resolve_stage_approvers
+                from durgam.services.auth import can
+
+                is_approver = False
+
+                # Check prior-stage approver via recorded steps
+                prior_steps = step_repo.list_for_request(request_id)
+                if any(s.approver_user_id == viewer_id for s in prior_steps):
+                    is_approver = True
+
+                # Check current-stage approver via routing
+                if not is_approver and req.state in ("submitted", "in_review") and proc:
+                    try:
+                        approvers = resolve_stage_approvers(
+                            request=req, process=proc, session=session,
+                        )
+                        if viewer_id in {u.id for u in approvers}:
+                            is_approver = True
+                    except Exception:
+                        pass
+
+                # Fallback: user holds the approve permission (e.g. SYSTEM_ADMIN)
+                if not is_approver:
+                    if can(viewer_id, "approve", "approval_request", None, None, session):
+                        is_approver = True
+
+                if not is_approver:
+                    self.error = ""
+                    self.loading = False
+                    return rx.redirect("/approvals/my-requests")
+
             svc = ApprovalRequestService(session)
             svc.view_request(request_id=request_id, viewer_user_id=viewer_id)
             session.commit()
@@ -530,8 +566,6 @@ class RequestDetailState(BaseState):
                 self.error = "Request not found."
                 self.loading = False
                 return
-
-            proc = proc_repo.get_by_id(req.process_id)
             channel_len = len(proc.channel_role_codes) if proc and proc.channel_role_codes else 0
 
             requestor = session.get(User, req.requestor_user_id)
