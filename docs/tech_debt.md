@@ -405,6 +405,125 @@ test suite after migration.
 
 ---
 
+### TD-021 — Approval-attachment join table
+
+**Location:** `durgam/services/approval_request.py` (attachment handling),
+`durgam/models/crosscutting.py` (FileAsset)
+
+**What it is:** M7 Phase 1 used `FileAsset.purpose` + `metadata_json.approval_request_id`
+tagging to associate uploaded files with approval requests. There is no FK constraint
+between `FileAsset` and `ApprovalRequest` — a dangling `metadata_json.approval_request_id`
+pointing at a deleted request would not raise a DB error.
+
+**Fix:** Create a dedicated `approval_request_attachments` join table with FK constraints
+to both `approval_requests` and `file_assets`, replacing the metadata_json tagging.
+
+**Trigger to re-open:** When approval attachments need cascade-delete semantics, or when
+a query needs to efficiently list all attachments for a request via FK join.
+
+---
+
+### TD-022 — Pre-select process in submit form via query param
+
+**Location:** `durgam/pages/approvals/submit.py`, `durgam/states/approval_requests.py`
+
+**What it is:** The NRF admin page's "+ Submit for Approval" button redirects to
+`/approvals/submit` with no pre-selection. The user must manually select "Non-Regular
+Faculty Approval" from the process picker. A `?process=NRF_APPROVAL` query param could
+drive the picker automatically.
+
+**Fix:** Read `rx.State.router.page.params.get("process")` in `load_submit()` and
+pre-select the matching process.
+
+**Trigger to re-open:** When more processes accumulate and the submit page is commonly
+reached from process-specific entry points.
+
+---
+
+### TD-023 — Multi-HOD users and dept auto-resolution
+
+**Location:** `durgam/states/base.py` (`_resolve_user_dept_scope`)
+
+**What it is:** `_resolve_user_dept_scope()` picks the first department arbitrarily for
+users holding multiple HOD roles across departments. This returns a deterministic but
+potentially incorrect department for NRF submissions.
+
+**Fix:** When multiple departments are found, present an explicit department picker on
+the submit form instead of silently picking the first.
+
+**Trigger to re-open:** When a user holds HOD roles for multiple departments and submits
+an NRF approval request for the wrong department.
+
+---
+
+### TD-024 — Approval-grant maintenance with new channels
+
+**Location:** `scripts/seed.py` (role_perm_map)
+
+**What it is:** The permission `approval_request:approve:*` is granted statically per
+role in the seed. When a new ApprovalProcess is created with new channel roles, the seed
+must be manually updated to grant those roles the approve permission. The grant set is
+not auto-derived from active processes.
+
+**Fix options:** (a) Derive grants from active processes at seed time by scanning
+`ApprovalProcess.channel_role_codes`. (b) Compute nav visibility dynamically from active
+processes rather than a static permission check.
+
+**Trigger to re-open:** When a new approval process adds a channel role that doesn't
+already hold `approval_request:approve:*`, causing that role to not see the inbox.
+
+---
+
+### TD-025 — Submit-form conditional-fields growth
+
+**Location:** `durgam/pages/approvals/submit.py` (`_nrf_fields_section`),
+`durgam/states/approval_requests.py` (NRF field vars)
+
+**What it is:** The Phase-4-A approach adds process-specific fields via
+`rx.cond(selected_process_code == "NRF_APPROVAL", ...)`. This is clean for v1's two
+processes (CPC_FUND_RELEASE has no extra fields; NRF_APPROVAL has 7). If a third process
+adds its own fields, the conditional chain grows linearly.
+
+**Fix:** Refactor to a registry pattern — each process code registers a component
+function and state vars — when ≥3 process-specific submit shapes accumulate.
+
+**Trigger to re-open:** A third approval process needs process-specific fields on the
+submit form.
+
+---
+
+### TD-026 — Approver inbox pagination
+
+**Location:** `durgam/pages/approvals/inbox.py`, `durgam/states/approval_requests.py`
+
+**What it is:** The Phase 3 approver inbox loads all pending requests without pagination.
+The inbox is assumed small in v1 (most approvers see single-digit pending requests).
+
+**Fix:** Add offset/limit pagination with page controls, matching the pattern used in
+the audit log page.
+
+**Trigger to re-open:** When typical inbox sizes exceed ~50 rows (likely when the approval
+engine handles high-volume processes like leave requests at M8+).
+
+---
+
+### TD-027 — MinIO-dependent download tests
+
+**Location:** Multiple test files across M5a–M7
+
+**What it is:** 8 pre-existing test errors are flagged across M7 phases, all related to
+MinIO storage backend availability. These tests assume MinIO is running but do not gate
+on a `DURGAM_MINIO=1` environment variable (unlike E2E tests which gate on `DURGAM_E2E=1`).
+
+**Fix options:** (a) Gate MinIO-dependent tests on `DURGAM_MINIO=1`, matching the E2E
+skipif pattern. (b) Mock the storage backend in unit/integration tests that test download
+logic (not storage).
+
+**Trigger to re-open:** When CI is formalized and these errors block the pipeline. Pre-
+existing; not introduced by M7.
+
+---
+
 ## Resolved
 
 ### TD-002 — SAWarning: transaction already deassociated from connection (resolved in m0-cleanup)

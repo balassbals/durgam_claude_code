@@ -69,7 +69,7 @@ E-004 (RoleEmail) bind to this split.
 | RoleEmail (email bound to role/scope) | §9.3 | M2/M5a | Shipped at M5a | M2 seeded; M4 reads for calendar phase-transition emails; E-004 remediation at M5a (re-key to UUID PK + TimestampedSoftDelete + partial unique indexes); management UI at `/admin/config/role-emails` (Registrar family + SysAdmin) |
 | LetterheadAsset (file per role) | §9.3 | M5a | Shipped at M5a | Upload/replace/deactivate/download; partial unique index on `(purpose, role_code)`; MIME filter (DOCX); max 5 MB; scope columns removed at M5b gate (one letterhead per role is sufficient) |
 | ApprovalProcess (workflow config — schema + CPC config) | §9.3, §8.4 | M5b | Shipped at M5b | Config UI + service + seeds CPC_FUND_RELEASE process (is_finance=True). Runtime execution stays M7. |
-| ApprovalProcess (runtime execution) | §9.5 | M7 | Planned for M7 | Generic approval engine consumes M5b config; CPC fund-release fully wired. |
+| ApprovalProcess (runtime execution) | §9.5 | M7 | Shipped at M7 | Generic approval engine with state machine, scope-chain routing, requestor + approver UI, NRF post-approval callback. CPC concurrent-committee topology deferred (requires M10 Faculty). |
 | PurchaseProcedureRule (spend-tier config, Finance-owned) | Purchase Procedures doc, §9.5, E-007 | M5b | Shipped at M5b | 10 rows (5 tiers × 2 fund sources) seeded. Overlap validation with self-exclusion on update. Floor/ceiling normalization (Projects/UGC tier-2: 10,001). BOM as literal string in approving_authority_role_codes. Finance Officer only (NOT _PUBLIC_READ). |
 | PurchaseCommitteeTemplate (committee composition policy, Finance-owned) | E-007 | M5b | Shipped at M5b | 2 rows seeded: campus (director_excluded=True, faculty by designation rank) + central (escalation_designate=REGISTRAR). eligible_designations + faculty_member_count + fixed_role_members model. Rank-preference enforcement → M7 runtime (requires M10 Faculty). |
 | Designation (extensible faculty designation vocabulary) | E-007 | M5b | Shipped at M5b | 4 rows seeded (senior_professor through assistant_professor). Finance Officer owns. Referenced by PurchaseCommitteeTemplate.eligible_designations. |
@@ -130,10 +130,10 @@ E-004 (RoleEmail) bind to this split.
 | Class coordinator student picker | §9.3 | M12 | Needs Student model |
 | Course-code dropdown auto-fill | §9.3 | M14 | |
 | Announcement composer roster | §9.3 | M9 (RFP §12) | |
-| HoD picks next-level approver from candidate set | E-007 | M7 | E-007 R1 semantic |
-| Informational CC notification on approval | E-007 | M7 | informational_cc_role_codes field |
-| Non-regular faculty approval routing per case | E-003, E-007 | M7 | Current direct-approve placeholder |
-| Approval-process SLA enforcement | §9.5 | M7 | |
+| HoD picks next-level approver from candidate set | E-007 | M10/M14 | Deferred from M7 — requires purchase-request artifact + M10 Faculty model. E-007 R1 semantic. |
+| Informational CC notification on approval | E-007 | M7 | Shipped at M7 | CC recipients resolved from `informational_cc_role_codes` and notified on terminal decision. |
+| Non-regular faculty approval routing per case | E-003, E-007 | M7 | Shipped at M7 | NRF_APPROVAL process with DEAN→REGISTRAR channel; post-approval auto-creates NRF record. E-014 records channel-customization concern. |
+| Approval-process SLA enforcement | §9.5 | Future | Deferred from M7 — tracking step-level time limits not needed for v1 processes. |
 | Purchase committee rank-preference enforcement | E-007 | M7 | Runtime concern: highest-rank-first selection from eligible_designations requires M10 Faculty model for who-exists/availability |
 | Purchase committee availability/fatigue check | E-007 | M7 | Runtime concern: reject faculty serving on too many concurrent committees; requires M10 Faculty model |
 | Purchase committee justification field | E-007 | M7 | Runtime concern: text justification when lower-ranked faculty selected; requires purchase-request artifact (M7) |
@@ -244,13 +244,10 @@ deferred scope.
 16. **Faculty mentor roster letterhead overlay** — basic DOCX-on-letterhead
     (render_docx_template with Director letterhead) works at M5b. Rich auto-fill
     polish (campus/director-name/designation from login scope) remains. → M14.
-17. **Non-regular faculty approval-request workflow** — current M5b direct-approve
-    (Director or Registrar family clicks Approve) is a simple admin action recording
-    `approved_at` and `approved_by_user_id`. At M7, the Approval Requests module
-    replaces this with proper case-by-case routing: configurable per-case selection
-    between Director and Registrar (and any other institutional approvers), with the
-    request artifact, channel, audit trail, and SLA. The direct-approve action
-    becomes either retired or an override-only mechanism. → M7.
+17. **Non-regular faculty approval-request workflow** — **Resolved at M7.** M5b's
+    direct-approve placeholder replaced by NRF_APPROVAL process with DEAN→REGISTRAR
+    channel. Post-approval callback auto-creates the NRF record. Direct-approve toggle
+    retained for historical rows. See E-014 for channel-customization concern.
 
 ---
 

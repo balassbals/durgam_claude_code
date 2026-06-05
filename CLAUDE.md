@@ -4,7 +4,7 @@
 **Spec**: `docs/durgam_rfp_v3.pdf` — all section references (§8, §12, etc.) point to this file.
 **Python**: 3.13 (pinned via `.python-version`).
 **Theme**: Puttaparthi Saffron–Indigo–Ivory (§15.1). Single committed theme; no alternatives in v3.
-**Current milestone**: M7 — Approval Requests.
+**Current milestone**: M8.
 
 ## Authority files (binding, in priority order)
 
@@ -1372,8 +1372,48 @@ string as the "clear selection" sentinel. Use `value="all"` with a descriptive l
 (e.g. "All scopes") for "no filter" items. All filter state vars that feed a
 `rx.select` must default to `"all"`, not `""`.
 
+## Patterns established at M7
+
+### Approval engine — service-layer state machine with direct audit
+
+The approval engine (`durgam/services/approval_request.py`) owns the state machine
+(submitted → in_review → approved/rejected/withdrawn/cancelled). Audit rows are written
+via `write_audit_row()` directly inside the service transaction — NOT via the
+`@audit_action` decorator — because the service must record the transition atomically
+with the state change. The decorator pattern is used for page-state handlers that call
+into the service.
+
+### Scope-chain routing via `resolve_stage_approvers`
+
+`durgam/services/approval_routing.py` walks dept → school → campus → universitywide to
+find users holding the required channel role at the most-specific scope. The walk order
+is fixed; the first scope level with at least one matching user wins. This avoids
+returning approvers at every level and duplicating notifications.
+
+### Post-approval callback dispatch
+
+`ApprovalRequestService._run_post_approval()` (`durgam/services/approval_request.py`)
+dispatches by `process.code` on terminal approval. Single-consumer pattern for v1 — only
+`NRF_APPROVAL` has a handler (`_create_nrf_from_approval`). New processes that need
+post-approval side effects add a branch here. Deferred imports are used inside the handler
+to avoid cross-service import at module level.
+
+### Permission-gated nav for approver roles
+
+The "Approvals" nav entry (inbox) is gated on `approval_request:approve:*`. This grant
+is given to 5 specific roles (REGISTRAR, DEPUTY_REGISTRAR, FINANCE_OFFICER, VC,
+CPC_CHAIRPERSON) plus DEAN (added for NRF_APPROVAL stage 1). SYSTEM_ADMIN inherits via
+wildcard. **Maintenance note**: when new approval processes introduce new channel roles,
+the seed must be updated to grant `approval_request:approve:*` to those roles — the
+grant set is not auto-derived from active processes.
+
+### Empty-string Select.Item sentinel discipline
+
+Carried forward from M6b (`value="all"`, not `value=""`). See M6b patterns section;
+not duplicated here.
+
 ## Current milestone
-**M7 — Approval Requests.**
+**M8.**
 
 This line is the source of truth for "where are we." Before opening a milestone-completing PR, Claude Code MUST:
 1. Grep this file for "Current milestone" and update both occurrences (the top status line and this section).

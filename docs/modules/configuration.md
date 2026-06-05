@@ -267,7 +267,7 @@ superseded by E-005).
 
 | Milestone | What it adds to this module |
 |---|---|
-| **M7** (Purchase & Inventory) | Rank-preference enforcement, availability/fatigue check, justification field (require M10 Faculty + M7 purchase-request artifact) |
+| **M7** (Approval Requests) | Generic approval engine (shipped); NRF_APPROVAL process with post-approval NRF record creation (shipped). Rank-preference enforcement, availability/fatigue check, justification field deferred to M10/M14 (require M10 Faculty). |
 | **M10** (Faculty) | Faculty model enables rich assignment UI + committee member selection; faculty bulk import |
 | **M11** (Projects & Research) | Project-fund link to PI's faculty record |
 | **M12** (Student) | Student model enables rich class-teacher/coordinator UI; student bulk import |
