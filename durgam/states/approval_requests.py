@@ -198,6 +198,27 @@ class SubmitRequestState(BaseState):
     nrf_available_to: str = ""
     nrf_type: str = "visiting"
 
+    def set_nrf_name(self, v: str) -> None:
+        self.nrf_name = v
+
+    def set_nrf_designation(self, v: str) -> None:
+        self.nrf_designation = v
+
+    def set_nrf_organization(self, v: str) -> None:
+        self.nrf_organization = v
+
+    def set_nrf_expertise(self, v: str) -> None:
+        self.nrf_expertise = v
+
+    def set_nrf_available_from(self, v: str) -> None:
+        self.nrf_available_from = v
+
+    def set_nrf_available_to(self, v: str) -> None:
+        self.nrf_available_to = v
+
+    def set_nrf_type(self, v: str) -> None:
+        self.nrf_type = v
+
     @rx.var
     def selected_process(self) -> dict[str, Any]:
         for p in self.process_options:
