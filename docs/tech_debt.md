@@ -507,6 +507,26 @@ engine handles high-volume processes like leave requests at M8+).
 
 ---
 
+### TD-028 — E2E test coverage gap for approval detail page
+
+**Location:** `tests/e2e/test_approvals_suite.py` (`TestApproverFlow`)
+
+**What it is:** `test_request_detail_page_renders_for_authorized_viewer` was deferred
+at M7 Phase 5. Reflex has no REST API, so Playwright cannot seed an in-flight
+`ApprovalRequest` from outside the WebSocket. The unit-test surface and the gate-ritual
+manual walkthrough cover the detail-page rendering today.
+
+**Fix:** Either (a) add a deterministic seed-side fixture (`scripts/seed.py` produces
+an `e2e_test_approval_request` row in `submitted` state), or (b) drive submission
+through Playwright as part of the test setup (fill the submit form, select a process,
+submit, then navigate to the detail page).
+
+**Trigger to re-open:** When the approval detail page gains complex conditional
+rendering (e.g. decision controls, attachment sections) that the manual walkthrough
+could miss.
+
+---
+
 ### TD-027 — MinIO-dependent download tests
 
 **Location:** Multiple test files across M5a–M7

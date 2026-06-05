@@ -1407,6 +1407,13 @@ wildcard. **Maintenance note**: when new approval processes introduce new channe
 the seed must be updated to grant `approval_request:approve:*` to those roles — the
 grant set is not auto-derived from active processes.
 
+### Explicit manual setters for form-bound state vars
+
+Every State var bound to a form input (`on_change`, `value` binding) requires a
+corresponding `def set_<var>(self, value): self.<var> = value` method. Reflex's implicit
+auto-setters throw runtime errors in this codebase. Caught and fixed in M7 for
+`SubmitRequestState` NRF fields; same pattern applied in M6b for `AuditLogState` filters.
+
 ### Empty-string Select.Item sentinel discipline
 
 Carried forward from M6b (`value="all"`, not `value=""`). See M6b patterns section;

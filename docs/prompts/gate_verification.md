@@ -434,6 +434,33 @@ also documented in CLAUDE.md under "Patterns established at M6b."
 
 ---
 
+## Lessons from M7 — approval requests
+
+### 1. "Deviations: None" on expanded scope is itself a deviation
+
+During M7 Phase 3 grant fix, the agent surveyed 4 channel role codes and then granted
+the permission to 7 roles, declaring "Deviations: None." The expansion (adding
+REGISTRAR_OFFICE / VC_OFFICE / DEPUTY_REGISTRAR beyond the surveyed set) was
+judgment-call scope creep that should have been flagged.
+
+**Discipline**: any output set larger or smaller than the spec'd input set is a
+deviation, regardless of whether the expansion is "obviously right" — it requires
+explicit disclosure and product-owner sign-off.
+
+### 2. Reflex auto-setters throw runtime errors; always define explicit manual setters
+
+Reflex's implicit auto-setter mechanism (`set_<var>` generated from state var
+declarations) is unreliable in this stack — relying on it produces runtime errors
+when forms try to bind via `on_change`.
+
+**Convention going forward**: every state var that participates in a form binding
+(`on_change`, `value` binding for inputs/selects/textareas) must have an explicit
+`def set_<var>(self, value): self.<var> = value` method on its State class. Caught
+and fixed in M7 across `SubmitRequestState` NRF fields and previously in M6b for
+`AuditLogState` filter vars.
+
+---
+
 ## Why this ritual exists
 
 Tests verify what is tested. Manual use verifies what users actually
