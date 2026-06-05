@@ -105,6 +105,110 @@ def _attachment_section() -> rx.Component:
     )
 
 
+_NRF_TYPE_OPTIONS = ["visiting", "adjunct", "guest", "contract", "honorary"]
+
+
+def _nrf_fields_section() -> rx.Component:
+    return rx.cond(
+        SubmitRequestState.selected_process_code == "NRF_APPROVAL",
+        rx.vstack(
+            rx.text(
+                "Non-Regular Faculty Details",
+                font_weight="600",
+                font_size="0.9rem",
+                font_family="var(--font-sans)",
+            ),
+            rx.vstack(
+                rx.text("Name *", font_size="0.85rem", color="var(--color-muted)"),
+                rx.input(
+                    placeholder="Full name",
+                    value=SubmitRequestState.nrf_name,
+                    on_change=SubmitRequestState.set_nrf_name,
+                    width="100%",
+                ),
+                align="start", gap="0.25rem", width="100%",
+            ),
+            rx.vstack(
+                rx.text("Designation *", font_size="0.85rem", color="var(--color-muted)"),
+                rx.input(
+                    placeholder="e.g. Professor",
+                    value=SubmitRequestState.nrf_designation,
+                    on_change=SubmitRequestState.set_nrf_designation,
+                    width="100%",
+                ),
+                align="start", gap="0.25rem", width="100%",
+            ),
+            rx.vstack(
+                rx.text("Organization *", font_size="0.85rem", color="var(--color-muted)"),
+                rx.input(
+                    placeholder="e.g. IISc Bangalore",
+                    value=SubmitRequestState.nrf_organization,
+                    on_change=SubmitRequestState.set_nrf_organization,
+                    width="100%",
+                ),
+                align="start", gap="0.25rem", width="100%",
+            ),
+            rx.vstack(
+                rx.text("Expertise *", font_size="0.85rem", color="var(--color-muted)"),
+                rx.input(
+                    placeholder="e.g. Quantum Physics",
+                    value=SubmitRequestState.nrf_expertise,
+                    on_change=SubmitRequestState.set_nrf_expertise,
+                    width="100%",
+                ),
+                align="start", gap="0.25rem", width="100%",
+            ),
+            rx.hstack(
+                rx.vstack(
+                    rx.text("Available From *", font_size="0.85rem", color="var(--color-muted)"),
+                    rx.input(
+                        type="date",
+                        value=SubmitRequestState.nrf_available_from,
+                        on_change=SubmitRequestState.set_nrf_available_from,
+                        width="100%",
+                    ),
+                    align="start", gap="0.25rem", flex="1",
+                ),
+                rx.vstack(
+                    rx.text("Available To *", font_size="0.85rem", color="var(--color-muted)"),
+                    rx.input(
+                        type="date",
+                        value=SubmitRequestState.nrf_available_to,
+                        on_change=SubmitRequestState.set_nrf_available_to,
+                        width="100%",
+                    ),
+                    align="start", gap="0.25rem", flex="1",
+                ),
+                gap="1rem", width="100%",
+            ),
+            rx.vstack(
+                rx.text("Type", font_size="0.85rem", color="var(--color-muted)"),
+                rx.select.root(
+                    rx.select.trigger(placeholder="Select type"),
+                    rx.select.content(
+                        rx.foreach(
+                            _NRF_TYPE_OPTIONS,
+                            lambda o: rx.select.item(o, value=o),
+                        ),
+                    ),
+                    value=SubmitRequestState.nrf_type,
+                    on_change=SubmitRequestState.set_nrf_type,
+                    width="100%",
+                ),
+                align="start", gap="0.25rem", width="100%",
+            ),
+            align="start",
+            gap="0.75rem",
+            width="100%",
+            padding="1rem",
+            background="var(--color-background, #f5f0eb)",
+            border="1px solid var(--color-rule)",
+            border_radius="6px",
+        ),
+        rx.fragment(),
+    )
+
+
 def submit_page() -> rx.Component:
     content = rx.vstack(
         nav_shell(),
@@ -189,6 +293,8 @@ def submit_page() -> rx.Component:
                     gap="0.25rem",
                     width="100%",
                 ),
+                # NRF-specific fields (conditional)
+                _nrf_fields_section(),
                 # Attachments
                 _attachment_section(),
                 # Action buttons

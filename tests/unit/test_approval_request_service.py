@@ -668,3 +668,233 @@ class TestAuditDiffShape:
         assert submit_kwargs["before"] is None
         assert submit_kwargs["action"] == "submit"
         assert submit_kwargs["resource"] == "approval_request"
+
+
+# ── Post-approval callback tests ─────────────────────────────────────
+
+
+class TestPostApprovalCallback:
+    @patch("durgam.services.approval_request.write_audit_row")
+    @patch("durgam.services.approval_request.resolve_stage_approvers")
+    def test_approve_terminal_nrf_creates_record(
+        self, mock_resolve, mock_audit
+    ):
+        """Full NRF_APPROVAL 2-stage flow: stage-1 forward, stage-2 terminal approval
+        creates NonRegularFaculty record with approval fields populated."""
+        approver_1 = _make_user()
+        approver_2 = _make_user()
+
+        nrf_payload = {
+            "description": "Visiting faculty request",
+            "nrf_data": {
+                "department_id": str(uuid4()),
+                "name": "Dr. Example",
+                "designation": "Professor",
+                "organization": "Test University",
+                "expertise": "Physics",
+                "available_from": "2026-07-01",
+                "available_to": "2026-12-31",
+                "non_regular_type": "visiting",
+            },
+        }
+
+        process = _make_process(channel_role_codes=["DEAN", "REGISTRAR"])
+        process.code = "NRF_APPROVAL"
+
+        request = _make_request(
+            state="in_review",
+            current_stage=2,
+            process_id=process.id,
+        )
+        request.payload_json = nrf_payload
+
+        mock_resolve.return_value = [approver_2]
+
+        session = MagicMock()
+        requestor = _make_user(request.requestor_user_id)
+        session.get.return_value = requestor
+
+        def exec_side(stmt):
+            result = MagicMock()
+            result.first.return_value = None
+            result.all.return_value = []
+            return result
+
+        session.exec.side_effect = exec_side
+
+        mock_nrf_record = MagicMock()
+        mock_nrf_record.id = uuid4()
+
+        with patch(
+            "durgam.repositories.non_regular_faculty.NonRegularFacultyRepository"
+        ) as MockNrfRepo, patch(
+            "durgam.services.non_regular_faculty.NonRegularFacultyService"
+        ) as MockNrfSvc:
+            mock_repo_inst = MagicMock()
+            MockNrfRepo.return_value = mock_repo_inst
+            mock_svc_inst = MagicMock()
+            mock_svc_inst.create.return_value = mock_nrf_record
+            MockNrfSvc.return_value = mock_svc_inst
+
+            svc = ApprovalRequestService(session)
+            svc._req_repo = MagicMock()
+            svc._req_repo.get_by_id.return_value = request
+            svc._proc_repo = MagicMock()
+            svc._proc_repo.get_by_id.return_value = process
+
+            svc.approve(
+                request_id=request.id,
+                approver_user_id=approver_2.id,
+            )
+
+            mock_svc_inst.create.assert_called_once()
+            create_kwargs = mock_svc_inst.create.call_args.kwargs
+            assert create_kwargs["name"] == "Dr. Example"
+            assert create_kwargs["designation"] == "Professor"
+            assert create_kwargs["organization"] == "Test University"
+            assert create_kwargs["expertise"] == "Physics"
+
+            assert mock_nrf_record.is_admin_approved is True
+            assert mock_nrf_record.approved_by_user_id == approver_2.id
+            assert mock_nrf_record.approval_request_id == request.id
+            mock_repo_inst.save.assert_called_once_with(mock_nrf_record)
+
+    @patch("durgam.services.approval_request.write_audit_row")
+    @patch("durgam.services.approval_request.resolve_stage_approvers")
+    def test_approve_nrf_payload_missing_required_fields_raises(
+        self, mock_resolve, mock_audit
+    ):
+        """NRF_APPROVAL with missing nrf_data raises ApprovalRequestError."""
+        approver = _make_user()
+        mock_resolve.return_value = [approver]
+
+        process = _make_process(channel_role_codes=["REGISTRAR"])
+        process.code = "NRF_APPROVAL"
+
+        request = _make_request(
+            state="in_review",
+            current_stage=1,
+            process_id=process.id,
+        )
+        request.payload_json = {"description": "Missing nrf_data"}
+
+        session = MagicMock()
+        svc = ApprovalRequestService(session)
+        svc._req_repo = MagicMock()
+        svc._req_repo.get_by_id.return_value = request
+        svc._proc_repo = MagicMock()
+        svc._proc_repo.get_by_id.return_value = process
+
+        with pytest.raises(ApprovalRequestError, match="nrf_data"):
+            svc.approve(
+                request_id=request.id,
+                approver_user_id=approver.id,
+            )
+
+    @patch("durgam.services.approval_request.write_audit_row")
+    @patch("durgam.services.approval_request.resolve_stage_approvers")
+    def test_approve_non_nrf_process_skips_callback(
+        self, mock_resolve, mock_audit
+    ):
+        """Non-NRF process terminal approval does not create NRF records."""
+        approver = _make_user()
+        mock_resolve.return_value = [approver]
+
+        requestor = _make_user()
+        process = _make_process(channel_role_codes=["HOD"])
+        process.code = "CPC_FUND_RELEASE"
+
+        request = _make_request(
+            state="in_review",
+            current_stage=1,
+            process_id=process.id,
+            requestor_user_id=requestor.id,
+        )
+
+        session = MagicMock()
+        session.get.return_value = requestor
+
+        def exec_side(stmt):
+            result = MagicMock()
+            result.first.return_value = None
+            result.all.return_value = []
+            return result
+
+        session.exec.side_effect = exec_side
+
+        svc = ApprovalRequestService(session)
+        svc._req_repo = MagicMock()
+        svc._req_repo.get_by_id.return_value = request
+        svc._proc_repo = MagicMock()
+        svc._proc_repo.get_by_id.return_value = process
+
+        with patch(
+            "durgam.repositories.non_regular_faculty.NonRegularFacultyRepository"
+        ) as MockNrfRepo:
+            svc.approve(
+                request_id=request.id,
+                approver_user_id=approver.id,
+            )
+            MockNrfRepo.assert_not_called()
+
+        svc._req_repo.update_state.assert_called_once()
+        assert svc._req_repo.update_state.call_args[0][1] == "approved"
+
+    @patch("durgam.services.approval_request.write_audit_row")
+    @patch("durgam.services.approval_request.resolve_stage_approvers")
+    def test_approve_nrf_rollback_on_callback_failure(
+        self, mock_resolve, mock_audit
+    ):
+        """If NRF creation fails, the approve state transition is not committed."""
+        approver = _make_user()
+        mock_resolve.return_value = [approver]
+
+        process = _make_process(channel_role_codes=["REGISTRAR"])
+        process.code = "NRF_APPROVAL"
+
+        nrf_payload = {
+            "nrf_data": {
+                "department_id": str(uuid4()),
+                "name": "",
+                "designation": "Prof",
+                "organization": "Org",
+                "expertise": "Area",
+                "available_from": "2026-07-01",
+                "available_to": "2026-12-31",
+            },
+        }
+
+        request = _make_request(
+            state="in_review",
+            current_stage=1,
+            process_id=process.id,
+        )
+        request.payload_json = nrf_payload
+
+        session = MagicMock()
+        svc = ApprovalRequestService(session)
+        svc._req_repo = MagicMock()
+        svc._req_repo.get_by_id.return_value = request
+        svc._proc_repo = MagicMock()
+        svc._proc_repo.get_by_id.return_value = process
+
+        from durgam.services.non_regular_faculty import NonRegularFacultyError
+
+        with patch(
+            "durgam.repositories.non_regular_faculty.NonRegularFacultyRepository"
+        ), patch(
+            "durgam.services.non_regular_faculty.NonRegularFacultyService"
+        ) as MockNrfSvc:
+            mock_svc_inst = MagicMock()
+            mock_svc_inst.create.side_effect = NonRegularFacultyError(
+                "Name is required."
+            )
+            MockNrfSvc.return_value = mock_svc_inst
+
+            with pytest.raises(NonRegularFacultyError, match="Name is required"):
+                svc.approve(
+                    request_id=request.id,
+                    approver_user_id=approver.id,
+                )
+
+        mock_audit.assert_not_called()

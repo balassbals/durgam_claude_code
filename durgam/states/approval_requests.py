@@ -189,12 +189,25 @@ class SubmitRequestState(BaseState):
     submitting: bool = False
     error: str = ""
 
+    # NRF-specific fields (conditionally shown when process is NRF_APPROVAL)
+    nrf_name: str = ""
+    nrf_designation: str = ""
+    nrf_organization: str = ""
+    nrf_expertise: str = ""
+    nrf_available_from: str = ""
+    nrf_available_to: str = ""
+    nrf_type: str = "visiting"
+
     @rx.var
     def selected_process(self) -> dict[str, Any]:
         for p in self.process_options:
             if p["id"] == self.selected_process_id:
                 return p
         return {}
+
+    @rx.var
+    def selected_process_code(self) -> str:
+        return str(self.selected_process.get("code", ""))
 
     @rx.var
     def requires_upward(self) -> bool:
@@ -212,6 +225,16 @@ class SubmitRequestState(BaseState):
             return True
         if self.max_upward > 0 and len(self.uploaded_file_ids) > self.max_upward:
             return True
+        if self.selected_process_code == "NRF_APPROVAL":
+            if not all([
+                self.nrf_name.strip(),
+                self.nrf_designation.strip(),
+                self.nrf_organization.strip(),
+                self.nrf_expertise.strip(),
+                self.nrf_available_from,
+                self.nrf_available_to,
+            ]):
+                return True
         return self.submitting
 
     async def load_submit(self) -> None:
@@ -225,6 +248,13 @@ class SubmitRequestState(BaseState):
         self.uploaded_file_ids = []
         self.error = ""
         self.submitting = False
+        self.nrf_name = ""
+        self.nrf_designation = ""
+        self.nrf_organization = ""
+        self.nrf_expertise = ""
+        self.nrf_available_from = ""
+        self.nrf_available_to = ""
+        self.nrf_type = "visiting"
 
         from durgam.repositories.approval_process import ApprovalProcessRepository
         from durgam.repositories.user_role import UserRoleRepository
@@ -258,6 +288,13 @@ class SubmitRequestState(BaseState):
         self.selected_process_id = value
         self.uploaded_file_ids = []
         self.error = ""
+        self.nrf_name = ""
+        self.nrf_designation = ""
+        self.nrf_organization = ""
+        self.nrf_expertise = ""
+        self.nrf_available_from = ""
+        self.nrf_available_to = ""
+        self.nrf_type = "visiting"
 
     def set_title(self, value: str) -> None:
         self.title = value
@@ -322,11 +359,33 @@ class SubmitRequestState(BaseState):
         try:
             with open_session() as session:
                 svc = ApprovalRequestService(session)
+                payload: dict[str, Any] | None = None
+                if self.selected_process_code == "NRF_APPROVAL":
+                    dept_id = self._resolve_user_dept_scope(session)
+                    if not dept_id:
+                        self.error = "Cannot determine your department for NRF submission."
+                        self.submitting = False
+                        return
+                    payload = {
+                        "description": self.description.strip(),
+                        "nrf_data": {
+                            "department_id": str(dept_id),
+                            "name": self.nrf_name.strip(),
+                            "designation": self.nrf_designation.strip(),
+                            "organization": self.nrf_organization.strip(),
+                            "expertise": self.nrf_expertise.strip(),
+                            "available_from": self.nrf_available_from,
+                            "available_to": self.nrf_available_to,
+                            "non_regular_type": self.nrf_type,
+                        },
+                    }
+                elif self.description.strip():
+                    payload = {"description": self.description.strip()}
                 request = svc.submit(
                     process_id=UUID(self.selected_process_id),
                     requestor_user_id=UUID(self.current_user_id),
                     title=self.title.strip(),
-                    payload={"description": self.description.strip()} if self.description.strip() else None,
+                    payload=payload,
                     upward_attachment_file_ids=[UUID(fid) for fid in self.uploaded_file_ids] if self.uploaded_file_ids else None,
                 )
                 session.commit()

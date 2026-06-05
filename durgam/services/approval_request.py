@@ -6,7 +6,7 @@ session transaction. The caller owns the session and calls session.commit().
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 from uuid import UUID
 
@@ -210,6 +210,7 @@ class ApprovalRequestService:
 
         if is_terminal:
             self._req_repo.update_state(request, "approved", decided_at=now)
+            self._run_post_approval(request, process, approver_user_id)
 
             requestor = self._session.get(User, request.requestor_user_id)
             recipients = [requestor] if requestor else []
@@ -624,6 +625,68 @@ class ApprovalRequestService:
             )
         ).first()
         return ur is not None
+
+    def _run_post_approval(
+        self,
+        request: ApprovalRequest,
+        process: ApprovalProcess,
+        approver_user_id: UUID,
+    ) -> None:
+        if process.code == "NRF_APPROVAL":
+            self._create_nrf_from_approval(request, approver_user_id)
+
+    _NRF_REQUIRED_KEYS = frozenset({
+        "department_id", "name", "designation", "organization",
+        "expertise", "available_from", "available_to",
+    })
+
+    def _create_nrf_from_approval(
+        self,
+        request: ApprovalRequest,
+        approver_user_id: UUID,
+    ) -> None:
+        payload = request.payload_json or {}
+        nrf_data = payload.get("nrf_data")
+        if not nrf_data or not isinstance(nrf_data, dict):
+            raise ApprovalRequestError(
+                "NRF_APPROVAL payload missing required 'nrf_data' field."
+            )
+
+        missing = self._NRF_REQUIRED_KEYS - set(nrf_data.keys())
+        if missing:
+            raise ApprovalRequestError(
+                f"NRF payload missing required fields: {', '.join(sorted(missing))}"
+            )
+
+        from durgam.repositories.non_regular_faculty import NonRegularFacultyRepository
+        from durgam.services.non_regular_faculty import NonRegularFacultyService
+
+        repo = NonRegularFacultyRepository(self._session)
+        svc = NonRegularFacultyService(repo=repo)
+
+        nrf = svc.create(
+            department_id=UUID(nrf_data["department_id"]),
+            name=nrf_data["name"],
+            designation=nrf_data["designation"],
+            organization=nrf_data["organization"],
+            expertise=nrf_data["expertise"],
+            available_from=date.fromisoformat(nrf_data["available_from"]),
+            available_to=date.fromisoformat(nrf_data["available_to"]),
+            actor_id=approver_user_id,
+            non_regular_type=nrf_data.get("non_regular_type", "visiting"),
+        )
+        nrf.is_admin_approved = True
+        nrf.approved_at = datetime.now(UTC)
+        nrf.approved_by_user_id = approver_user_id
+        nrf.approval_request_id = request.id
+        repo.save(nrf)
+
+        log.info(
+            "nrf_created_from_approval",
+            nrf_id=str(nrf.id),
+            request_id=str(request.id),
+            approver=str(approver_user_id),
+        )
 
     def _enqueue_notifications(
         self,
