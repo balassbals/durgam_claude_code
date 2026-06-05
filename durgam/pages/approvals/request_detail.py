@@ -88,13 +88,13 @@ def _attachment_item(att: rx.Var) -> rx.Component:
         rx.icon("file", size=14, color="var(--color-muted)"),
         rx.link(
             att["name"],
-            href=rx.Var.create(DOWNLOAD_PREFIX) + att["id"],
+            href=rx.Var.create(DOWNLOAD_PREFIX) + att["id"].to(str),
             font_size="0.85rem",
             color="var(--color-primary)",
             text_decoration="underline",
         ),
         rx.text(
-            rx.Var.create("(") + att["size_kb"] + " KB)",
+            rx.Var.create("(") + att["size_kb"].to(str) + " KB)",
             font_size="0.8rem",
             color="var(--color-muted)",
         ),
