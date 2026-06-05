@@ -13,5 +13,6 @@ register(NavEntry(
     href="/approvals/inbox",
     icon="inbox",
     group="Approvals",
-    permission_action=None,
+    permission_action="approve",
+    permission_resource="approval_request",
 ))

@@ -324,6 +324,8 @@ def seed(session: Session) -> dict[str, int]:
         {"resource": "approval_process",             "action": "read",    "scope": "*"},
         {"resource": "approval_process",             "action": "write",   "scope": "*"},
         {"resource": "approval_process",             "action": "delete",  "scope": "*"},
+        # Approval request — approver nav visibility (M7)
+        {"resource": "approval_request",             "action": "approve", "scope": "*"},
         # Designation vocabulary (Finance Officer + SysAdmin)
         {"resource": "designation",                  "action": "read",    "scope": "*"},
         {"resource": "designation",                  "action": "write",   "scope": "*"},
@@ -417,6 +419,8 @@ def seed(session: Session) -> dict[str, int]:
         ("program_import",             "write",     "*"),
         # M5b — non-regular faculty approval (Registrar family is also institutional approver)
         ("non_regular_faculty",        "approve",   "*"),
+        # M7 — approval request approver (channel role in CPC_FUND_RELEASE)
+        ("approval_request",           "approve",   "*"),
     ]
 
     _HOD_SPECIFIC = [
@@ -522,6 +526,8 @@ def seed(session: Session) -> dict[str, int]:
         ("designation",                 "read",   "*"),
         ("designation",                 "write",  "*"),
         ("designation",                 "delete", "*"),
+        # M7 — approval request approver (channel role in CPC_FUND_RELEASE)
+        ("approval_request",            "approve", "*"),
     ]
 
     role_perm_map: dict[str, list[tuple[str, str, str]]] = {
@@ -566,11 +572,17 @@ def seed(session: Session) -> dict[str, int]:
             # M5b-R3 V2 — HoD Office can bulk-import courses
             ("course_import",              "write",     "*"),
         ],
-        # M5b — approver/channel roles; no config-write permissions yet (runtime → M7)
-        "VC":                   _PUBLIC_READ,
-        "VC_OFFICE":            _PUBLIC_READ,
+        # M5b/M7 — approver/channel roles
+        "VC":                   _PUBLIC_READ + [
+            ("approval_request",           "approve",   "*"),
+        ],
+        "VC_OFFICE":            _PUBLIC_READ + [
+            ("approval_request",           "approve",   "*"),
+        ],
         "FINANCE_OFFICER":      _PUBLIC_READ + _FINANCE_SPECIFIC,
-        "CPC_CHAIRPERSON":      _PUBLIC_READ,
+        "CPC_CHAIRPERSON":      _PUBLIC_READ + [
+            ("approval_request",           "approve",   "*"),
+        ],
         "FACULTY":              _PUBLIC_READ,
         "LIBRARIAN":            _PUBLIC_READ,
         "PLACEMENT_OFFICER":    _PUBLIC_READ,

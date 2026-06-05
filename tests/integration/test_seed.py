@@ -27,8 +27,8 @@ class TestSeed:
         # M5b R2: 27 roles (26 prior − 4 DEAN variants + 5 new: FACULTY, LIBRARIAN,
         # PLACEMENT_OFFICER, CESRC_COORDINATOR, CENTRE_COORDINATOR).
         assert _count(db_session, Role) == 27, "Expected 27 seeded roles at M5b"
-        # M5b R3: 100 triples (98 prior + program_import:write:* + course_import:write:*).
-        assert _count(db_session, Permission) == 100, "Expected 100 seeded permission triples at M5b"
+        # M7: 101 triples (100 prior + approval_request:approve:*).
+        assert _count(db_session, Permission) == 101, "Expected 101 seeded permission triples at M7"
         assert _count(db_session, User) >= 25, "Expected at least 25 seeded users"
         assert _count(db_session, RolePermission) >= 100, "Expected at least 100 role→permission rows"
         ay = db_session.exec(select(AcademicYear).where(AcademicYear.code == "2025-26")).first()
