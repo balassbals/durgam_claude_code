@@ -5,6 +5,8 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
+import pytest
+
 from durgam.nav.registry import NavEntry, get_all, get_visible_entries, register
 
 
@@ -99,6 +101,34 @@ class TestApprovalsNavGate:
         with patch("durgam.nav.registry.can", return_value=False):
             visible = get_visible_entries(user_id, session)
         assert not any(r["label"] == "Approvals" for r in visible)
+
+    @pytest.mark.parametrize(
+        "role_label, can_returns, expected_visible",
+        [
+            ("REGISTRAR", True, True),
+            ("DEPUTY_REGISTRAR", True, True),
+            ("REGISTRAR_OFFICE", False, False),
+            ("VC_OFFICE", False, False),
+            ("STUDENT", False, False),
+        ],
+        ids=[
+            "registrar-sees-link",
+            "deputy_registrar-sees-link",
+            "registrar_office-hidden",
+            "vc_office-hidden",
+            "student-hidden",
+        ],
+    )
+    def test_approvals_nav_visibility_by_role(
+        self, role_label, can_returns, expected_visible
+    ):
+        """Approvals link visible only to roles holding approval_request:approve."""
+        user_id = uuid4()
+        session = MagicMock()
+        with patch("durgam.nav.registry.can", return_value=can_returns):
+            visible = get_visible_entries(user_id, session)
+        result = any(r["label"] == "Approvals" for r in visible)
+        assert result is expected_visible, f"{role_label} visibility mismatch"
 
     def test_my_requests_nav_visible_to_all(self):
         """My Requests nav entry uses permission_action=None — visible to all."""

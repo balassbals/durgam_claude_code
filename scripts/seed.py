@@ -419,8 +419,6 @@ def seed(session: Session) -> dict[str, int]:
         ("program_import",             "write",     "*"),
         # M5b — non-regular faculty approval (Registrar family is also institutional approver)
         ("non_regular_faculty",        "approve",   "*"),
-        # M7 — approval request approver (channel role in CPC_FUND_RELEASE)
-        ("approval_request",           "approve",   "*"),
     ]
 
     _HOD_SPECIFIC = [
@@ -531,8 +529,12 @@ def seed(session: Session) -> dict[str, int]:
     ]
 
     role_perm_map: dict[str, list[tuple[str, str, str]]] = {
-        "REGISTRAR":            _PUBLIC_READ + _REGISTRAR_SPECIFIC,
-        "DEPUTY_REGISTRAR":     _PUBLIC_READ + _REGISTRAR_SPECIFIC,
+        "REGISTRAR":            _PUBLIC_READ + _REGISTRAR_SPECIFIC + [
+            ("approval_request",           "approve",   "*"),
+        ],
+        "DEPUTY_REGISTRAR":     _PUBLIC_READ + _REGISTRAR_SPECIFIC + [
+            ("approval_request",           "approve",   "*"),
+        ],
         "REGISTRAR_OFFICE":     _PUBLIC_READ + _REGISTRAR_SPECIFIC,
         "DIRECTOR":             _PUBLIC_READ + _DIRECTOR_SPECIFIC,
         "DEPUTY_DIRECTOR":      _PUBLIC_READ + _DIRECTOR_SPECIFIC,
@@ -576,9 +578,7 @@ def seed(session: Session) -> dict[str, int]:
         "VC":                   _PUBLIC_READ + [
             ("approval_request",           "approve",   "*"),
         ],
-        "VC_OFFICE":            _PUBLIC_READ + [
-            ("approval_request",           "approve",   "*"),
-        ],
+        "VC_OFFICE":            _PUBLIC_READ,
         "FINANCE_OFFICER":      _PUBLIC_READ + _FINANCE_SPECIFIC,
         "CPC_CHAIRPERSON":      _PUBLIC_READ + [
             ("approval_request",           "approve",   "*"),
