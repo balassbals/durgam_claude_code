@@ -262,6 +262,35 @@ class TestViewRequest:
         mock_audit.assert_not_called()
 
 
+class TestInboxReadOnly:
+    """Inbox listing must be pure-read: no view_request, no state transition."""
+
+    @patch("durgam.services.approval_request.resolve_stage_approvers")
+    def test_inbox_load_does_not_transition_state(self, mock_resolve):
+        approver = _make_user()
+        mock_resolve.return_value = [approver]
+
+        request = _make_request(state="submitted")
+        process = _make_process()
+
+        session = MagicMock()
+        req_repo = MagicMock()
+        req_repo.list_by_states.return_value = [request]
+
+        proc_repo = MagicMock()
+        proc_repo.get_by_id.return_value = process
+
+        from durgam.services.approval_routing import resolve_stage_approvers
+
+        pending = req_repo.list_by_states(["submitted", "in_review"])
+        for r in pending:
+            resolve_stage_approvers(request=r, process=process, session=session)
+
+        req_repo.update_state.assert_not_called()
+        session.commit.assert_not_called()
+        assert request.state == "submitted"
+
+
 # ── Approve tests ──────────────────────────────────────────────────────
 
 
