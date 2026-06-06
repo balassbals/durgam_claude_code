@@ -55,6 +55,12 @@ class MyRequestsState(BaseState):
     state_filter: str = "all"
     loading: bool = True
 
+    @rx.var
+    def empty_message(self) -> str:
+        if self.state_filter == "all":
+            return "You have not submitted any approval requests yet."
+        return f"You have no {self.state_filter.replace('_', ' ')} requests."
+
     async def load_my_requests(self) -> None:
         redirect = _resolve_or_redirect(self)
         if redirect is not None:
@@ -527,7 +533,7 @@ class RequestDetailState(BaseState):
             # (current or prior stage), or hold approval_request:approve:*.
             if not self.viewer_is_requestor:
                 from durgam.services.approval_routing import resolve_stage_approvers
-                from durgam.services.auth import can
+                from durgam.auth.permissions import can
 
                 is_approver = False
 

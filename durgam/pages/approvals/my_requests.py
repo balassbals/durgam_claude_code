@@ -109,7 +109,7 @@ def my_requests_page() -> rx.Component:
                     card_primary_key="title",
                     is_mobile=False,
                     actions=_actions,
-                    empty_message="You have not submitted any approval requests yet.",
+                    empty_message=MyRequestsState.empty_message,
                 ),
             ),
             padding="2rem",
