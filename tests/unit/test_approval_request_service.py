@@ -920,7 +920,7 @@ class TestPostApprovalCallback:
             )
             MockNrfSvc.return_value = mock_svc_inst
 
-            with pytest.raises(NonRegularFacultyError, match="Name is required"):
+            with pytest.raises(ApprovalRequestError, match="Cannot create NRF record"):
                 svc.approve(
                     request_id=request.id,
                     approver_user_id=approver.id,

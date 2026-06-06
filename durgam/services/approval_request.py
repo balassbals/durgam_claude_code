@@ -659,22 +659,30 @@ class ApprovalRequestService:
             )
 
         from durgam.repositories.non_regular_faculty import NonRegularFacultyRepository
-        from durgam.services.non_regular_faculty import NonRegularFacultyService
+        from durgam.services.non_regular_faculty import (
+            NonRegularFacultyError,
+            NonRegularFacultyService,
+        )
 
         repo = NonRegularFacultyRepository(self._session)
         svc = NonRegularFacultyService(repo=repo)
 
-        nrf = svc.create(
-            department_id=UUID(nrf_data["department_id"]),
-            name=nrf_data["name"],
-            designation=nrf_data["designation"],
-            organization=nrf_data["organization"],
-            expertise=nrf_data["expertise"],
-            available_from=date.fromisoformat(nrf_data["available_from"]),
-            available_to=date.fromisoformat(nrf_data["available_to"]),
-            actor_id=approver_user_id,
-            non_regular_type=nrf_data.get("non_regular_type", "visiting"),
-        )
+        try:
+            nrf = svc.create(
+                department_id=UUID(nrf_data["department_id"]),
+                name=nrf_data["name"],
+                designation=nrf_data["designation"],
+                organization=nrf_data["organization"],
+                expertise=nrf_data["expertise"],
+                available_from=date.fromisoformat(nrf_data["available_from"]),
+                available_to=date.fromisoformat(nrf_data["available_to"]),
+                actor_id=approver_user_id,
+                non_regular_type=nrf_data.get("non_regular_type", "visiting"),
+            )
+        except NonRegularFacultyError as e:
+            raise ApprovalRequestError(
+                f"Cannot create NRF record: {e}"
+            ) from e
         nrf.is_admin_approved = True
         nrf.approved_at = datetime.now(UTC)
         nrf.approved_by_user_id = approver_user_id

@@ -423,8 +423,13 @@ class SubmitRequestState(BaseState):
         except ApprovalRequestError as e:
             self.error = str(e)
             self.submitting = False
-        except Exception:
-            log.exception("submit_request_failed")
+        except Exception as e:
+            log.error(
+                "submit_request_failed",
+                exc_info=True,
+                error_type=type(e).__name__,
+                error_message=str(e),
+            )
             self.error = "An unexpected error occurred. Please try again."
             self.submitting = False
 
@@ -837,8 +842,13 @@ class RequestDetailState(BaseState):
             self.decision_error = str(e)
             self.decision_submitting = False
             return
-        except Exception:
-            log.exception("submit_approve_failed")
+        except Exception as e:
+            log.error(
+                "submit_approve_failed",
+                exc_info=True,
+                error_type=type(e).__name__,
+                error_message=str(e),
+            )
             self.decision_error = "An unexpected error occurred."
             self.decision_submitting = False
             return
@@ -882,8 +892,13 @@ class RequestDetailState(BaseState):
             self.decision_error = str(e)
             self.decision_submitting = False
             return
-        except Exception:
-            log.exception("submit_reject_failed")
+        except Exception as e:
+            log.error(
+                "submit_reject_failed",
+                exc_info=True,
+                error_type=type(e).__name__,
+                error_message=str(e),
+            )
             self.decision_error = "An unexpected error occurred."
             self.decision_submitting = False
             return
