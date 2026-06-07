@@ -83,16 +83,41 @@ class ApprovalRequestService:
             "approval_upward",
         )
 
-        approvers = self._resolve_approvers(request, process)
+        channel = process.channel_role_codes or []
+        auto_approved = False
+        while self._should_skip_stage(request, process):
+            old_stage = request.current_stage
+            self._req_repo.advance_stage(request)
+            write_audit_row(
+                actor_user_id=requestor_user_id,
+                actor_role_code=None,
+                action="auto_skip_stage",
+                resource="approval_request",
+                resource_id=str(request.id),
+                request_id=None,
+                ip=None,
+                user_agent=None,
+                before={"stage": old_stage},
+                after={"stage": request.current_stage, "reason": "requestor_is_sole_approver"},
+                session=self._session,
+            )
+            if request.current_stage > len(channel):
+                self._req_repo.update_state(request, "approved", decided_at=now)
+                self._run_post_approval(request, process, requestor_user_id)
+                auto_approved = True
+                break
 
-        self._enqueue_notifications(
-            recipients=approvers,
-            subject=f"New approval request: {request.title}",
-            body=f"A new request '{request.title}' has been submitted and requires your review.",
-            request=request,
-            process=process,
-            action="submit",
-        )
+        approvers = self._resolve_approvers(request, process) if not auto_approved else []
+
+        if not auto_approved:
+            self._enqueue_notifications(
+                recipients=approvers,
+                subject=f"New approval request: {request.title}",
+                body=f"A new request '{request.title}' has been submitted and requires your review.",
+                request=request,
+                process=process,
+                action="submit",
+            )
 
         write_audit_row(
             actor_user_id=requestor_user_id,
@@ -104,7 +129,7 @@ class ApprovalRequestService:
             ip=None,
             user_agent=None,
             before=None,
-            after={"state": "submitted", "stage": 1, "title": request.title},
+            after={"state": request.state, "stage": request.current_stage, "title": request.title},
             session=self._session,
         )
 
@@ -113,6 +138,8 @@ class ApprovalRequestService:
             request_id=str(request.id),
             process_id=str(process_id),
             requestor=str(requestor_user_id),
+            final_stage=request.current_stage,
+            auto_approved=auto_approved,
         )
         return request
 
@@ -243,33 +270,81 @@ class ApprovalRequestService:
             old_stage = request.current_stage
             self._req_repo.advance_stage(request)
 
-            new_approvers = self._resolve_approvers(request, process)
+            became_terminal = False
+            while self._should_skip_stage(request, process):
+                skip_from = request.current_stage
+                self._req_repo.advance_stage(request)
+                write_audit_row(
+                    actor_user_id=approver_user_id,
+                    actor_role_code=role_code,
+                    action="auto_skip_stage",
+                    resource="approval_request",
+                    resource_id=str(request.id),
+                    request_id=None,
+                    ip=None,
+                    user_agent=None,
+                    before={"stage": skip_from},
+                    after={"stage": request.current_stage, "reason": "requestor_is_sole_approver"},
+                    session=self._session,
+                )
+                if request.current_stage > len(channel):
+                    self._req_repo.update_state(request, "approved", decided_at=now)
+                    self._run_post_approval(request, process, approver_user_id)
+                    became_terminal = True
+                    break
 
-            self._enqueue_notifications(
-                recipients=new_approvers,
-                subject=f"Request forwarded for review: {request.title}",
-                body=(
-                    f"Request '{request.title}' has been approved at stage "
-                    f"{old_stage} and forwarded to you for review."
-                ),
-                request=request,
-                process=process,
-                action="forward",
-            )
-
-            write_audit_row(
-                actor_user_id=approver_user_id,
-                actor_role_code=role_code,
-                action="forward",
-                resource="approval_request",
-                resource_id=str(request.id),
-                request_id=None,
-                ip=None,
-                user_agent=None,
-                before={"state": "in_review", "stage": old_stage},
-                after={"state": "in_review", "stage": request.current_stage},
-                session=self._session,
-            )
+            if became_terminal:
+                requestor = self._session.get(User, request.requestor_user_id)
+                recipients = [requestor] if requestor else []
+                cc_users = self._get_cc_users(process)
+                recipients.extend(cc_users)
+                self._enqueue_notifications(
+                    recipients=recipients,
+                    subject=f"Request approved: {request.title}",
+                    body=f"Your request '{request.title}' has been approved.",
+                    request=request,
+                    process=process,
+                    action="approve",
+                )
+                write_audit_row(
+                    actor_user_id=approver_user_id,
+                    actor_role_code=role_code,
+                    action="approve",
+                    resource="approval_request",
+                    resource_id=str(request.id),
+                    request_id=None,
+                    ip=None,
+                    user_agent=None,
+                    before={"state": "in_review", "stage": old_stage},
+                    after={"state": "approved", "stage": request.current_stage},
+                    session=self._session,
+                )
+            else:
+                new_approvers = self._resolve_approvers(request, process)
+                self._enqueue_notifications(
+                    recipients=new_approvers,
+                    subject=f"Request forwarded for review: {request.title}",
+                    body=(
+                        f"Request '{request.title}' has been approved at stage "
+                        f"{old_stage} and forwarded to you for review."
+                    ),
+                    request=request,
+                    process=process,
+                    action="forward",
+                )
+                write_audit_row(
+                    actor_user_id=approver_user_id,
+                    actor_role_code=role_code,
+                    action="forward",
+                    resource="approval_request",
+                    resource_id=str(request.id),
+                    request_id=None,
+                    ip=None,
+                    user_agent=None,
+                    before={"state": "in_review", "stage": old_stage},
+                    after={"state": "in_review", "stage": request.current_stage},
+                    session=self._session,
+                )
 
         log.info(
             "approval_request_approved",
@@ -577,6 +652,20 @@ class ApprovalRequestService:
         except ApprovalRoutingError as e:
             log.warning("approver_resolution_failed", error=str(e))
             return []
+
+    def _should_skip_stage(
+        self,
+        request: ApprovalRequest,
+        process: ApprovalProcess,
+    ) -> bool:
+        """True if the requestor is the sole approver at the current stage."""
+        channel = process.channel_role_codes or []
+        if request.current_stage < 1 or request.current_stage > len(channel):
+            return False
+        approvers = self._resolve_approvers(request, process)
+        if len(approvers) == 1 and approvers[0].id == request.requestor_user_id:
+            return True
+        return False
 
     def _get_cc_users(self, process: ApprovalProcess) -> list[User]:
         if not process.informational_cc_role_codes:

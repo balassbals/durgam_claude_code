@@ -54,12 +54,13 @@ class TestSeed:
             counts2 = seed(session)
             session.commit()
 
-        # Exclude roles (on_conflict_do_update counts all processed rows) and
-        # users (password re-hash on every run) and role_emails (select-guard).
+        # Exclude roles (on_conflict_do_update counts all processed rows),
+        # users (password re-hash on every run), role_emails (select-guard),
+        # and approval_processes (on_conflict_do_update for channel changes).
         non_upsert = {
             k: v
             for k, v in counts2.items()
-            if k not in ("role_emails", "users", "roles")
+            if k not in ("role_emails", "users", "roles", "approval_processes")
         }
         assert all(v == 0 for v in non_upsert.values()), (
             f"Non-zero on 2nd run: {counts2}"

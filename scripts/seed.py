@@ -2079,14 +2079,17 @@ def seed(session: Session) -> dict[str, int]:
             code="NRF_APPROVAL",
             title="Non-Regular Faculty Approval",
             requestor_role_codes=["HOD", "AHOD"],
-            channel_role_codes=["DEAN", "REGISTRAR"],
+            channel_role_codes=["HOD", "DEAN", "REGISTRAR"],
             requires_upward_attachments=True,
             max_upward_attachments=5,
             requires_downward_attachments=False,
             max_downward_attachments=3,
             is_finance=False,
         )
-        .on_conflict_do_nothing(constraint="uq_approval_processes_code"),
+        .on_conflict_do_update(
+            constraint="uq_approval_processes_code",
+            set_={"channel_role_codes": ["HOD", "DEAN", "REGISTRAR"]},
+        ),
     )
     counts["approval_processes"] += nrf_inserted
 

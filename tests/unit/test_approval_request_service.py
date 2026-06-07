@@ -303,8 +303,9 @@ class TestApprove:
         approver = _make_user()
         next_approver = _make_user()
         mock_resolve.side_effect = [
-            [approver],
-            [next_approver],
+            [approver],        # approve() auth check
+            [next_approver],   # _should_skip_stage check
+            [next_approver],   # forward notification resolution
         ]
 
         request = _make_request(state="in_review", current_stage=1)
@@ -927,3 +928,219 @@ class TestPostApprovalCallback:
                 )
 
         mock_audit.assert_not_called()
+
+
+# ── Skip-self-at-stage tests ────────────────────────────────────────
+
+
+class TestSkipSelfAtStage:
+    @patch("durgam.services.approval_request.write_audit_row")
+    @patch("durgam.services.approval_request.resolve_stage_approvers")
+    def test_submit_skips_requestor_sole_stage(self, mock_resolve, mock_audit):
+        """3-stage channel [HOD, DEAN, REGISTRAR]; requestor is the only HOD
+        at their scope → stage 1 auto-skipped, request starts at stage 2."""
+        requestor_id = uuid4()
+        requestor_user = _make_user(requestor_id)
+        dean_approver = _make_user()
+
+        def resolve_side(**kwargs):
+            req = kwargs["request"]
+            if req.current_stage == 1:
+                return [requestor_user]
+            return [dean_approver]
+
+        mock_resolve.side_effect = resolve_side
+
+        process = _make_process(channel_role_codes=["HOD", "DEAN", "REGISTRAR"])
+
+        session = MagicMock()
+        svc = ApprovalRequestService(session)
+        svc._proc_repo = MagicMock()
+        svc._proc_repo.get_by_id.return_value = process
+        svc._req_repo = MagicMock()
+        svc._req_repo.save.side_effect = lambda r: r
+        svc._req_repo.advance_stage.side_effect = (
+            lambda r: setattr(r, "current_stage", r.current_stage + 1) or r
+        )
+
+        result = svc.submit(
+            process_id=process.id,
+            requestor_user_id=requestor_id,
+            title="Skip-self test",
+        )
+
+        assert result.current_stage == 2
+        svc._req_repo.advance_stage.assert_called_once()
+
+        audit_calls = mock_audit.call_args_list
+        actions = [c.kwargs["action"] for c in audit_calls]
+        assert "auto_skip_stage" in actions
+        skip_call = next(c for c in audit_calls if c.kwargs["action"] == "auto_skip_stage")
+        assert skip_call.kwargs["after"]["reason"] == "requestor_is_sole_approver"
+
+    @patch("durgam.services.approval_request.write_audit_row")
+    @patch("durgam.services.approval_request.resolve_stage_approvers")
+    def test_submit_does_not_skip_when_other_approvers(self, mock_resolve, mock_audit):
+        """Requestor is HOD but another HOD exists → stage 1 NOT skipped."""
+        requestor_id = uuid4()
+        requestor_user = _make_user(requestor_id)
+        other_hod = _make_user()
+
+        mock_resolve.return_value = [requestor_user, other_hod]
+
+        process = _make_process(channel_role_codes=["HOD", "DEAN", "REGISTRAR"])
+
+        session = MagicMock()
+        svc = ApprovalRequestService(session)
+        svc._proc_repo = MagicMock()
+        svc._proc_repo.get_by_id.return_value = process
+        svc._req_repo = MagicMock()
+        svc._req_repo.save.side_effect = lambda r: r
+
+        result = svc.submit(
+            process_id=process.id,
+            requestor_user_id=requestor_id,
+            title="No-skip test",
+        )
+
+        assert result.current_stage == 1
+        svc._req_repo.advance_stage.assert_not_called()
+
+    @patch("durgam.services.approval_request.write_audit_row")
+    @patch("durgam.services.approval_request.resolve_stage_approvers")
+    def test_approve_advance_skips_sole_requestor_stage(self, mock_resolve, mock_audit):
+        """After stage-1 approve, stage-2 role holder is requestor only → auto-skip to 3."""
+        requestor_id = uuid4()
+        requestor_user = _make_user(requestor_id)
+        stage1_approver = _make_user()
+        stage3_approver = _make_user()
+
+        call_count = {"n": 0}
+
+        def resolve_side(**kwargs):
+            call_count["n"] += 1
+            req = kwargs["request"]
+            if call_count["n"] == 1:
+                return [stage1_approver]
+            if req.current_stage == 2:
+                return [requestor_user]
+            return [stage3_approver]
+
+        mock_resolve.side_effect = resolve_side
+
+        process = _make_process(channel_role_codes=["HOD", "DEAN", "REGISTRAR"])
+
+        request = _make_request(
+            state="in_review",
+            current_stage=1,
+            process_id=process.id,
+            requestor_user_id=requestor_id,
+        )
+
+        session = MagicMock()
+        session.get.return_value = None
+        svc = ApprovalRequestService(session)
+        svc._req_repo = MagicMock()
+        svc._req_repo.get_by_id.return_value = request
+        svc._proc_repo = MagicMock()
+        svc._proc_repo.get_by_id.return_value = process
+        svc._req_repo.advance_stage.side_effect = (
+            lambda r: setattr(r, "current_stage", r.current_stage + 1) or r
+        )
+
+        svc.approve(
+            request_id=request.id,
+            approver_user_id=stage1_approver.id,
+            comment="Approved",
+        )
+
+        assert request.current_stage == 3
+        assert svc._req_repo.advance_stage.call_count == 2
+
+        audit_calls = mock_audit.call_args_list
+        actions = [c.kwargs["action"] for c in audit_calls]
+        assert "auto_skip_stage" in actions
+        assert "forward" in actions
+
+
+# ── Valid-date NRF regression test ───────────────────────────────────
+
+
+class TestNrfValidDateRegression:
+    @patch("durgam.services.approval_request.write_audit_row")
+    @patch("durgam.services.approval_request.resolve_stage_approvers")
+    def test_approve_nrf_with_valid_forward_dates_succeeds(
+        self, mock_resolve, mock_audit
+    ):
+        """Regression: valid forward dates (2026-08-01 → 2027-07-31) must not
+        trigger the 'available-to date must be on or after' error."""
+        approver = _make_user()
+        mock_resolve.return_value = [approver]
+
+        nrf_payload = {
+            "description": "Valid forward dates",
+            "nrf_data": {
+                "department_id": str(uuid4()),
+                "name": "Dr. Forward Dates",
+                "designation": "Professor",
+                "organization": "Test University",
+                "expertise": "Testing",
+                "available_from": "2026-08-01",
+                "available_to": "2027-07-31",
+                "non_regular_type": "visiting",
+            },
+        }
+
+        process = _make_process(channel_role_codes=["REGISTRAR"])
+        process.code = "NRF_APPROVAL"
+
+        request = _make_request(
+            state="in_review",
+            current_stage=1,
+            process_id=process.id,
+        )
+        request.payload_json = nrf_payload
+
+        session = MagicMock()
+        requestor = _make_user(request.requestor_user_id)
+        session.get.return_value = requestor
+
+        def exec_side(stmt):
+            result = MagicMock()
+            result.first.return_value = None
+            result.all.return_value = []
+            return result
+
+        session.exec.side_effect = exec_side
+
+        mock_nrf_record = MagicMock()
+        mock_nrf_record.id = uuid4()
+
+        with patch(
+            "durgam.repositories.non_regular_faculty.NonRegularFacultyRepository"
+        ) as MockNrfRepo, patch(
+            "durgam.services.non_regular_faculty.NonRegularFacultyService"
+        ) as MockNrfSvc:
+            mock_svc_inst = MagicMock()
+            mock_svc_inst.create.return_value = mock_nrf_record
+            MockNrfSvc.return_value = mock_svc_inst
+            MockNrfRepo.return_value = MagicMock()
+
+            svc = ApprovalRequestService(session)
+            svc._req_repo = MagicMock()
+            svc._req_repo.get_by_id.return_value = request
+            svc._proc_repo = MagicMock()
+            svc._proc_repo.get_by_id.return_value = process
+
+            result = svc.approve(
+                request_id=request.id,
+                approver_user_id=approver.id,
+            )
+
+            svc._req_repo.update_state.assert_called_once()
+            assert svc._req_repo.update_state.call_args[0][1] == "approved"
+
+            create_kwargs = mock_svc_inst.create.call_args.kwargs
+            from datetime import date
+            assert create_kwargs["available_from"] == date(2026, 8, 1)
+            assert create_kwargs["available_to"] == date(2027, 7, 31)

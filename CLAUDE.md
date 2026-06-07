@@ -1398,14 +1398,25 @@ dispatches by `process.code` on terminal approval. Single-consumer pattern for v
 post-approval side effects add a branch here. Deferred imports are used inside the handler
 to avoid cross-service import at module level.
 
-### Permission-gated nav for approver roles
+### Dynamic nav gating for approver roles (TD-024)
 
-The "Approvals" nav entry (inbox) is gated on `approval_request:approve:*`. This grant
-is given to 5 specific roles (REGISTRAR, DEPUTY_REGISTRAR, FINANCE_OFFICER, VC,
-CPC_CHAIRPERSON) plus DEAN (added for NRF_APPROVAL stage 1). SYSTEM_ADMIN inherits via
-wildcard. **Maintenance note**: when new approval processes introduce new channel roles,
-the seed must be updated to grant `approval_request:approve:*` to those roles — the
-grant set is not auto-derived from active processes.
+The "Approvals" nav entry uses `dynamic_check=is_channel_approver` on its `NavEntry`
+registration (`durgam/pages/approvals/__init__.py`). The entry is visible if EITHER:
+- The user holds the static `approval_request:approve:*` permission (5 roles + SYSTEM_ADMIN), OR
+- The user holds any role that appears in any active `ApprovalProcess.channel_role_codes`.
+
+The inbox page guard mirrors this logic: `ApproverInboxState._potential_approver_guard()`
+checks both paths before rendering. The `is_channel_approver()` function is defined once
+in `durgam/pages/approvals/__init__.py` and imported by both the nav registration and
+the state guard — single source of truth prevents drift.
+
+### Skip-self-at-stage routing for approval channels
+
+When the requestor is the sole holder of a channel role at a given stage, that stage
+is auto-skipped on submit and on approve-advance. An `auto_skip_stage` audit row is
+written for each skip. If ALL stages are skipped (requestor is sole holder of every
+channel role), the request is auto-approved. The skip logic lives in
+`ApprovalRequestService._should_skip_stage()`.
 
 ### Explicit manual setters for form-bound state vars
 
