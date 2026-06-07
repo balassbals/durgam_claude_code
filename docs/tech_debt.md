@@ -544,6 +544,67 @@ existing; not introduced by M7.
 
 ---
 
+### TD-029 — more_info_requested state for approval requests
+
+**Location:** `durgam/services/approval_request.py` (state machine),
+`durgam/states/approval_requests.py` (inbox/detail handlers)
+
+**What it is:** The approval state machine has four terminal states (approved, rejected,
+withdrawn, cancelled) and one active state (submitted/in_review). There is no
+`more_info_requested` state that allows an approver to pause the review and request
+additional information from the requestor before making a decision.
+
+**Fix:** Add `more_info_requested` as a reversible state. The approver sends a message
+(with optional attachments) back to the requestor. The requestor responds (with optional
+attachments), which returns the request to the approver's inbox. The detail page shows
+the conversation thread. Audit rows record each transition.
+
+**Trigger to re-open:** When stakeholders request this workflow, likely at M9+ when
+approval volumes increase and requestors routinely submit incomplete information.
+
+---
+
+### TD-030 — Approver decision history on detail page
+
+**Location:** `durgam/pages/approvals/request_detail.py`,
+`durgam/states/approval_requests.py`
+
+**What it is:** The detail page shows the current state and the current stage's approver,
+but does not display the full decision history (who approved at each prior stage, when,
+and with what comments). The `approval_steps` table records this data; it is not yet
+surfaced in the UI.
+
+**Fix:** Add a "Decision History" section to the detail page that renders each completed
+`approval_steps` row as a timeline entry: stage number, approver name, decision
+(approved/rejected), timestamp, and comments.
+
+**Trigger to re-open:** When multi-stage processes are in active use and requestors or
+later-stage approvers need to see prior decisions for context.
+
+---
+
+### TD-031 — In-app notification surface for CC users
+
+**Location:** `durgam/services/approval_request.py` (`_enqueue_notifications`),
+notifications table
+
+**What it is:** CC notification dispatch is working correctly — `_enqueue_notifications`
+creates both `in_app` and `email` channel notification rows for CC recipients at submit,
+approve, reject, and withdraw transitions. Verified via DB: `iqac_user` (IQAC_COORDINATOR)
+received 10 notification rows across transitions for process `p1`. However, there is no
+in-app notification inbox or bell icon to surface `in_app` notifications to users. The
+`in_app` rows accumulate in the `notifications` table but are never rendered.
+
+**Fix:** Build a notification inbox page or a notification bell dropdown in the nav shell
+that queries `notifications WHERE recipient_user_id = current_user AND channel = 'in_app'
+AND read_at IS NULL`. Mark notifications read on click-through.
+
+**Trigger to re-open:** When CC stakeholders need real-time awareness of approval
+transitions without relying on email. Likely at M9+ when notification infrastructure is
+formalized.
+
+---
+
 ## Resolved
 
 ### TD-002 — SAWarning: transaction already deassociated from connection (resolved in m0-cleanup)
