@@ -173,3 +173,79 @@ class TestPotentialApproverGuard:
         assert result is not None
         assert state.flash == "You do not have access to the approvals inbox."
         assert state.admin_authorized is False
+
+
+class TestIsChannelApprover:
+    """Unit tests for is_channel_approver — exact role-code matching."""
+
+    def _setup_mocks(self, user_role_codes, process_channels):
+        """Return (session, user_id) with mocked queries."""
+        session = MagicMock()
+        user_id = uuid4()
+
+        # Mock processes
+        processes = []
+        for channel in process_channels:
+            p = MagicMock()
+            p.channel_role_codes = channel
+            p.is_deleted = False
+            processes.append(p)
+
+        # Mock roles
+        roles = []
+        for code in user_role_codes:
+            r = MagicMock()
+            r.code = code
+            roles.append(r)
+
+        # session.exec().all() returns processes first, then roles
+        call_count = {"n": 0}
+        orig_exec = session.exec
+
+        def side_effect_exec(stmt):
+            result = MagicMock()
+            if call_count["n"] == 0:
+                result.all = MagicMock(return_value=processes)
+            else:
+                result.all = MagicMock(return_value=roles)
+            call_count["n"] += 1
+            return result
+
+        session.exec = side_effect_exec
+        return session, user_id
+
+    def test_dean_student_welfare_matches_channel(self):
+        """DEAN_STUDENT_WELFARE in user roles + in process channel → True."""
+        from durgam.pages.approvals import is_channel_approver
+
+        session, user_id = self._setup_mocks(
+            user_role_codes=["BASIC_USER", "DEAN_STUDENT_WELFARE"],
+            process_channels=[
+                ["HOD", "DEAN_STUDENT_WELFARE", "REGISTRAR"],
+            ],
+        )
+        assert is_channel_approver(user_id, session) is True
+
+    def test_dean_student_welfare_does_not_match_office_role(self):
+        """DEAN_STUDENT_WELFARE in user roles but channel has DEAN_STUDENT_WELFARE_OFFICE → False."""
+        from durgam.pages.approvals import is_channel_approver
+
+        session, user_id = self._setup_mocks(
+            user_role_codes=["BASIC_USER", "DEAN_STUDENT_WELFARE"],
+            process_channels=[
+                ["REGISTRAR_OFFICE", "DEAN_STUDENT_WELFARE_OFFICE"],
+            ],
+        )
+        assert is_channel_approver(user_id, session) is False
+
+    def test_no_channel_match_returns_false(self):
+        """User role not in any channel → False."""
+        from durgam.pages.approvals import is_channel_approver
+
+        session, user_id = self._setup_mocks(
+            user_role_codes=["BASIC_USER", "STUDENT"],
+            process_channels=[
+                ["HOD", "DEAN", "REGISTRAR"],
+            ],
+        )
+        assert is_channel_approver(user_id, session) is False

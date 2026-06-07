@@ -2093,6 +2093,27 @@ def seed(session: Session) -> dict[str, int]:
     )
     counts["approval_processes"] += nrf_inserted
 
+    # ── ApprovalProcess — DSW_CLEARANCE ─────────────────────────────────────
+    # Demo process so dean_sw (DEAN_STUDENT_WELFARE role) appears as a channel
+    # approver and sees the Approvals nav link via dynamic_check.
+    dsw_inserted = _exec_insert(
+        session,
+        pg_insert(ApprovalProcess)
+        .values(
+            code="DSW_CLEARANCE",
+            title="Dean Student Welfare Clearance",
+            requestor_role_codes=["HOD", "AHOD"],
+            channel_role_codes=["HOD", "DEAN_STUDENT_WELFARE", "REGISTRAR"],
+            requires_upward_attachments=False,
+            max_upward_attachments=3,
+            requires_downward_attachments=False,
+            max_downward_attachments=0,
+            is_finance=False,
+        )
+        .on_conflict_do_nothing(constraint="uq_approval_processes_code"),
+    )
+    counts["approval_processes"] += dsw_inserted
+
     session.commit()
     return counts
 
