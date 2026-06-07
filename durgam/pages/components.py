@@ -496,40 +496,116 @@ def role_multi_select(
     )
 
 
+def _stage_item(
+    code: rx.Var,
+    idx: rx.Var,
+    move_up_handler,
+    move_down_handler,
+    total: rx.Var,
+) -> rx.Component:
+    stage_num = idx + 1
+    return rx.hstack(
+        rx.text(
+            stage_num.to(str) + ".",
+            font_size="0.8rem",
+            font_weight="600",
+            color="var(--color-primary)",
+            min_width="1.5rem",
+        ),
+        rx.text(code, font_size="0.85rem"),
+        rx.spacer(),
+        rx.icon_button(
+            rx.icon("chevron-up", size=12),
+            aria_label="Move up",
+            on_click=move_up_handler(code),
+            variant="ghost",
+            size="1",
+            cursor="pointer",
+            disabled=idx == 0,
+        ),
+        rx.icon_button(
+            rx.icon("chevron-down", size=12),
+            aria_label="Move down",
+            on_click=move_down_handler(code),
+            variant="ghost",
+            size="1",
+            cursor="pointer",
+            disabled=idx == total - 1,
+        ),
+        align="center",
+        gap="0.25rem",
+        width="100%",
+        padding="0.15rem 0",
+    )
+
+
 def role_multi_select_ordered(
     options: rx.Var,
     selected_codes: rx.Var,
     toggle_handler,
+    *,
+    move_up_handler=None,
+    move_down_handler=None,
 ) -> rx.Component:
-    """Scrollable checkbox list for ordered selection (append on check, remove on uncheck)."""
-    return rx.box(
-        rx.foreach(
-            options,
-            lambda o: rx.hstack(
-                rx.checkbox(
-                    checked=selected_codes.contains(o["code"]),
-                    on_change=toggle_handler(o["code"]),
+    """Scrollable checkbox list for ordered selection with reorder controls."""
+    stage_list = rx.fragment()
+    if move_up_handler and move_down_handler:
+        stage_list = rx.cond(
+            selected_codes.length() > 0,  # type: ignore[attr-defined]
+            rx.vstack(
+                rx.text(
+                    "Stage order (use arrows to reorder):",
+                    font_size="0.75rem",
+                    color="var(--color-muted)",
+                    font_weight="600",
                 ),
-                rx.text(o["label"], font_size="0.875rem"),
-                spacing="2",
-                align="center",
-            ),
-        ),
-        rx.cond(
-            selected_codes.length() > 0,
-            rx.text(
-                "Routing order: " + selected_codes.join(" → "),
-                font_size="0.75rem",
-                color="var(--color-muted)",
+                rx.foreach(
+                    selected_codes,
+                    lambda code, idx: _stage_item(
+                        code, idx, move_up_handler, move_down_handler,
+                        selected_codes.length(),  # type: ignore[attr-defined]
+                    ),
+                ),
+                align="start",
+                gap="0.15rem",
+                width="100%",
                 margin_top="0.5rem",
+                padding="0.5rem",
+                border="1px solid var(--color-rule)",
+                border_radius="var(--radius-2)",
+                background="var(--color-background, #f5f0eb)",
             ),
             rx.fragment(),
+        )
+
+    return rx.box(
+        rx.text(
+            "Click to add/remove. Stage 1 approves first; last stage is terminal.",
+            font_size="0.75rem",
+            color="var(--color-muted)",
+            margin_bottom="0.25rem",
+            font_style="italic",
         ),
-        max_height="200px",
-        overflow_y="auto",
-        border="1px solid var(--color-rule)",
-        border_radius="var(--radius-2)",
-        padding="0.5rem",
+        rx.box(
+            rx.foreach(
+                options,
+                lambda o: rx.hstack(
+                    rx.checkbox(
+                        checked=selected_codes.contains(o["code"]),
+                        on_change=toggle_handler(o["code"]),
+                    ),
+                    rx.text(o["label"], font_size="0.875rem"),
+                    spacing="2",
+                    align="center",
+                ),
+            ),
+            max_height="200px",
+            overflow_y="auto",
+            border="1px solid var(--color-rule)",
+            border_radius="var(--radius-2)",
+            padding="0.5rem",
+        ),
+        stage_list,
     )
 
 
