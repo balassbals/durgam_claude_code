@@ -128,8 +128,7 @@ class ApproverInboxState(BaseState):
         user_id = UUID(self.current_user_id)
         with open_session() as session:
             has_static = can_perm(
-                user_id=user_id, action="approve", resource="approval_request",
-                session=session,
+                user_id, "approve", "approval_request", None, None, session,
             )
             if not has_static and not is_channel_approver(user_id, session):
                 self.flash = "You do not have access to the approvals inbox."
@@ -287,6 +286,16 @@ class SubmitRequestState(BaseState):
                 if self.nrf_available_to < self.nrf_available_from:
                     return True
         return self.submitting
+
+    @rx.var
+    def nrf_date_range_error(self) -> str:
+        if (
+            self.nrf_available_from
+            and self.nrf_available_to
+            and self.nrf_available_to < self.nrf_available_from
+        ):
+            return "'Available To' must be on or after 'Available From'."
+        return ""
 
     async def load_submit(self) -> None:
         redirect = _resolve_or_redirect(self)

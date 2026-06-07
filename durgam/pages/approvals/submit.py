@@ -181,6 +181,15 @@ def _nrf_fields_section() -> rx.Component:
                 ),
                 gap="1rem", width="100%",
             ),
+            rx.cond(
+                SubmitRequestState.nrf_date_range_error != "",
+                rx.text(
+                    SubmitRequestState.nrf_date_range_error,
+                    color="var(--color-destructive, #c0392b)",
+                    font_size="0.8rem",
+                ),
+                rx.fragment(),
+            ),
             rx.vstack(
                 rx.text("Type", font_size="0.85rem", color="var(--color-muted)"),
                 rx.select.root(
