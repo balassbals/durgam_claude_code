@@ -66,7 +66,7 @@ def _attachment_section() -> rx.Component:
                 rx.cond(
                     SubmitRequestState.max_upward > 0,
                     rx.text(
-                        f"You may attach up to {SubmitRequestState.max_upward} document(s).",
+                        f"You may attach up to {SubmitRequestState.max_upward} supporting document(s) (optional).",
                         font_size="0.8rem",
                         color="var(--color-muted)",
                         font_family="var(--font-sans)",

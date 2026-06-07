@@ -522,6 +522,7 @@ def _stage_item(
             size="1",
             cursor="pointer",
             disabled=idx == 0,
+            type="button",
         ),
         rx.icon_button(
             rx.icon("chevron-down", size=12),
@@ -531,6 +532,7 @@ def _stage_item(
             size="1",
             cursor="pointer",
             disabled=idx == total - 1,
+            type="button",
         ),
         align="center",
         gap="0.25rem",
