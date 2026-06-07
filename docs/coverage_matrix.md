@@ -134,9 +134,9 @@ E-004 (RoleEmail) bind to this split.
 | Informational CC notification on approval | E-007 | M7 | Shipped at M7 | CC recipients resolved from `informational_cc_role_codes` and notified on terminal decision. |
 | Non-regular faculty approval routing per case | E-003, E-007 | M7 | Shipped at M7 | NRF_APPROVAL process with DEAN→REGISTRAR channel; post-approval auto-creates NRF record. E-014 records channel-customization concern. |
 | Approval-process SLA enforcement | §9.5 | Future | Deferred from M7 — tracking step-level time limits not needed for v1 processes. |
-| Purchase committee rank-preference enforcement | E-007 | M7 | Runtime concern: highest-rank-first selection from eligible_designations requires M10 Faculty model for who-exists/availability |
-| Purchase committee availability/fatigue check | E-007 | M7 | Runtime concern: reject faculty serving on too many concurrent committees; requires M10 Faculty model |
-| Purchase committee justification field | E-007 | M7 | Runtime concern: text justification when lower-ranked faculty selected; requires purchase-request artifact (M7) |
+| Purchase committee rank-preference enforcement | E-007 | M10/M14 | Deferred from M7 — highest-rank-first selection from eligible_designations requires M10 Faculty model for who-exists/availability |
+| Purchase committee availability/fatigue check | E-007 | M10/M14 | Deferred from M7 — reject faculty serving on too many concurrent committees; requires M10 Faculty model |
+| Purchase committee justification field | E-007 | M10/M14 | Deferred from M7 — text justification when lower-ranked faculty selected; requires M10 Faculty model |
 | Project-fund link to PI | E-007 | M11 | Runtime concern: link project fund source to PI's faculty record; requires M10 Faculty + M11 Research |
 | ClassCoordinatorAssignment ownership transfer to class-teacher role | §9.3 | M14 | Requires M10 Faculty identity + M12 Student model for student-picker |
 | Committee member selection (rank-preference, availability) | E-007 | M10/M14 | Requires M10 Faculty model for who-exists/who's-available lookup |
