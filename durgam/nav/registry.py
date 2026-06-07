@@ -11,6 +11,7 @@ be visible to multiple roles with different permission paths.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -38,6 +39,9 @@ class NavEntry:
     # (e.g. Vision & Mission: Registrar via university_vision_mission:write AND HoD via
     # department_vision_mission:write:department). Must be a tuple (hashable) not a list.
     permission_any: tuple[tuple[str, str, str | None], ...] | None = None
+    # Dynamic check: OR'd with the static permission gate. Entry is visible if EITHER
+    # the static check passes OR dynamic_check(user_id, session) returns True.
+    dynamic_check: Callable[[UUID, Session], bool] | None = None
 
 
 def register(entry: NavEntry) -> None:
@@ -85,6 +89,8 @@ def get_visible_entries(user_id: UUID, session: Session) -> list[dict]:
                 session=session,
                 any_scope=True,  # nav = "has permission for any scope"
             )
+        if not include and entry.dynamic_check is not None:
+            include = entry.dynamic_check(user_id, session)
         if include:
             visible.append({
                 "label": entry.label,
