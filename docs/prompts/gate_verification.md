@@ -377,6 +377,90 @@ catches gaps that aggregate claims hide.
 
 ---
 
+## Lessons from M6b — audit log read UI
+
+M6b built the admin-only audit log viewer (filter strip, paginated table, detail
+drawer, CSV export) plus the resource label resolver. The gate ritual required
+five hotfix rounds after the initial "ready to ship" report. Each hotfix exposed
+a pattern worth institutionalising.
+
+### 1. Agent silent corrective commits
+
+During M6b hotfix prompts, the agent made two undocumented commits in adjacent
+areas (058fca8 — explicit setters for AuditLogState filter vars; 51ee852 — Reflex
+component build errors including padding conflict, foreach typing, and drawer handler
+naming). Neither commit appeared in the agent's post-fix report. They were discovered
+only by scanning `git log` after the round.
+
+**Discipline**: after every agent fix prompt, run `git log --oneline -5` and compare
+against the agent's report. Silent corrective commits during Reflex compile-pressure
+are common — the agent fixes one error, encounters cascading errors, and commits
+additional fixes without reporting them.
+
+### 2. Reflex hot-reload misses JSX-level changes
+
+Adding `aria_label` attributes to icon-only buttons did not reach the running app via
+Reflex's hot reload during M6b gate ritual. The old rendered DOM persisted until the
+dev server was restarted.
+
+**Discipline**: after any UI prop change (aria, role, data-testid, style-only props on
+existing components), Ctrl+C the Reflex dev server and restart. Do not trust hot reload
+for prop-level changes. This applies to all future milestones.
+
+### 3. Test selectors written without rendered-DOM grounding fail strict mode
+
+The agent's `get_by_text("Audit Log")` collided with the new nav link because both
+the sidebar nav entry and the page heading rendered the same string. Playwright's
+strict mode rejected the ambiguous match. Similarly, `get_by_text("OCCURRED AT")`
+failed because the DOM text is "Occurred at" — CSS `text_transform: uppercase` is
+visual only and does not affect the DOM text node that Playwright matches against.
+
+**Discipline**: when adding nav entries that duplicate a page heading's text, test
+selectors must qualify by role (`get_by_role("heading", ...)`) or by element scoping.
+Column headers and field labels that use CSS text-transform render original-case in
+the DOM. Always verify selectors against the source code's literal strings, not
+against the visual appearance of the rendered page.
+
+### 4. Radix Select.Item forbids empty-string values
+
+`rx.select.item("...", value="")` crashes the page with a Radix UI runtime error.
+Radix reserves empty string as the "clear selection" sentinel internally; passing it
+as an explicit item value triggers a validation exception at compile time.
+
+**Discipline**: use a non-empty sentinel (`"all"`) for "no filter selected" items in
+`rx.select`. All filter state vars that feed a `rx.select` must default to `"all"`,
+not `""`. The query layer treats the sentinel as "skip this filter". This pattern is
+also documented in CLAUDE.md under "Patterns established at M6b."
+
+---
+
+## Lessons from M7 — approval requests
+
+### 1. "Deviations: None" on expanded scope is itself a deviation
+
+During M7 Phase 3 grant fix, the agent surveyed 4 channel role codes and then granted
+the permission to 7 roles, declaring "Deviations: None." The expansion (adding
+REGISTRAR_OFFICE / VC_OFFICE / DEPUTY_REGISTRAR beyond the surveyed set) was
+judgment-call scope creep that should have been flagged.
+
+**Discipline**: any output set larger or smaller than the spec'd input set is a
+deviation, regardless of whether the expansion is "obviously right" — it requires
+explicit disclosure and product-owner sign-off.
+
+### 2. Reflex auto-setters throw runtime errors; always define explicit manual setters
+
+Reflex's implicit auto-setter mechanism (`set_<var>` generated from state var
+declarations) is unreliable in this stack — relying on it produces runtime errors
+when forms try to bind via `on_change`.
+
+**Convention going forward**: every state var that participates in a form binding
+(`on_change`, `value` binding for inputs/selects/textareas) must have an explicit
+`def set_<var>(self, value): self.<var> = value` method on its State class. Caught
+and fixed in M7 across `SubmitRequestState` NRF fields and previously in M6b for
+`AuditLogState` filter vars.
+
+---
+
 ## Why this ritual exists
 
 Tests verify what is tested. Manual use verifies what users actually

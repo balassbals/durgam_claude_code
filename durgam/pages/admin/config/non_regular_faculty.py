@@ -259,6 +259,49 @@ def _inline_form() -> rx.Component:
     )
 
 
+def _pending_request_action(row: dict) -> rx.Component:
+    return rx.icon_button(
+        rx.icon("eye", size=14),
+        aria_label="View request",
+        variant="ghost",
+        size="1",
+        cursor="pointer",
+        on_click=rx.redirect(rx.cond(True, "/approvals/request/" + row["id"], "")),  # type: ignore[arg-type]
+    )
+
+
+def _pending_approvals_section() -> rx.Component:
+    return rx.cond(
+        NonRegularFacultyConfigState.pending_requests.length() > 0,  # type: ignore[attr-defined]
+        rx.vstack(
+            rx.heading(
+                "Pending Approvals",
+                size="4",
+                font_family="var(--font-sans)",
+                margin_bottom="0.5rem",
+            ),
+            data_table(
+                rows=NonRegularFacultyConfigState.pending_requests,
+                columns=[
+                    TableColumn(key="title", label="Title"),
+                    TableColumn(key="requestor_display", label="Requestor"),
+                    TableColumn(key="stage_label", label="Stage", hidden_on_card=True),
+                    TableColumn(key="submitted_at", label="Submitted", hidden_on_card=True),
+                ],
+                card_primary_key="title",
+                is_mobile=False,
+                actions=_pending_request_action,
+                empty_message="No pending non-regular-faculty approvals.",
+            ),
+            rx.separator(margin_y="1.5rem"),
+            align="start",
+            width="100%",
+            margin_bottom="1rem",
+        ),
+        rx.fragment(),
+    )
+
+
 def admin_config_non_regular_faculty() -> rx.Component:
     return admin_page(
         rx.vstack(
@@ -272,8 +315,8 @@ def admin_config_non_regular_faculty() -> rx.Component:
                     ),
                     rx.spacer(),
                     primary_btn(
-                        "+ Add",
-                        on_click=NonRegularFacultyConfigState.open_create,
+                        "+ Submit for Approval",
+                        on_click=rx.redirect("/approvals/submit"),
                     ),
                     align="center",
                     width="100%",
@@ -291,6 +334,7 @@ def admin_config_non_regular_faculty() -> rx.Component:
                     NonRegularFacultyConfigState.dismiss_flash,
                 ),
                 _inline_form(),
+                _pending_approvals_section(),
                 rx.cond(
                     NonRegularFacultyConfigState.loading,
                     rx.center(rx.spinner(), padding="2rem"),

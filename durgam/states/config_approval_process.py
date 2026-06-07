@@ -30,6 +30,10 @@ class ApprovalProcessConfigState(BaseState):
     form_channel_selected: list[str] = []
     form_is_finance: bool = False
     form_cc_selected: list[str] = []
+    form_requires_upward: bool = False
+    form_max_upward: int = 0
+    form_requires_downward: bool = False
+    form_max_downward: int = 0
 
     confirm_open: bool = False
     confirm_id: str = ""
@@ -61,6 +65,10 @@ class ApprovalProcessConfigState(BaseState):
                     "raw_channel": ",".join(p.channel_role_codes or []),
                     "raw_cc": ",".join(p.informational_cc_role_codes or []),
                     "raw_finance": "1" if p.is_finance else "0",
+                    "raw_requires_upward": "1" if p.requires_upward_attachments else "0",
+                    "raw_max_upward": str(p.max_upward_attachments),
+                    "raw_requires_downward": "1" if p.requires_downward_attachments else "0",
+                    "raw_max_downward": str(p.max_downward_attachments),
                 })
 
         self._load_nav_entries()
@@ -84,6 +92,20 @@ class ApprovalProcessConfigState(BaseState):
         else:
             self.form_channel_selected = [*self.form_channel_selected, code]
 
+    def move_channel_up(self, code: str) -> None:
+        lst = list(self.form_channel_selected)
+        idx = lst.index(code) if code in lst else -1
+        if idx > 0:
+            lst[idx - 1], lst[idx] = lst[idx], lst[idx - 1]
+            self.form_channel_selected = lst
+
+    def move_channel_down(self, code: str) -> None:
+        lst = list(self.form_channel_selected)
+        idx = lst.index(code) if code in lst else -1
+        if 0 <= idx < len(lst) - 1:
+            lst[idx], lst[idx + 1] = lst[idx + 1], lst[idx]
+            self.form_channel_selected = lst
+
     def toggle_cc(self, code: str) -> None:
         if code in self.form_cc_selected:
             self.form_cc_selected = [c for c in self.form_cc_selected if c != code]
@@ -92,6 +114,24 @@ class ApprovalProcessConfigState(BaseState):
 
     def set_form_is_finance(self, v: bool) -> None:
         self.form_is_finance = v
+
+    def set_form_requires_upward(self, v: bool) -> None:
+        self.form_requires_upward = v
+
+    def set_form_max_upward(self, v: str) -> None:
+        try:
+            self.form_max_upward = max(0, min(20, int(v)))
+        except (ValueError, TypeError):
+            self.form_max_upward = 0
+
+    def set_form_requires_downward(self, v: bool) -> None:
+        self.form_requires_downward = v
+
+    def set_form_max_downward(self, v: str) -> None:
+        try:
+            self.form_max_downward = max(0, min(20, int(v)))
+        except (ValueError, TypeError):
+            self.form_max_downward = 0
 
     def open_create(self):
         self.flash = ""
@@ -103,11 +143,17 @@ class ApprovalProcessConfigState(BaseState):
         self.form_channel_selected = []
         self.form_cc_selected = []
         self.form_is_finance = False
+        self.form_requires_upward = False
+        self.form_max_upward = 0
+        self.form_requires_downward = False
+        self.form_max_downward = 0
         self.show_form = True
 
     def open_edit(
         self, pid: str, code: str, title: str, requestors: str,
         channel: str, finance: str, cc: str,
+        requires_upward: str = "0", max_upward: str = "0",
+        requires_downward: str = "0", max_downward: str = "0",
     ):
         self.flash = ""
         self.flash_type = "info"
@@ -118,6 +164,16 @@ class ApprovalProcessConfigState(BaseState):
         self.form_channel_selected = [c for c in channel.split(",") if c]
         self.form_cc_selected = [c for c in cc.split(",") if c]
         self.form_is_finance = finance == "1"
+        self.form_requires_upward = requires_upward == "1"
+        try:
+            self.form_max_upward = int(max_upward)
+        except (ValueError, TypeError):
+            self.form_max_upward = 0
+        self.form_requires_downward = requires_downward == "1"
+        try:
+            self.form_max_downward = int(max_downward)
+        except (ValueError, TypeError):
+            self.form_max_downward = 0
         self.show_form = True
 
     def cancel_form(self):
@@ -137,6 +193,15 @@ class ApprovalProcessConfigState(BaseState):
         channel = self.form_channel_selected or None
         cc = self.form_cc_selected or None
 
+        if self.form_requires_upward and self.form_max_upward < 1:
+            self.flash = "Maximum requestor attachments must be at least 1 when required."
+            self.flash_type = "error"
+            return
+        if self.form_requires_downward and self.form_max_downward < 1:
+            self.flash = "Maximum approver attachments must be at least 1 when required."
+            self.flash_type = "error"
+            return
+
         try:
             with open_session() as session:
                 svc = _svc(session)
@@ -149,6 +214,10 @@ class ApprovalProcessConfigState(BaseState):
                         channel_role_codes=channel,
                         is_finance=self.form_is_finance,
                         informational_cc_role_codes=cc,
+                        requires_upward_attachments=self.form_requires_upward,
+                        max_upward_attachments=self.form_max_upward,
+                        requires_downward_attachments=self.form_requires_downward,
+                        max_downward_attachments=self.form_max_downward,
                         actor_id=actor_id,
                     )
                     after_snap = audit_snapshot(entity)
@@ -167,6 +236,10 @@ class ApprovalProcessConfigState(BaseState):
                             "channel_role_codes": channel,
                             "is_finance": self.form_is_finance,
                             "informational_cc_role_codes": cc,
+                            "requires_upward_attachments": self.form_requires_upward,
+                            "max_upward_attachments": self.form_max_upward,
+                            "requires_downward_attachments": self.form_requires_downward,
+                            "max_downward_attachments": self.form_max_downward,
                         },
                         actor_id,
                     )

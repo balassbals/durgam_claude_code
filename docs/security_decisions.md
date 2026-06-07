@@ -187,3 +187,111 @@ authenticated user who knows the UUID.
 - If the number of restricted purposes grows large, consider inverting
   the default (deny-unless-allowed) with an explicit allow-list for
   public file types.
+
+---
+
+## SD-004 — Audit log read access restricted to SYSTEM_ADMIN
+
+**Milestone:** M6b — Audit Log Read UI
+**Date:** 2026-06-05
+**Decision makers:** Project architect
+
+### Context
+
+RFP §8.4 requires "all system activities shall be logged for audit trail" but is
+silent on who may read the trail. Three options were considered:
+(a) All authenticated users see their own actions.
+(b) Scoped access per role/department.
+(c) SYSTEM_ADMIN-only full view.
+
+### Decision
+
+**Option (c) chosen.** Visibility restricted to SYSTEM_ADMIN via the
+`audit_log:read:*` permission, which is granted only through the SYSTEM_ADMIN
+wildcard at `scripts/seed.py`. The `_config_guard("audit_log", "read")` on
+`AuditLogState.load_audit()` enforces this server-side. The audit nav entry uses
+the same permission predicate so non-sys-admins do not see the link.
+
+### Rationale
+
+The audit trail can expose redacted-but-sensitive operational patterns and per-actor
+activity which is unsuitable even for other admin roles. A Registrar seeing audit
+rows for all HoD actions, or a Dean browsing faculty login timestamps, introduces
+information exposure beyond what those roles need for their functions. The audit log
+is an oversight tool, not an operational tool.
+
+### Alternatives not chosen
+
+**(a) Per-user own-actions view** — would require row-level filtering and a
+separate UI path. Adds complexity without clear operational benefit at this stage.
+
+**(b) Scoped access (e.g. HoD sees department-only)** — plausible for larger
+institutions. The `actor_roles_json` JSONB column with GIN index and the existing
+`@>` containment filter make this technically feasible as a future extension
+without changing the SYSTEM_ADMIN path.
+
+### Escalation triggers
+
+- A future milestone requires role-scoped audit views (e.g. HoD compliance
+  reporting). Add new permission triples and scope-filtered queries; the existing
+  SYSTEM_ADMIN path remains unchanged.
+- M20 security hardening review — confirm the access model is appropriate for
+  the institution's governance structure before production launch.
+
+---
+
+## SD-005 — Approval request read/approve access
+
+**Milestone:** M7 — Approval Requests
+**Date:** 2026-06-05
+**Decision makers:** Project architect
+
+### Context
+
+Approval requests can carry sensitive data — CVs, financial details, personal
+information in payloads (especially NRF appointments). The system must balance
+self-service submission with controlled approver access.
+
+### Decision
+
+**Two-tier access model:**
+
+1. **Requestor self-service.** Any authenticated user can submit a request and
+   view their own requests (`/approvals/my-requests`, `/approvals/request/<id>`).
+   No special permission is required; the page guards check `current_user_id != ""`
+   only.
+
+2. **Approver-side visibility.** The inbox (`/approvals/inbox`) is gated by
+   `approval_request:approve:*`, granted in `scripts/seed.py` to 5 specific
+   roles: REGISTRAR, DEPUTY_REGISTRAR, FINANCE_OFFICER, VC, CPC_CHAIRPERSON.
+   DEAN was added at M7 Phase 4 because `NRF_APPROVAL` includes DEAN at
+   stage 1. SYSTEM_ADMIN inherits via its global wildcard grant.
+
+3. **Runtime decision authority.** Holding `approval_request:approve:*` lets a
+   user see the inbox, not approve everything. Actual approve/reject authority is
+   further filtered by `resolve_stage_approvers()` — only users holding the
+   channel role at the request's scope AND at the current stage are presented
+   with decision controls. A DEAN scoped to School of Sciences cannot approve
+   an NRF request for a department in School of Humanities.
+
+### Rationale
+
+Read access to approval requests is restricted to approver-tier roles because
+payloads can contain sensitive personal and financial information. A student or
+basic faculty member should not be able to browse other users' approval requests.
+The requestor sees only their own submissions.
+
+### Alternatives considered
+
+**(a) All authenticated users can view any request** — rejected because approval
+payloads may contain CVs, salary details, and personal information.
+
+**(b) Department-scoped read for HoDs** — plausible but adds complexity without
+clear operational benefit at v1. HoDs are typically requestors, not reviewers.
+
+### Escalation triggers
+
+- A future process requires HoDs to view (but not decide on) approval requests
+  for their department. Add a `approval_request:read:department` permission and
+  scope-filtered query.
+- M20 security hardening review — confirm the access model is appropriate.

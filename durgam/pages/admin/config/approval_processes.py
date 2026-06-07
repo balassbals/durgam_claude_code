@@ -38,6 +38,8 @@ def _kebab(row: dict) -> rx.Component:
                     row["id"], row["code"], row["title"],
                     row["raw_requestors"], row["raw_channel"],
                     row["raw_finance"], row["raw_cc"],
+                    row["raw_requires_upward"], row["raw_max_upward"],
+                    row["raw_requires_downward"], row["raw_max_downward"],
                 ),
             ),
             rx.menu.item(
@@ -96,11 +98,13 @@ def _inline_form() -> rx.Component:
                         align="start", gap="0.25rem", width="100%",
                     ),
                     rx.vstack(
-                        rx.text("Channel Roles (ordered)", font_size="0.85rem", color="var(--color-muted)"),
+                        rx.text("Channel Roles (approval stages)", font_size="0.85rem", color="var(--color-muted)"),
                         role_multi_select_ordered(
                             options=ApprovalProcessConfigState.role_options,
                             selected_codes=ApprovalProcessConfigState.form_channel_selected,
                             toggle_handler=ApprovalProcessConfigState.toggle_channel,
+                            move_up_handler=ApprovalProcessConfigState.move_channel_up,
+                            move_down_handler=ApprovalProcessConfigState.move_channel_down,
                         ),
                         align="start", gap="0.25rem", width="100%",
                     ),
@@ -112,6 +116,53 @@ def _inline_form() -> rx.Component:
                             toggle_handler=ApprovalProcessConfigState.toggle_cc,
                         ),
                         align="start", gap="0.25rem", width="100%",
+                    ),
+                    rx.vstack(
+                        rx.text("Attachments", font_weight="600", font_size="0.9rem",
+                                color="var(--color-primary)", margin_top="0.5rem"),
+                        rx.hstack(
+                            rx.checkbox(
+                                "Require requestor attachments",
+                                checked=ApprovalProcessConfigState.form_requires_upward,
+                                on_change=ApprovalProcessConfigState.set_form_requires_upward,
+                            ),
+                            align="center",
+                        ),
+                        rx.vstack(
+                            rx.text("Maximum requestor attachments",
+                                    font_size="0.8rem", color="var(--color-muted)"),
+                            rx.input(
+                                type="number",
+                                min="0", max="20",
+                                value=ApprovalProcessConfigState.form_max_upward.to(str),
+                                on_change=ApprovalProcessConfigState.set_form_max_upward,
+                                width="100px",
+                            ),
+                            rx.text("0 = no maximum", font_size="0.7rem",
+                                    color="var(--color-muted)", font_style="italic"),
+                            align="start", gap="0.15rem",
+                        ),
+                        rx.hstack(
+                            rx.checkbox(
+                                "Allow approver attachments (downward)",
+                                checked=ApprovalProcessConfigState.form_requires_downward,
+                                on_change=ApprovalProcessConfigState.set_form_requires_downward,
+                            ),
+                            align="center",
+                        ),
+                        rx.vstack(
+                            rx.text("Maximum approver attachments per decision",
+                                    font_size="0.8rem", color="var(--color-muted)"),
+                            rx.input(
+                                type="number",
+                                min="0", max="20",
+                                value=ApprovalProcessConfigState.form_max_downward.to(str),
+                                on_change=ApprovalProcessConfigState.set_form_max_downward,
+                                width="100px",
+                            ),
+                            align="start", gap="0.15rem",
+                        ),
+                        align="start", gap="0.5rem", width="100%",
                     ),
                     rx.checkbox(
                         "Finance process",

@@ -324,6 +324,8 @@ def seed(session: Session) -> dict[str, int]:
         {"resource": "approval_process",             "action": "read",    "scope": "*"},
         {"resource": "approval_process",             "action": "write",   "scope": "*"},
         {"resource": "approval_process",             "action": "delete",  "scope": "*"},
+        # Approval request — approver nav visibility (M7)
+        {"resource": "approval_request",             "action": "approve", "scope": "*"},
         # Designation vocabulary (Finance Officer + SysAdmin)
         {"resource": "designation",                  "action": "read",    "scope": "*"},
         {"resource": "designation",                  "action": "write",   "scope": "*"},
@@ -522,17 +524,25 @@ def seed(session: Session) -> dict[str, int]:
         ("designation",                 "read",   "*"),
         ("designation",                 "write",  "*"),
         ("designation",                 "delete", "*"),
+        # M7 — approval request approver (channel role in CPC_FUND_RELEASE)
+        ("approval_request",            "approve", "*"),
     ]
 
     role_perm_map: dict[str, list[tuple[str, str, str]]] = {
-        "REGISTRAR":            _PUBLIC_READ + _REGISTRAR_SPECIFIC,
-        "DEPUTY_REGISTRAR":     _PUBLIC_READ + _REGISTRAR_SPECIFIC,
+        "REGISTRAR":            _PUBLIC_READ + _REGISTRAR_SPECIFIC + [
+            ("approval_request",           "approve",   "*"),
+        ],
+        "DEPUTY_REGISTRAR":     _PUBLIC_READ + _REGISTRAR_SPECIFIC + [
+            ("approval_request",           "approve",   "*"),
+        ],
         "REGISTRAR_OFFICE":     _PUBLIC_READ + _REGISTRAR_SPECIFIC,
         "DIRECTOR":             _PUBLIC_READ + _DIRECTOR_SPECIFIC,
         "DEPUTY_DIRECTOR":      _PUBLIC_READ + _DIRECTOR_SPECIFIC,
         "DIRECTOR_OFFICE":      _PUBLIC_READ + _DIRECTOR_SPECIFIC,
         "IQAC_COORDINATOR":     _PUBLIC_READ + _IQAC_SPECIFIC,
-        "DEAN":                 _PUBLIC_READ + _DEAN_SPECIFIC,
+        "DEAN":                 _PUBLIC_READ + _DEAN_SPECIFIC + [
+            ("approval_request",           "approve",   "*"),
+        ],
         "DEAN_STUDENT_WELFARE": _PUBLIC_READ + _DEAN_SW_SPECIFIC,
         "DEAN_STUDENT_WELFARE_OFFICE": _PUBLIC_READ + _DEAN_SW_SPECIFIC,
         "DEAN_ACADEMIC_AFFAIRS": _PUBLIC_READ + _DEAN_AA_SPECIFIC,
@@ -566,11 +576,15 @@ def seed(session: Session) -> dict[str, int]:
             # M5b-R3 V2 — HoD Office can bulk-import courses
             ("course_import",              "write",     "*"),
         ],
-        # M5b — approver/channel roles; no config-write permissions yet (runtime → M7)
-        "VC":                   _PUBLIC_READ,
+        # M5b/M7 — approver/channel roles
+        "VC":                   _PUBLIC_READ + [
+            ("approval_request",           "approve",   "*"),
+        ],
         "VC_OFFICE":            _PUBLIC_READ,
         "FINANCE_OFFICER":      _PUBLIC_READ + _FINANCE_SPECIFIC,
-        "CPC_CHAIRPERSON":      _PUBLIC_READ,
+        "CPC_CHAIRPERSON":      _PUBLIC_READ + [
+            ("approval_request",           "approve",   "*"),
+        ],
         "FACULTY":              _PUBLIC_READ,
         "LIBRARIAN":            _PUBLIC_READ,
         "PLACEMENT_OFFICER":    _PUBLIC_READ,
@@ -2056,6 +2070,49 @@ def seed(session: Session) -> dict[str, int]:
         .on_conflict_do_nothing(constraint="uq_approval_processes_code"),
     )
     counts["approval_processes"] = cpc_inserted
+
+    # ── ApprovalProcess — NRF_APPROVAL ──────────────────────────────────────
+    nrf_inserted = _exec_insert(
+        session,
+        pg_insert(ApprovalProcess)
+        .values(
+            code="NRF_APPROVAL",
+            title="Non-Regular Faculty Approval",
+            requestor_role_codes=["HOD", "AHOD"],
+            channel_role_codes=["HOD", "DEAN", "REGISTRAR"],
+            requires_upward_attachments=True,
+            max_upward_attachments=5,
+            requires_downward_attachments=False,
+            max_downward_attachments=3,
+            is_finance=False,
+        )
+        .on_conflict_do_update(
+            constraint="uq_approval_processes_code",
+            set_={"channel_role_codes": ["HOD", "DEAN", "REGISTRAR"]},
+        ),
+    )
+    counts["approval_processes"] += nrf_inserted
+
+    # ── ApprovalProcess — DSW_CLEARANCE ─────────────────────────────────────
+    # Demo process so dean_sw (DEAN_STUDENT_WELFARE role) appears as a channel
+    # approver and sees the Approvals nav link via dynamic_check.
+    dsw_inserted = _exec_insert(
+        session,
+        pg_insert(ApprovalProcess)
+        .values(
+            code="DSW_CLEARANCE",
+            title="Dean Student Welfare Clearance",
+            requestor_role_codes=["HOD", "AHOD"],
+            channel_role_codes=["HOD", "DEAN_STUDENT_WELFARE", "REGISTRAR"],
+            requires_upward_attachments=False,
+            max_upward_attachments=3,
+            requires_downward_attachments=False,
+            max_downward_attachments=0,
+            is_finance=False,
+        )
+        .on_conflict_do_nothing(constraint="uq_approval_processes_code"),
+    )
+    counts["approval_processes"] += dsw_inserted
 
     session.commit()
     return counts

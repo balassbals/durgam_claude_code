@@ -30,6 +30,7 @@ class NonRegularFacultyConfigState(BaseState):
     dept_name_display: str = ""
 
     visitors: list[dict[str, str]] = []
+    pending_requests: list[dict[str, str]] = []
     loading: bool = True
 
     show_form: bool = False
@@ -79,6 +80,7 @@ class NonRegularFacultyConfigState(BaseState):
                     self.selected_dept_id = self.dept_options[0]["value"]
 
             self._load_data(session)
+            self._load_pending_requests(session)
 
         from durgam.auth.permissions import can
 
@@ -121,6 +123,39 @@ class NonRegularFacultyConfigState(BaseState):
                 "approved_info": approved_info,
                 "non_regular_type": v.non_regular_type,
             })
+
+    def _load_pending_requests(self, session) -> None:
+        self.pending_requests = []
+        from durgam.models.identity import User
+        from durgam.repositories.approval_process import ApprovalProcessRepository
+        from durgam.repositories.approval_request import ApprovalRequestRepository
+
+        proc_repo = ApprovalProcessRepository(session)
+        req_repo = ApprovalRequestRepository(session)
+        all_procs = proc_repo.list_all_active()
+        nrf_proc = next((p for p in all_procs if p.code == "NRF_APPROVAL"), None)
+        if not nrf_proc:
+            return
+
+        pending = req_repo.list_by_states(["submitted", "in_review"])
+        nrf_pending = [r for r in pending if r.process_id == nrf_proc.id]
+        channel_len = len(nrf_proc.channel_role_codes or [])
+
+        enriched: list[dict[str, str]] = []
+        for r in nrf_pending:
+            requestor = session.get(User, r.requestor_user_id)
+            requestor_display = (
+                (requestor.full_name or requestor.username) if requestor else "Unknown"
+            )
+            stage_label = f"Stage {r.current_stage} of {channel_len}"
+            enriched.append({
+                "id": str(r.id),
+                "title": r.title,
+                "requestor_display": requestor_display,
+                "stage_label": stage_label,
+                "submitted_at": r.created_at.strftime("%Y-%m-%d %H:%M UTC") if r.created_at else "—",
+            })
+        self.pending_requests = enriched
 
     async def on_dept_change(self, value: str) -> None:
         self.selected_dept_id = value

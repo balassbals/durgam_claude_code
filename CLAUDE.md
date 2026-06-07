@@ -4,7 +4,7 @@
 **Spec**: `docs/durgam_rfp_v3.pdf` — all section references (§8, §12, etc.) point to this file.
 **Python**: 3.13 (pinned via `.python-version`).
 **Theme**: Puttaparthi Saffron–Indigo–Ivory (§15.1). Single committed theme; no alternatives in v3.
-**Current milestone**: M5b — Configuration — Assignments & Approval Config.
+**Current milestone**: M8.
 
 ## Authority files (binding, in priority order)
 
@@ -1372,8 +1372,66 @@ string as the "clear selection" sentinel. Use `value="all"` with a descriptive l
 (e.g. "All scopes") for "no filter" items. All filter state vars that feed a
 `rx.select` must default to `"all"`, not `""`.
 
+## Patterns established at M7
+
+### Approval engine — service-layer state machine with direct audit
+
+The approval engine (`durgam/services/approval_request.py`) owns the state machine
+(submitted → in_review → approved/rejected/withdrawn/cancelled). Audit rows are written
+via `write_audit_row()` directly inside the service transaction — NOT via the
+`@audit_action` decorator — because the service must record the transition atomically
+with the state change. The decorator pattern is used for page-state handlers that call
+into the service.
+
+### Scope-chain routing via `resolve_stage_approvers`
+
+`durgam/services/approval_routing.py` walks dept → school → campus → universitywide to
+find users holding the required channel role at the most-specific scope. The walk order
+is fixed; the first scope level with at least one matching user wins. This avoids
+returning approvers at every level and duplicating notifications.
+
+### Post-approval callback dispatch
+
+`ApprovalRequestService._run_post_approval()` (`durgam/services/approval_request.py`)
+dispatches by `process.code` on terminal approval. Single-consumer pattern for v1 — only
+`NRF_APPROVAL` has a handler (`_create_nrf_from_approval`). New processes that need
+post-approval side effects add a branch here. Deferred imports are used inside the handler
+to avoid cross-service import at module level.
+
+### Dynamic nav gating for approver roles (TD-024)
+
+The "Approvals" nav entry uses `dynamic_check=is_channel_approver` on its `NavEntry`
+registration (`durgam/pages/approvals/__init__.py`). The entry is visible if EITHER:
+- The user holds the static `approval_request:approve:*` permission (5 roles + SYSTEM_ADMIN), OR
+- The user holds any role that appears in any active `ApprovalProcess.channel_role_codes`.
+
+The inbox page guard mirrors this logic: `ApproverInboxState._potential_approver_guard()`
+checks both paths before rendering. The `is_channel_approver()` function is defined once
+in `durgam/pages/approvals/__init__.py` and imported by both the nav registration and
+the state guard — single source of truth prevents drift.
+
+### Skip-self-at-stage routing for approval channels
+
+When the requestor is the sole holder of a channel role at a given stage, that stage
+is auto-skipped on submit and on approve-advance. An `auto_skip_stage` audit row is
+written for each skip. If ALL stages are skipped (requestor is sole holder of every
+channel role), the request is auto-approved. The skip logic lives in
+`ApprovalRequestService._should_skip_stage()`.
+
+### Explicit manual setters for form-bound state vars
+
+Every State var bound to a form input (`on_change`, `value` binding) requires a
+corresponding `def set_<var>(self, value): self.<var> = value` method. Reflex's implicit
+auto-setters throw runtime errors in this codebase. Caught and fixed in M7 for
+`SubmitRequestState` NRF fields; same pattern applied in M6b for `AuditLogState` filters.
+
+### Empty-string Select.Item sentinel discipline
+
+Carried forward from M6b (`value="all"`, not `value=""`). See M6b patterns section;
+not duplicated here.
+
 ## Current milestone
-**M5b — Configuration — Assignments & Approval Config.**
+**M8.**
 
 This line is the source of truth for "where are we." Before opening a milestone-completing PR, Claude Code MUST:
 1. Grep this file for "Current milestone" and update both occurrences (the top status line and this section).

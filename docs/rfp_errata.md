@@ -530,3 +530,37 @@ import UIs.
   role-scoped views (e.g. HoD seeing only their department's audit entries),
   new permission triples and scope-filtered queries can be added without
   changing the existing SYSTEM_ADMIN path.
+
+---
+
+## E-013 — audit_logs.actor_roles_json stores [] (not NULL) for no-actor rows
+
+- **Status**: Acknowledged. Convention documented.
+- **Source**: M6b implementation — discovered during label resolver and detail
+  drawer development.
+- **Gap in v3 RFP**: §8.4 does not specify the representation of actor roles
+  when the audit row has no actor (login_failed events, anonymous actions).
+- **Resolution**: `actor_roles_json` is stored as `[]` (empty JSON array, not
+  NULL) when the audit row has no actor. The resolver in
+  `durgam/audit/labels.py` and the detail drawer in
+  `durgam/pages/audit/index.py` handle both `[]` and NULL identically — both
+  render as "no roles recorded." This is a convention, not a fix. Future code
+  that queries `actor_roles_json` must treat `[]` and NULL as equivalent
+  empty states.
+
+---
+
+## E-014 — NRF approval channel is a working default; institutional reality may differ
+
+- **Status**: Acknowledged. Seed-configurable.
+- **Source**: M7 Phase 4 implementation — NRF_APPROVAL process seeded with
+  `channel_role_codes=["DEAN", "REGISTRAR"]`.
+- **Gap in v3 RFP**: §9.3 and §9.5 do not specify the exact approval channel for
+  non-regular faculty appointments. The informal requirements say "approved by admin"
+  without naming specific roles or routing order.
+- **Resolution**: `["DEAN", "REGISTRAR"]` is seeded as a working default (DEAN at
+  stage 1, REGISTRAR at stage 2). At SSSIHL, some NRF appointments may route through
+  the Vice-Chancellor or Director instead. The channel is seed-configurable —
+  adjusting the routing is a `scripts/seed.py` change, not a code change. The approval
+  engine handles any channel length and role composition without code changes. Flag
+  for stakeholder confirmation before production deployment.

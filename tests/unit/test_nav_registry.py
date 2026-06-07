@@ -5,6 +5,8 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
+import pytest
+
 from durgam.nav.registry import NavEntry, get_all, get_visible_entries, register
 
 
@@ -66,3 +68,74 @@ class TestGetVisibleEntries:
 
         # "Secret Section" should not appear when can() returns False
         assert not any(r["label"] == "Secret Section" for r in results)
+
+
+class TestApprovalsNavGate:
+    @classmethod
+    def setup_class(cls):
+        import durgam.pages.approvals  # noqa: F401 — triggers nav registration
+
+    def test_approvals_nav_gated_on_approve_permission(self):
+        """Approvals nav entry uses permission_action='approve',
+        permission_resource='approval_request'. A user with the permission
+        sees it; a user without does not."""
+        all_entries = get_all()
+        approvals_entry = next(
+            (e for e in all_entries if e.label == "Approvals" and e.href == "/approvals/inbox"),
+            None,
+        )
+        assert approvals_entry is not None, "Approvals nav entry not registered"
+        assert approvals_entry.permission_action == "approve"
+        assert approvals_entry.permission_resource == "approval_request"
+
+        user_id = uuid4()
+        session = MagicMock()
+
+        def _can_approve_only(*, user_id, action, resource, scope_type, scope_id, session, any_scope):
+            return action == "approve" and resource == "approval_request"
+
+        with patch("durgam.nav.registry.can", side_effect=_can_approve_only):
+            visible = get_visible_entries(user_id, session)
+        assert any(r["label"] == "Approvals" for r in visible)
+
+        with patch("durgam.nav.registry.can", return_value=False):
+            visible = get_visible_entries(user_id, session)
+        assert not any(r["label"] == "Approvals" for r in visible)
+
+    @pytest.mark.parametrize(
+        "role_label, can_returns, expected_visible",
+        [
+            ("REGISTRAR", True, True),
+            ("DEPUTY_REGISTRAR", True, True),
+            ("REGISTRAR_OFFICE", False, False),
+            ("VC_OFFICE", False, False),
+            ("STUDENT", False, False),
+        ],
+        ids=[
+            "registrar-sees-link",
+            "deputy_registrar-sees-link",
+            "registrar_office-hidden",
+            "vc_office-hidden",
+            "student-hidden",
+        ],
+    )
+    def test_approvals_nav_visibility_by_role(
+        self, role_label, can_returns, expected_visible
+    ):
+        """Approvals link visible only to roles holding approval_request:approve."""
+        user_id = uuid4()
+        session = MagicMock()
+        with patch("durgam.nav.registry.can", return_value=can_returns):
+            visible = get_visible_entries(user_id, session)
+        result = any(r["label"] == "Approvals" for r in visible)
+        assert result is expected_visible, f"{role_label} visibility mismatch"
+
+    def test_my_requests_nav_visible_to_all(self):
+        """My Requests nav entry uses permission_action=None — visible to all."""
+        all_entries = get_all()
+        my_req_entry = next(
+            (e for e in all_entries if e.label == "My Requests"),
+            None,
+        )
+        assert my_req_entry is not None
+        assert my_req_entry.permission_action is None
