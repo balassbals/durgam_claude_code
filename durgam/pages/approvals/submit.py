@@ -56,7 +56,11 @@ def _attachment_section() -> rx.Component:
                         "This process requires at least 1 supporting document.",
                     ),
                     font_size="0.8rem",
-                    color="var(--color-muted)",
+                    color=rx.cond(
+                        SubmitRequestState.uploaded_file_ids.length() == 0,  # type: ignore[attr-defined]
+                        "var(--color-destructive, #c0392b)",
+                        "var(--color-muted)",
+                    ),
                     font_family="var(--font-sans)",
                 ),
                 rx.cond(

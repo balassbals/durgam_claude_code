@@ -103,6 +103,36 @@ def _attachment_item(att: rx.Var) -> rx.Component:
     )
 
 
+def _downward_attachment_item(att: rx.Var) -> rx.Component:
+    return rx.hstack(
+        rx.icon("file", size=14, color="var(--color-muted)"),
+        rx.link(
+            att["name"],
+            href=rx.Var.create(DOWNLOAD_PREFIX) + att["id"].to(str),
+            font_size="0.85rem",
+            color="var(--color-primary)",
+            text_decoration="underline",
+        ),
+        rx.cond(
+            att["uploader"].to(str) != "",
+            rx.text(
+                rx.Var.create("uploaded by ") + att["uploader"].to(str),
+                font_size="0.8rem",
+                color="var(--color-muted)",
+                font_style="italic",
+            ),
+            rx.fragment(),
+        ),
+        rx.text(
+            rx.Var.create("(") + att["size_kb"].to(str) + " KB)",
+            font_size="0.8rem",
+            color="var(--color-muted)",
+        ),
+        align="center",
+        gap="0.5rem",
+    )
+
+
 def _header_section() -> rx.Component:
     return rx.vstack(
         rx.hstack(
@@ -194,7 +224,8 @@ def _nrf_details_section() -> rx.Component:
     )
 
 
-def _attachments_section(title: str, items: rx.Var) -> rx.Component:
+def _attachments_section(title: str, items: rx.Var, *, item_renderer=None) -> rx.Component:
+    renderer = item_renderer or _attachment_item
     return rx.cond(
         items.length() > 0,  # type: ignore[attr-defined]
         rx.vstack(
@@ -206,7 +237,7 @@ def _attachments_section(title: str, items: rx.Var) -> rx.Component:
                 font_family="var(--font-sans)",
             ),
             rx.vstack(
-                rx.foreach(items, _attachment_item),
+                rx.foreach(items, renderer),
                 align="start",
                 gap="0.5rem",
                 width="100%",
@@ -607,6 +638,19 @@ def request_detail_page() -> rx.Component:
                     href="/approvals/my-requests",
                     text_decoration="none",
                 ),
+                rx.cond(
+                    RequestDetailState.viewer_is_channel_approver,
+                    rx.link(
+                        secondary_btn(
+                            rx.icon("inbox", size=14),
+                            " Back to Inbox",
+                        ),
+                        href="/approvals/inbox",
+                        text_decoration="none",
+                    ),
+                    rx.fragment(),
+                ),
+                gap="0.75rem",
                 margin_bottom="1rem",
             ),
             # Error
@@ -637,6 +681,7 @@ def request_detail_page() -> rx.Component:
                         _attachments_section(
                             "Approver Attachments",
                             RequestDetailState.downward_attachments,
+                            item_renderer=_downward_attachment_item,
                         ),
                         _decision_section(),
                         _action_row(),

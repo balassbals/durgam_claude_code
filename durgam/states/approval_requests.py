@@ -490,6 +490,7 @@ class RequestDetailState(BaseState):
     confirm_withdraw_open: bool = False
 
     # Phase 3 — approver decision state
+    viewer_is_channel_approver: bool = False
     viewer_is_current_stage_approver: bool = False
     can_decide: bool = False
     next_stage_approvers_preview: list[str] = []
@@ -520,6 +521,7 @@ class RequestDetailState(BaseState):
         self.viewer_is_requestor = False
         self.can_withdraw = False
         self.confirm_withdraw_open = False
+        self.viewer_is_channel_approver = False
         self.viewer_is_current_stage_approver = False
         self.can_decide = False
         self.next_stage_approvers_preview = []
@@ -608,6 +610,9 @@ class RequestDetailState(BaseState):
                     self.loading = False
                     return rx.redirect("/approvals/my-requests")
 
+            from durgam.pages.approvals import is_channel_approver as _is_ch
+            self.viewer_is_channel_approver = _is_ch(viewer_id, session)
+
             svc = ApprovalRequestService(session)
             svc.view_request(request_id=request_id, viewer_user_id=viewer_id)
             session.commit()
@@ -689,15 +694,36 @@ class RequestDetailState(BaseState):
                 )
             )
             down_files = session.exec(down_stmt).all()
-            self.downward_attachments = [
-                {
+            step_by_approver: dict[UUID, tuple[str, int]] = {}
+            for s in raw_steps:
+                if s.approver_user_id and s.approver_user_id not in step_by_approver:
+                    step_by_approver[s.approver_user_id] = (
+                        s.approver_role_code,
+                        s.stage,
+                    )
+            down_list: list[dict[str, Any]] = []
+            for f in down_files:
+                if (f.metadata_json or {}).get("approval_request_id") != str(request_id):
+                    continue
+                uploader_name = ""
+                uploader_info = ""
+                if f.owner_user_id:
+                    uploader = session.get(User, f.owner_user_id)
+                    if uploader:
+                        uploader_name = uploader.full_name or uploader.username
+                    role_stage = step_by_approver.get(f.owner_user_id)
+                    if role_stage:
+                        uploader_info = f"{uploader_name} ({role_stage[0]}, Stage {role_stage[1]})"
+                    else:
+                        uploader_info = uploader_name
+                entry: dict[str, Any] = {
                     "id": str(f.id),
                     "name": f.original_name,
                     "size_kb": round(f.size_bytes / 1024, 1),
+                    "uploader": uploader_info,
                 }
-                for f in down_files
-                if (f.metadata_json or {}).get("approval_request_id") == str(request_id)
-            ]
+                down_list.append(entry)
+            self.downward_attachments = down_list
 
             self.can_withdraw = (
                 self.viewer_is_requestor and req.state == "submitted"
