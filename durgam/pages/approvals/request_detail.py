@@ -165,6 +165,35 @@ def _description_section() -> rx.Component:
     )
 
 
+def _nrf_details_section() -> rx.Component:
+    return rx.vstack(
+        rx.text(
+            "Non-Regular Faculty Details",
+            font_weight="700",
+            font_size="1rem",
+            color="var(--color-primary)",
+            font_family="var(--font-sans)",
+        ),
+        rx.box(
+            _kv_row("Name", RequestDetailState.request["nrf_name"]),
+            _kv_row("Designation", RequestDetailState.request["nrf_designation"]),
+            _kv_row("Organization", RequestDetailState.request["nrf_organization"]),
+            _kv_row("Expertise", RequestDetailState.request["nrf_expertise"]),
+            _kv_row("Available From", RequestDetailState.request["nrf_available_from"]),
+            _kv_row("Available To", RequestDetailState.request["nrf_available_to"]),
+            _kv_row("Type", RequestDetailState.request["nrf_type"]),
+            width="100%",
+        ),
+        align="start",
+        gap="0.5rem",
+        width="100%",
+        padding="1.25rem",
+        background="white",
+        border="1px solid var(--color-rule)",
+        border_radius="6px",
+    )
+
+
 def _attachments_section(title: str, items: rx.Var) -> rx.Component:
     return rx.cond(
         items.length() > 0,  # type: ignore[attr-defined]
@@ -595,6 +624,11 @@ def request_detail_page() -> rx.Component:
                     rx.vstack(
                         _header_section(),
                         _description_section(),
+                        rx.cond(
+                            RequestDetailState.request["process_code"].to(str) == "NRF_APPROVAL",
+                            _nrf_details_section(),
+                            rx.fragment(),
+                        ),
                         _attachments_section(
                             "Supporting Documents",
                             RequestDetailState.upward_attachments,
@@ -620,7 +654,7 @@ def request_detail_page() -> rx.Component:
             confirmation_dialog(
                 is_open=RequestDetailState.confirm_withdraw_open,
                 title="Withdraw this request?",
-                body="Approvers will be notified. This cannot be undone.",
+                body="This request will be removed from approver inboxes. This cannot be undone.",
                 on_confirm=RequestDetailState.withdraw_request,
                 on_cancel=RequestDetailState.cancel_withdraw,
                 confirm_label="Withdraw",

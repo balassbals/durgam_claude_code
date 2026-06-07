@@ -117,8 +117,29 @@ class ApproverInboxState(BaseState):
     rows: list[dict[str, Any]] = []
     loading: bool = True
 
+    def _potential_approver_guard(self) -> rx.Component | None:
+        """Route guard: redirect if user cannot possibly be an approver."""
+        self._resolve_session()
+        if not self.current_user_id:
+            return rx.redirect("/login")
+        from durgam.auth.permissions import can as can_perm
+        from durgam.pages.approvals import is_channel_approver
+
+        user_id = UUID(self.current_user_id)
+        with open_session() as session:
+            has_static = can_perm(
+                user_id=user_id, action="approve", resource="approval_request",
+                session=session,
+            )
+            if not has_static and not is_channel_approver(user_id, session):
+                self.flash = "You do not have access to the approvals inbox."
+                self.flash_type = "error"
+                return rx.redirect("/")
+        self.admin_authorized = True
+        return None
+
     async def load_inbox(self) -> None:
-        guard = self._config_guard("approval_request", "approve")
+        guard = self._potential_approver_guard()
         if guard is not None:
             return guard
 
@@ -262,6 +283,9 @@ class SubmitRequestState(BaseState):
                 self.nrf_available_to,
             ]):
                 return True
+            if self.nrf_available_from and self.nrf_available_to:
+                if self.nrf_available_to < self.nrf_available_from:
+                    return True
         return self.submitting
 
     async def load_submit(self) -> None:
@@ -377,6 +401,13 @@ class SubmitRequestState(BaseState):
             self.error = "Please select an approval process."
             self.submitting = False
             return
+
+        if self.selected_process_code == "NRF_APPROVAL":
+            if self.nrf_available_from and self.nrf_available_to:
+                if self.nrf_available_to < self.nrf_available_from:
+                    self.error = "'Available To' must be on or after 'Available From'."
+                    self.submitting = False
+                    return
 
         from durgam.services.approval_request import (
             ApprovalRequestError,
@@ -582,6 +613,7 @@ class RequestDetailState(BaseState):
             requestor = session.get(User, req.requestor_user_id)
             requestor_name = requestor.full_name or requestor.username if requestor else "Unknown"
 
+            nrf_data = (req.payload_json or {}).get("nrf_data")
             self.request = {
                 "id": str(req.id),
                 "title": req.title,
@@ -592,6 +624,14 @@ class RequestDetailState(BaseState):
                 "decided_at": _format_dt(req.decided_at),
                 "description": (req.payload_json or {}).get("description", ""),
                 "requestor_name": requestor_name,
+                "process_code": proc.code if proc else "",
+                "nrf_name": nrf_data.get("name", "") if nrf_data else "",
+                "nrf_designation": nrf_data.get("designation", "") if nrf_data else "",
+                "nrf_organization": nrf_data.get("organization", "") if nrf_data else "",
+                "nrf_expertise": nrf_data.get("expertise", "") if nrf_data else "",
+                "nrf_available_from": nrf_data.get("available_from", "") if nrf_data else "",
+                "nrf_available_to": nrf_data.get("available_to", "") if nrf_data else "",
+                "nrf_type": nrf_data.get("non_regular_type", "visiting") if nrf_data else "",
             }
 
             self.process = {
