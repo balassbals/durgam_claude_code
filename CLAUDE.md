@@ -4,7 +4,7 @@
 **Spec**: `docs/durgam_rfp_v3.pdf` — all section references (§8, §12, etc.) point to this file.
 **Python**: 3.13 (pinned via `.python-version`).
 **Theme**: Puttaparthi Saffron–Indigo–Ivory (§15.1). Single committed theme; no alternatives in v3.
-**Current milestone**: M8.
+**Current milestone**: M8 (Leave Rules).
 
 ## Authority files (binding, in priority order)
 
@@ -1431,7 +1431,7 @@ Carried forward from M6b (`value="all"`, not `value=""`). See M6b patterns secti
 not duplicated here.
 
 ## Current milestone
-**M8.**
+**M8 (Leave Rules).**
 
 This line is the source of truth for "where are we." Before opening a milestone-completing PR, Claude Code MUST:
 1. Grep this file for "Current milestone" and update both occurrences (the top status line and this section).
