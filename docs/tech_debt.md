@@ -588,12 +588,12 @@ later-stage approvers need to see prior decisions for context.
 **Location:** `durgam/services/approval_request.py` (`_enqueue_notifications`),
 notifications table
 
-**What it is:** CC notification dispatch is working correctly — `_enqueue_notifications`
-creates both `in_app` and `email` channel notification rows for CC recipients at submit,
-approve, reject, and withdraw transitions. Verified via DB: `iqac_user` (IQAC_COORDINATOR)
-received 10 notification rows across transitions for process `p1`. However, there is no
-in-app notification inbox or bell icon to surface `in_app` notifications to users. The
-`in_app` rows accumulate in the `notifications` table but are never rendered.
+**What it is:** `_enqueue_notifications` creates `in_app` and `email` notification rows
+for all recipients (channel approvers + CC users) at submit, approve, reject, and
+withdraw transitions. The rows are written correctly — 54 rows exist (27 email, 27
+in_app), all at `delivery_status='pending'`. However, there is no in-app notification
+inbox or bell icon to surface `in_app` rows. They accumulate in the `notifications`
+table but are never rendered.
 
 **Fix:** Build a notification inbox page or a notification bell dropdown in the nav shell
 that queries `notifications WHERE recipient_user_id = current_user AND channel = 'in_app'
@@ -602,6 +602,45 @@ AND read_at IS NULL`. Mark notifications read on click-through.
 **Trigger to re-open:** When CC stakeholders need real-time awareness of approval
 transitions without relying on email. Likely at M9+ when notification infrastructure is
 formalized.
+
+---
+
+### TD-032 — Notification dispatch worker does not exist
+
+**Location:** `durgam/services/approval_request.py` (`_enqueue_notifications`),
+`durgam/tasks/celery_app.py`, `durgam/notifications/email.py`
+
+**What it is:** The approval engine writes `Notification` rows to the DB with
+`delivery_status='pending'` for both `in_app` and `email` channels. No Celery task,
+background worker, or any code path reads these rows and dispatches them. The
+`notifications` table is a dead-letter queue — all 54 rows (as of M7 gate) are stuck
+at `pending` and will never be dispatched.
+
+By contrast, M4 calendar emails and M1/M2 admin emails call `await send_email()` directly
+at the point of action (fire-and-forget via `asyncio.create_task`), bypassing the
+`notifications` table entirely. The two notification pathways are architecturally
+disconnected:
+- **Direct path** (M1–M4): `send_email()` called inline → email reaches Mailpit/SMTP.
+- **Table path** (M7): `_enqueue_notifications()` writes rows → nobody reads them.
+
+**Why this is not an M7 blocker:** The approval engine's functional behavior (state
+transitions, audit rows, routing, skip-self) is correct. The missing dispatch is a
+pre-existing infrastructure gap — the `notifications` table was designed for a future
+dispatch worker that was never built. Approvers are not relying on email notifications
+to discover pending requests; they use the inbox page.
+
+**Fix options:**
+(a) Add a Celery periodic task that polls `notifications WHERE delivery_status='pending'
+AND channel='email'`, calls `send_email()` for each, and updates `delivery_status` to
+`'sent'` or `'failed'`. Register in `celery_app.py` beat schedule.
+(b) Replace the table-based enqueue in `_enqueue_notifications` with direct
+`asyncio.create_task(send_email(...))` calls, matching the M4 calendar email pattern.
+Option (b) is simpler but loses the audit trail of delivery attempts. Option (a)
+preserves the table as a delivery log.
+
+**Trigger to re-open:** When email notifications for approvals become a stakeholder
+requirement. Likely at M9+ when notification infrastructure is formalized, consolidating
+the direct and table-based pathways.
 
 ---
 

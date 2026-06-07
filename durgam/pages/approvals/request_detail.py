@@ -152,6 +152,11 @@ def _header_section() -> rx.Component:
             _kv_row("Current Stage", RequestDetailState.request["current_stage_label"]),
             _kv_row("Submitted", RequestDetailState.request["submitted_at"]),
             _kv_row("Decided", RequestDetailState.request["decided_at"]),
+            rx.cond(
+                RequestDetailState.request["cc_role_codes"].to(str) != "",
+                _kv_row("CC'd to", RequestDetailState.request["cc_role_codes"]),
+                rx.fragment(),
+            ),
             width="100%",
         ),
         align="start",

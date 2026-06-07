@@ -646,6 +646,7 @@ class RequestDetailState(BaseState):
                 "nrf_available_from": nrf_data.get("available_from", "") if nrf_data else "",
                 "nrf_available_to": nrf_data.get("available_to", "") if nrf_data else "",
                 "nrf_type": nrf_data.get("non_regular_type", "visiting") if nrf_data else "",
+                "cc_role_codes": ", ".join(proc.informational_cc_role_codes) if proc and proc.informational_cc_role_codes else "",
             }
 
             self.process = {
