@@ -119,9 +119,10 @@ def seed(session: Session) -> dict[str, int]:
 
     # ── Roles ─────────────────────────────────────────────────────────────────
     # Role levels reflect organisational hierarchy (OQ-M4-4):
-    # SYSTEM_ADMIN=100 · VC family=90-85 · REGISTRAR/FINANCE=80 · DIRECTOR/CPC_CHAIR=75
+    # SYSTEM_ADMIN=100 · VC family=90-85 · REGISTRAR/FINANCE/COE=80 · DIRECTOR/CPC_CHAIR=75
     # · REGISTRAR sub=77-73 · DEPUTY_DIRECTOR=72 · IQAC=71 · DEAN_*=70
-    # · DIRECTOR_OFFICE=69 · HOD family=50-42 · STUDENT=10 · BASIC_USER=1
+    # · DIRECTOR_OFFICE=69 · HR_HEAD=60 · HOD family=50-42 · HR_OFFICE=45
+    # · LIBRARIAN etc=40 · FACULTY=30 · STUDENT=10 · BASIC_USER=1
     # on_conflict_do_update so re-seeding repairs any level drift (e.g. DEAN 50→70).
     roles_data = [
         # Technical admin (cross-cutting; not in org hierarchy)
@@ -130,6 +131,8 @@ def seed(session: Session) -> dict[str, int]:
         {"code": "REGISTRAR",            "name": "Registrar",               "level": 80},
         {"code": "DEPUTY_REGISTRAR",     "name": "Deputy Registrar",        "level": 77},
         {"code": "REGISTRAR_OFFICE",     "name": "Registrar Office",        "level": 73},
+        # Controller of Examinations (university level; M8)
+        {"code": "CONTROLLER_OF_EXAMINATIONS", "name": "Controller of Examinations", "level": 80},
         # Director family (campus-level; M4)
         {"code": "DIRECTOR",             "name": "Director",                "level": 75},
         {"code": "DEPUTY_DIRECTOR",      "name": "Deputy Director",         "level": 72},
@@ -143,6 +146,9 @@ def seed(session: Session) -> dict[str, int]:
         # Academic affairs (M5b — assignment config ownership)
         {"code": "DEAN_ACADEMIC_AFFAIRS",       "name": "Dean of Academic Affairs",                    "level": 70},
         {"code": "DEAN_ACADEMIC_AFFAIRS_OFFICE", "name": "Dean of Academic Affairs Office",            "level": 69},
+        # HR family (M8 — late attendance tracking + leave admin)
+        {"code": "HR_HEAD",              "name": "HR Head",                            "level": 60},
+        {"code": "HR_OFFICE",            "name": "HR Office",                          "level": 45},
         # HoD family
         {"code": "HOD",                  "name": "Head of Department",                 "level": 50},
         {"code": "AHOD",                 "name": "Associate Head of Department",       "level": 45},
@@ -211,9 +217,26 @@ def seed(session: Session) -> dict[str, int]:
         {"resource": "department",       "action": "read",      "scope": "school"},
         {"resource": "department",       "action": "read",      "scope": "department"},
         {"resource": "department",       "action": "write",     "scope": "department"},
-        # Leave request (M2 placeholder)
+        # Leave request (M2 placeholder — dept-scoped; extended in M8)
         {"resource": "leave_request",    "action": "read",      "scope": "department"},
         {"resource": "leave_request",    "action": "approve",   "scope": "department"},
+        # Leave request — M8 full set
+        {"resource": "leave_request",    "action": "create",    "scope": "*"},
+        {"resource": "leave_request",    "action": "read",      "scope": "own"},
+        {"resource": "leave_request",    "action": "read",      "scope": "*"},
+        {"resource": "leave_request",    "action": "approve",   "scope": "*"},
+        {"resource": "leave_request",    "action": "withdraw",  "scope": "own"},
+        {"resource": "leave_request",    "action": "cancel",    "scope": "*"},
+        # Leave balance (M8)
+        {"resource": "leave_balance",    "action": "read",      "scope": "own"},
+        {"resource": "leave_balance",    "action": "read",      "scope": "*"},
+        {"resource": "leave_balance",    "action": "write",     "scope": "*"},
+        # Leave sanction rule (M8 — sys admin configures the sanctioning matrix)
+        {"resource": "leave_sanction_rule", "action": "configure", "scope": "*"},
+        {"resource": "leave_sanction_rule", "action": "read",      "scope": "*"},
+        # Late attendance marker (M8 — HR admin logs markers pre-attendance module)
+        {"resource": "late_attendance",  "action": "write",     "scope": "*"},
+        {"resource": "late_attendance",  "action": "read",      "scope": "department"},
         # Audit log (M2 placeholder)
         {"resource": "audit_log",        "action": "read",      "scope": "*"},
         # ── M3 new triples ────────────────────────────────────────────────────
@@ -528,6 +551,28 @@ def seed(session: Session) -> dict[str, int]:
         ("approval_request",            "approve", "*"),
     ]
 
+    # M8 — Controller of Examinations: same approval scope as VC/Registrar for leave
+    _CONTROLLER_OF_EXAMINATIONS_SPECIFIC = [
+        ("leave_request",              "read",      "department"),
+        ("leave_request",              "approve",   "*"),
+        ("approval_request",           "approve",   "*"),
+    ]
+
+    # M8 — HR Head: leave admin (read all requests + balances + write late-attendance)
+    _HR_HEAD_SPECIFIC = [
+        ("leave_request",              "read",      "*"),
+        ("leave_balance",              "read",      "*"),
+        ("late_attendance",            "write",     "*"),
+        ("late_attendance",            "read",      "department"),
+    ]
+
+    # M8 — HR Office: read leave requests + balances (no write on late attendance)
+    _HR_OFFICE_SPECIFIC = [
+        ("leave_request",              "read",      "*"),
+        ("leave_balance",              "read",      "*"),
+        ("late_attendance",            "read",      "department"),
+    ]
+
     role_perm_map: dict[str, list[tuple[str, str, str]]] = {
         "REGISTRAR":            _PUBLIC_READ + _REGISTRAR_SPECIFIC + [
             ("approval_request",           "approve",   "*"),
@@ -585,6 +630,10 @@ def seed(session: Session) -> dict[str, int]:
         "CPC_CHAIRPERSON":      _PUBLIC_READ + [
             ("approval_request",           "approve",   "*"),
         ],
+        # M8 — new roles
+        "CONTROLLER_OF_EXAMINATIONS": _PUBLIC_READ + _CONTROLLER_OF_EXAMINATIONS_SPECIFIC,
+        "HR_HEAD":              _PUBLIC_READ + _HR_HEAD_SPECIFIC,
+        "HR_OFFICE":            _PUBLIC_READ + _HR_OFFICE_SPECIFIC,
         "FACULTY":              _PUBLIC_READ,
         "LIBRARIAN":            _PUBLIC_READ,
         "PLACEMENT_OFFICER":    _PUBLIC_READ,
@@ -655,12 +704,18 @@ def seed(session: Session) -> dict[str, int]:
     #   cesrc_coord_user / Cesrc_Dev1!XZ — CESRC_COORDINATOR (M5b-R2)
     #   center_coord_user / Center_Dev1!XZ — CENTRE_COORDINATOR (M5b-R2)
     users_data = [
+        # M8 employment fields added: gender ('M'|'F'|'O'|None), joined_on (date|None),
+        # employee_type (regular_teaching|regular_non_teaching|honorary_*|superannuated_*|visiting_fellow)
+        # faculty_user is gender="F", joined_on=date(2022,6,1) — maternity-eligible fixture (≥1y service).
         {
             "email": "sys.admin@sssihl.edu.in",
             "username": "sys_admin",
             "full_name": "System Administrator",
             "role_code": "SYSTEM_ADMIN",
             "plain_password": "SysAdmin_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2015, 6, 1),
+            "employee_type": "regular_non_teaching",
         },
         {
             "email": "dean.sci@sssihl.edu.in",
@@ -668,6 +723,9 @@ def seed(session: Session) -> dict[str, int]:
             "full_name": "Dean Sciences",
             "role_code": "DEAN",
             "plain_password": "DeanSci_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2018, 6, 1),
+            "employee_type": "regular_teaching",
         },
         {
             "email": "student.001@sssihl.edu.in",
@@ -699,6 +757,9 @@ def seed(session: Session) -> dict[str, int]:
             "full_name": "University Registrar",
             "role_code": "REGISTRAR",
             "plain_password": "Registrar_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2018, 6, 1),
+            "employee_type": "regular_non_teaching",
         },
         {
             "email": "hod.dmacs@sssihl.edu.in",
@@ -708,6 +769,9 @@ def seed(session: Session) -> dict[str, int]:
             # Only BASIC_USER is assigned here; see the scoped-roles block below.
             "role_code": "BASIC_USER",
             "plain_password": "HodDmacs_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2018, 6, 1),
+            "employee_type": "regular_teaching",
         },
         # M4 demo users
         {
@@ -717,6 +781,9 @@ def seed(session: Session) -> dict[str, int]:
             # DIRECTOR role is campus-scoped — assigned after campuses are seeded.
             "role_code": "BASIC_USER",
             "plain_password": "DirectorPsn_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2015, 6, 1),
+            "employee_type": "regular_teaching",
         },
         {
             "email": "iqac.coordinator@sssihl.edu.in",
@@ -724,6 +791,9 @@ def seed(session: Session) -> dict[str, int]:
             "full_name": "IQAC Coordinator",
             "role_code": "IQAC_COORDINATOR",
             "plain_password": "IqacCoord_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2018, 6, 1),
+            "employee_type": "regular_non_teaching",
         },
         {
             "email": "dean.sw@sssihl.edu.in",
@@ -731,6 +801,9 @@ def seed(session: Session) -> dict[str, int]:
             "full_name": "Dean of Student Welfare",
             "role_code": "DEAN_STUDENT_WELFARE",
             "plain_password": "DeanSW_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2018, 6, 1),
+            "employee_type": "regular_non_teaching",
         },
         # M5b demo users
         {
@@ -739,6 +812,9 @@ def seed(session: Session) -> dict[str, int]:
             "full_name": "Finance Officer",
             "role_code": "FINANCE_OFFICER",
             "plain_password": "Finance_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2018, 6, 1),
+            "employee_type": "regular_non_teaching",
         },
         {
             "email": "dean.aa@sssihl.edu.in",
@@ -746,6 +822,9 @@ def seed(session: Session) -> dict[str, int]:
             "full_name": "Dean of Academic Affairs",
             "role_code": "DEAN_ACADEMIC_AFFAIRS",
             "plain_password": "DeanAA_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2018, 6, 1),
+            "employee_type": "regular_non_teaching",
         },
         # M5b-R2 demo users (13 new)
         {
@@ -754,6 +833,9 @@ def seed(session: Session) -> dict[str, int]:
             "full_name": "Registrar Office Staff",
             "role_code": "REGISTRAR_OFFICE",
             "plain_password": "RegOffice_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2018, 6, 1),
+            "employee_type": "regular_non_teaching",
         },
         {
             "email": "deputy.registrar@sssihl.edu.in",
@@ -761,6 +843,9 @@ def seed(session: Session) -> dict[str, int]:
             "full_name": "Deputy Registrar",
             "role_code": "DEPUTY_REGISTRAR",
             "plain_password": "DeputyReg_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2018, 6, 1),
+            "employee_type": "regular_non_teaching",
         },
         {
             "email": "hod.office.dmacs@sssihl.edu.in",
@@ -768,6 +853,9 @@ def seed(session: Session) -> dict[str, int]:
             "full_name": "HoD Office DMACS",
             "role_code": "BASIC_USER",
             "plain_password": "HodOffice_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2018, 6, 1),
+            "employee_type": "regular_non_teaching",
         },
         {
             "email": "ahod.dmacs@sssihl.edu.in",
@@ -775,6 +863,9 @@ def seed(session: Session) -> dict[str, int]:
             "full_name": "Associate HoD Mathematics and Computer Science",
             "role_code": "BASIC_USER",
             "plain_password": "AhodDmacs_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2018, 6, 1),
+            "employee_type": "regular_teaching",
         },
         {
             "email": "director.office.psn@sssihl.edu.in",
@@ -782,6 +873,9 @@ def seed(session: Session) -> dict[str, int]:
             "full_name": "Director Office Prasanthi Nilayam",
             "role_code": "BASIC_USER",
             "plain_password": "DirOffice_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2018, 6, 1),
+            "employee_type": "regular_non_teaching",
         },
         {
             "email": "deputy.director.psn@sssihl.edu.in",
@@ -789,6 +883,9 @@ def seed(session: Session) -> dict[str, int]:
             "full_name": "Deputy Director Prasanthi Nilayam",
             "role_code": "BASIC_USER",
             "plain_password": "DeputyDir_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2018, 6, 1),
+            "employee_type": "regular_teaching",
         },
         {
             "email": "dsw.office@sssihl.edu.in",
@@ -796,6 +893,9 @@ def seed(session: Session) -> dict[str, int]:
             "full_name": "Dean Student Welfare Office Staff",
             "role_code": "DEAN_STUDENT_WELFARE_OFFICE",
             "plain_password": "DSWOffice_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2018, 6, 1),
+            "employee_type": "regular_non_teaching",
         },
         {
             "email": "daa.office@sssihl.edu.in",
@@ -803,6 +903,9 @@ def seed(session: Session) -> dict[str, int]:
             "full_name": "Dean Academic Affairs Office Staff",
             "role_code": "DEAN_ACADEMIC_AFFAIRS_OFFICE",
             "plain_password": "DaaOffice_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2018, 6, 1),
+            "employee_type": "regular_non_teaching",
         },
         {
             "email": "faculty.dmacs@sssihl.edu.in",
@@ -810,6 +913,10 @@ def seed(session: Session) -> dict[str, int]:
             "full_name": "Faculty Member DMACS",
             "role_code": "BASIC_USER",
             "plain_password": "Faculty_Dev1!XZ",
+            # M8: gender="F", joined_on 2022-06-01 → ≥1y service by 2026-06-08 → ML-eligible fixture
+            "gender": "F",
+            "joined_on": date(2022, 6, 1),
+            "employee_type": "regular_teaching",
         },
         {
             "email": "librarian@sssihl.edu.in",
@@ -817,6 +924,9 @@ def seed(session: Session) -> dict[str, int]:
             "full_name": "University Librarian",
             "role_code": "LIBRARIAN",
             "plain_password": "Librarian_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2018, 6, 1),
+            "employee_type": "regular_non_teaching",
         },
         {
             "email": "placement@sssihl.edu.in",
@@ -824,6 +934,9 @@ def seed(session: Session) -> dict[str, int]:
             "full_name": "Placement Officer",
             "role_code": "PLACEMENT_OFFICER",
             "plain_password": "Placement_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2018, 6, 1),
+            "employee_type": "regular_non_teaching",
         },
         {
             "email": "cesrc@sssihl.edu.in",
@@ -831,6 +944,9 @@ def seed(session: Session) -> dict[str, int]:
             "full_name": "CESRC Coordinator",
             "role_code": "CESRC_COORDINATOR",
             "plain_password": "Cesrc_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2018, 6, 1),
+            "employee_type": "regular_non_teaching",
         },
         {
             "email": "centre.coord@sssihl.edu.in",
@@ -838,6 +954,9 @@ def seed(session: Session) -> dict[str, int]:
             "full_name": "Centre of Excellence Coordinator",
             "role_code": "CENTRE_COORDINATOR",
             "plain_password": "Center_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2018, 6, 1),
+            "employee_type": "regular_non_teaching",
         },
     ]
     user_inserted = 0
@@ -846,6 +965,10 @@ def seed(session: Session) -> dict[str, int]:
         plain = u.pop("plain_password")
         is_active = u.pop("is_active", True)
         must_change = u.pop("must_change_password", False)
+        # M8 employment fields — default to None/non-teaching for users that don't specify
+        gender = u.pop("gender", None)
+        joined_on_val = u.pop("joined_on", None)
+        employee_type = u.pop("employee_type", "regular_non_teaching")
         new_hash = hash_password(plain)
 
         stmt = (
@@ -855,6 +978,9 @@ def seed(session: Session) -> dict[str, int]:
                 password_hash=new_hash,
                 is_active=is_active,
                 must_change_password=must_change,
+                gender=gender,
+                joined_on=joined_on_val,
+                employee_type=employee_type,
             )
             .on_conflict_do_update(
                 constraint="uq_users_email",
@@ -864,6 +990,9 @@ def seed(session: Session) -> dict[str, int]:
                     "must_change_password": must_change,
                     "failed_login_count": 0,
                     "locked_until": None,
+                    "gender": gender,
+                    "joined_on": joined_on_val,
+                    "employee_type": employee_type,
                 },
             )
         )
