@@ -1,0 +1,417 @@
+# SSSIHL Leave Sanctioning Authority Matrix
+# Source: RFP §11.10 + docs/leave_rules_sssihl.pdf §XXVIII §22–24
+#
+# Priority: lower number = matched first; specific rules before wildcards.
+# Office-staff routing uses the office role code directly as applicant_role_code
+# (e.g. VC_OFFICE → sanctioner VC) — no separate field needed.
+#
+# v1 limitation: applicant_designation_regex is null on every rule.
+# PROFESSOR / ASSOC_PROFESSOR are seeded roles; Lecturer-tier faculty hold only
+# FACULTY (routes to Director per §22.I.iii). M10 Faculty module may rework
+# designation-bearing rules at that point.
+#
+# Total rules: 73
+#   14 CL (§22.I) + 1 SCL (§22.II) + 56 EL/HPL/CML/ML (14 × 4, §23) + 2 EOL/SL (§24)
+
+rules:
+
+  # ═══════════════════════════════════════════════════════════════
+  # CL — Casual Leave (§22.I)
+  # ═══════════════════════════════════════════════════════════════
+
+  # Priority 10: University-head-level staff → VC
+  - leave_type: CL
+    applicant_role_code: REGISTRAR
+    sanctioner_role_code: VC
+    priority: 10
+    notes: "§22.I.i"
+  - leave_type: CL
+    applicant_role_code: CONTROLLER_OF_EXAMINATIONS
+    sanctioner_role_code: VC
+    priority: 10
+    notes: "§22.I.i"
+  - leave_type: CL
+    applicant_role_code: FINANCE_OFFICER
+    sanctioner_role_code: VC
+    priority: 10
+    notes: "§22.I.i"
+
+  # Priority 15: Office-staff → their respective office head (§22.I.iv)
+  - leave_type: CL
+    applicant_role_code: VC_OFFICE
+    sanctioner_role_code: VC
+    priority: 15
+    notes: "§22.I.iv.a — staff in VC office"
+  - leave_type: CL
+    applicant_role_code: REGISTRAR_OFFICE
+    sanctioner_role_code: REGISTRAR
+    priority: 15
+    notes: "§22.I.iv.a — staff in Registrar office"
+  - leave_type: CL
+    applicant_role_code: DIRECTOR_OFFICE
+    sanctioner_role_code: DIRECTOR
+    scope_type: campus
+    priority: 15
+    notes: "§22.I.iv.b — staff in Director office"
+
+  # Priority 20: Professors / Assoc Professors / Directors / Deans → VC (§22.I.ii)
+  - leave_type: CL
+    applicant_role_code: PROFESSOR
+    sanctioner_role_code: VC
+    priority: 20
+    notes: "§22.I.ii"
+  - leave_type: CL
+    applicant_role_code: ASSOC_PROFESSOR
+    sanctioner_role_code: VC
+    priority: 20
+    notes: "§22.I.ii"
+  - leave_type: CL
+    applicant_role_code: DIRECTOR
+    sanctioner_role_code: VC
+    requires_in_charge: true
+    priority: 20
+    notes: "§22.I.ii + §23.b.ii Note — Director must name faculty in charge during absence"
+  - leave_type: CL
+    applicant_role_code: DEAN
+    sanctioner_role_code: VC
+    priority: 20
+    notes: "§22.I.ii — Dean-level staff"
+
+  # Priority 30: Lecturer-tier + departmental staff → Director of Campus (§22.I.iii)
+  - leave_type: CL
+    applicant_role_code: FACULTY
+    sanctioner_role_code: DIRECTOR
+    scope_type: campus
+    priority: 30
+    notes: "§22.I.iii — Lecturers, Lecturer-senior, Lecturer-selection grade, Departmental staff"
+  - leave_type: CL
+    applicant_role_code: HOD
+    sanctioner_role_code: DIRECTOR
+    scope_type: campus
+    priority: 30
+  - leave_type: CL
+    applicant_role_code: AHOD
+    sanctioner_role_code: DIRECTOR
+    scope_type: campus
+    priority: 30
+  - leave_type: CL
+    applicant_role_code: HOD_OFFICE
+    sanctioner_role_code: DIRECTOR
+    scope_type: campus
+    priority: 30
+
+  # ═══════════════════════════════════════════════════════════════
+  # SCL — Special Casual Leave (§22.II)
+  # ═══════════════════════════════════════════════════════════════
+
+  # All employees: Director recommends → VC approves
+  - leave_type: SCL
+    applicant_role_code: "*"
+    sanctioner_role_code: VC
+    recommend_via_role_code: DIRECTOR
+    scope_type: campus
+    priority: 100
+    notes: "§22.II — VC or delegated authority; Director is recommending-only stage"
+
+  # ═══════════════════════════════════════════════════════════════
+  # EL — Earned Leave (§23)
+  # ═══════════════════════════════════════════════════════════════
+
+  - leave_type: EL
+    applicant_role_code: REGISTRAR
+    sanctioner_role_code: VC
+    priority: 10
+    notes: "§23.a"
+  - leave_type: EL
+    applicant_role_code: CONTROLLER_OF_EXAMINATIONS
+    sanctioner_role_code: VC
+    priority: 10
+    notes: "§23.a"
+  - leave_type: EL
+    applicant_role_code: FINANCE_OFFICER
+    sanctioner_role_code: VC
+    priority: 10
+    notes: "§23.a"
+  - leave_type: EL
+    applicant_role_code: VC_OFFICE
+    sanctioner_role_code: VC
+    priority: 15
+    notes: "§23.a"
+  - leave_type: EL
+    applicant_role_code: REGISTRAR_OFFICE
+    sanctioner_role_code: REGISTRAR
+    priority: 15
+    notes: "§23.a"
+  - leave_type: EL
+    applicant_role_code: DIRECTOR_OFFICE
+    sanctioner_role_code: DIRECTOR
+    scope_type: campus
+    priority: 15
+    notes: "§23.a"
+  - leave_type: EL
+    applicant_role_code: PROFESSOR
+    sanctioner_role_code: VC
+    priority: 20
+    notes: "§23.b.ii"
+  - leave_type: EL
+    applicant_role_code: ASSOC_PROFESSOR
+    sanctioner_role_code: VC
+    priority: 20
+    notes: "§23.b.ii"
+  - leave_type: EL
+    applicant_role_code: DIRECTOR
+    sanctioner_role_code: VC
+    requires_in_charge: true
+    priority: 20
+    notes: "§23.b.ii"
+  - leave_type: EL
+    applicant_role_code: DEAN
+    sanctioner_role_code: VC
+    priority: 20
+    notes: "§23.b.ii"
+  - leave_type: EL
+    applicant_role_code: FACULTY
+    sanctioner_role_code: DIRECTOR
+    scope_type: campus
+    priority: 30
+    notes: "§23.b.i"
+  - leave_type: EL
+    applicant_role_code: HOD
+    sanctioner_role_code: DIRECTOR
+    scope_type: campus
+    priority: 30
+  - leave_type: EL
+    applicant_role_code: AHOD
+    sanctioner_role_code: DIRECTOR
+    scope_type: campus
+    priority: 30
+  - leave_type: EL
+    applicant_role_code: HOD_OFFICE
+    sanctioner_role_code: DIRECTOR
+    scope_type: campus
+    priority: 30
+
+  # ═══════════════════════════════════════════════════════════════
+  # HPL — Half-pay Leave (§23, same authority as EL)
+  # ═══════════════════════════════════════════════════════════════
+
+  - leave_type: HPL
+    applicant_role_code: REGISTRAR
+    sanctioner_role_code: VC
+    priority: 10
+    notes: "§23.a"
+  - leave_type: HPL
+    applicant_role_code: CONTROLLER_OF_EXAMINATIONS
+    sanctioner_role_code: VC
+    priority: 10
+  - leave_type: HPL
+    applicant_role_code: FINANCE_OFFICER
+    sanctioner_role_code: VC
+    priority: 10
+  - leave_type: HPL
+    applicant_role_code: VC_OFFICE
+    sanctioner_role_code: VC
+    priority: 15
+  - leave_type: HPL
+    applicant_role_code: REGISTRAR_OFFICE
+    sanctioner_role_code: REGISTRAR
+    priority: 15
+  - leave_type: HPL
+    applicant_role_code: DIRECTOR_OFFICE
+    sanctioner_role_code: DIRECTOR
+    scope_type: campus
+    priority: 15
+  - leave_type: HPL
+    applicant_role_code: PROFESSOR
+    sanctioner_role_code: VC
+    priority: 20
+    notes: "§23.b.ii"
+  - leave_type: HPL
+    applicant_role_code: ASSOC_PROFESSOR
+    sanctioner_role_code: VC
+    priority: 20
+  - leave_type: HPL
+    applicant_role_code: DIRECTOR
+    sanctioner_role_code: VC
+    requires_in_charge: true
+    priority: 20
+  - leave_type: HPL
+    applicant_role_code: DEAN
+    sanctioner_role_code: VC
+    priority: 20
+  - leave_type: HPL
+    applicant_role_code: FACULTY
+    sanctioner_role_code: DIRECTOR
+    scope_type: campus
+    priority: 30
+    notes: "§23.b.i"
+  - leave_type: HPL
+    applicant_role_code: HOD
+    sanctioner_role_code: DIRECTOR
+    scope_type: campus
+    priority: 30
+  - leave_type: HPL
+    applicant_role_code: AHOD
+    sanctioner_role_code: DIRECTOR
+    scope_type: campus
+    priority: 30
+  - leave_type: HPL
+    applicant_role_code: HOD_OFFICE
+    sanctioner_role_code: DIRECTOR
+    scope_type: campus
+    priority: 30
+
+  # ═══════════════════════════════════════════════════════════════
+  # CML — Commuted Leave (§23, same authority as EL)
+  # ═══════════════════════════════════════════════════════════════
+
+  - leave_type: CML
+    applicant_role_code: REGISTRAR
+    sanctioner_role_code: VC
+    priority: 10
+    notes: "§23.a"
+  - leave_type: CML
+    applicant_role_code: CONTROLLER_OF_EXAMINATIONS
+    sanctioner_role_code: VC
+    priority: 10
+  - leave_type: CML
+    applicant_role_code: FINANCE_OFFICER
+    sanctioner_role_code: VC
+    priority: 10
+  - leave_type: CML
+    applicant_role_code: VC_OFFICE
+    sanctioner_role_code: VC
+    priority: 15
+  - leave_type: CML
+    applicant_role_code: REGISTRAR_OFFICE
+    sanctioner_role_code: REGISTRAR
+    priority: 15
+  - leave_type: CML
+    applicant_role_code: DIRECTOR_OFFICE
+    sanctioner_role_code: DIRECTOR
+    scope_type: campus
+    priority: 15
+  - leave_type: CML
+    applicant_role_code: PROFESSOR
+    sanctioner_role_code: VC
+    priority: 20
+    notes: "§23.b.ii"
+  - leave_type: CML
+    applicant_role_code: ASSOC_PROFESSOR
+    sanctioner_role_code: VC
+    priority: 20
+  - leave_type: CML
+    applicant_role_code: DIRECTOR
+    sanctioner_role_code: VC
+    requires_in_charge: true
+    priority: 20
+  - leave_type: CML
+    applicant_role_code: DEAN
+    sanctioner_role_code: VC
+    priority: 20
+  - leave_type: CML
+    applicant_role_code: FACULTY
+    sanctioner_role_code: DIRECTOR
+    scope_type: campus
+    priority: 30
+    notes: "§23.b.i"
+  - leave_type: CML
+    applicant_role_code: HOD
+    sanctioner_role_code: DIRECTOR
+    scope_type: campus
+    priority: 30
+  - leave_type: CML
+    applicant_role_code: AHOD
+    sanctioner_role_code: DIRECTOR
+    scope_type: campus
+    priority: 30
+  - leave_type: CML
+    applicant_role_code: HOD_OFFICE
+    sanctioner_role_code: DIRECTOR
+    scope_type: campus
+    priority: 30
+
+  # ═══════════════════════════════════════════════════════════════
+  # ML — Maternity Leave (§23, same authority as EL)
+  # ═══════════════════════════════════════════════════════════════
+
+  - leave_type: ML
+    applicant_role_code: REGISTRAR
+    sanctioner_role_code: VC
+    priority: 10
+    notes: "§23.a"
+  - leave_type: ML
+    applicant_role_code: CONTROLLER_OF_EXAMINATIONS
+    sanctioner_role_code: VC
+    priority: 10
+  - leave_type: ML
+    applicant_role_code: FINANCE_OFFICER
+    sanctioner_role_code: VC
+    priority: 10
+  - leave_type: ML
+    applicant_role_code: VC_OFFICE
+    sanctioner_role_code: VC
+    priority: 15
+  - leave_type: ML
+    applicant_role_code: REGISTRAR_OFFICE
+    sanctioner_role_code: REGISTRAR
+    priority: 15
+  - leave_type: ML
+    applicant_role_code: DIRECTOR_OFFICE
+    sanctioner_role_code: DIRECTOR
+    scope_type: campus
+    priority: 15
+  - leave_type: ML
+    applicant_role_code: PROFESSOR
+    sanctioner_role_code: VC
+    priority: 20
+    notes: "§23.b.ii"
+  - leave_type: ML
+    applicant_role_code: ASSOC_PROFESSOR
+    sanctioner_role_code: VC
+    priority: 20
+  - leave_type: ML
+    applicant_role_code: DIRECTOR
+    sanctioner_role_code: VC
+    requires_in_charge: true
+    priority: 20
+  - leave_type: ML
+    applicant_role_code: DEAN
+    sanctioner_role_code: VC
+    priority: 20
+  - leave_type: ML
+    applicant_role_code: FACULTY
+    sanctioner_role_code: DIRECTOR
+    scope_type: campus
+    priority: 30
+    notes: "§23.b.i"
+  - leave_type: ML
+    applicant_role_code: HOD
+    sanctioner_role_code: DIRECTOR
+    scope_type: campus
+    priority: 30
+  - leave_type: ML
+    applicant_role_code: AHOD
+    sanctioner_role_code: DIRECTOR
+    scope_type: campus
+    priority: 30
+  - leave_type: ML
+    applicant_role_code: HOD_OFFICE
+    sanctioner_role_code: DIRECTOR
+    scope_type: campus
+    priority: 30
+
+  # ═══════════════════════════════════════════════════════════════
+  # EOL + SL — Extraordinary / Study Leave (§24)
+  # ═══════════════════════════════════════════════════════════════
+
+  - leave_type: EOL
+    applicant_role_code: "*"
+    sanctioner_role_code: VC
+    priority: 100
+    notes: "§24 — VC; may delegate to suitable authority"
+  - leave_type: SL
+    applicant_role_code: "*"
+    sanctioner_role_code: VC
+    priority: 100
+    notes: "§24 — VC; may delegate to suitable authority"

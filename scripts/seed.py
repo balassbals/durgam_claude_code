@@ -160,6 +160,11 @@ def seed(session: Session) -> dict[str, int]:
         {"code": "FINANCE_OFFICER",      "name": "Finance Officer",                    "level": 80},
         # CPC (M5b — Central Purchase Committee)
         {"code": "CPC_CHAIRPERSON",      "name": "Central Purchase Committee Chairperson", "level": 75},
+        # Faculty designation roles (M8 — used in leave sanctioning matrix pre-M10 Faculty)
+        # v1: users hold PROFESSOR or ASSOC_PROFESSOR role in addition to FACULTY when applicable.
+        # Lecturer-tier faculty hold only FACULTY (routes to Director per §22.I.iii).
+        {"code": "PROFESSOR",            "name": "Professor",                          "level": 75},
+        {"code": "ASSOC_PROFESSOR",      "name": "Associate Professor",                "level": 73},
         # Faculty (dept-scoped via UserRole; M10 Faculty model deferred)
         {"code": "FACULTY",              "name": "Faculty",                            "level": 30},
         # Library, placements, centres
@@ -634,6 +639,9 @@ def seed(session: Session) -> dict[str, int]:
         "CONTROLLER_OF_EXAMINATIONS": _PUBLIC_READ + _CONTROLLER_OF_EXAMINATIONS_SPECIFIC,
         "HR_HEAD":              _PUBLIC_READ + _HR_HEAD_SPECIFIC,
         "HR_OFFICE":            _PUBLIC_READ + _HR_OFFICE_SPECIFIC,
+        # Faculty designation roles (M8 — inherit PUBLIC_READ; approval routes per leave matrix)
+        "PROFESSOR":            _PUBLIC_READ + [("approval_request", "approve", "*")],
+        "ASSOC_PROFESSOR":      _PUBLIC_READ + [("approval_request", "approve", "*")],
         "FACULTY":              _PUBLIC_READ,
         "LIBRARIAN":            _PUBLIC_READ,
         "PLACEMENT_OFFICER":    _PUBLIC_READ,
@@ -2242,6 +2250,66 @@ def seed(session: Session) -> dict[str, int]:
         .on_conflict_do_nothing(constraint="uq_approval_processes_code"),
     )
     counts["approval_processes"] += dsw_inserted
+
+    # ── ApprovalProcess — LEAVE_APPROVAL (M8) ───────────────────────────────
+    # Generic leave-request approval. Per-request channel is resolved at
+    # submit-time via LeaveSanctionAuthorityRule (Path A architecture).
+    # channel_role_codes = union of all sanctioner roles in the leave matrix;
+    # this drives is_channel_approver() nav gating without hard-coding any
+    # specific channel — the actual approval channel is in resolved_channel_json
+    # on each individual ApprovalRequest row.
+    leave_inserted = _exec_insert(
+        session,
+        pg_insert(ApprovalProcess)
+        .values(
+            code="LEAVE_APPROVAL",
+            title="Leave Approval",
+            # Any authenticated user may apply for leave; requestor gating is via
+            # the leave UI, not the ApprovalProcess template.
+            requestor_role_codes=None,
+            # Union of all sanctioner roles in the leave matrix — drives
+            # is_channel_approver() nav gating so these roles see the Approvals link.
+            channel_role_codes=[
+                "DIRECTOR", "VC", "REGISTRAR",
+                "FINANCE_OFFICER", "CONTROLLER_OF_EXAMINATIONS",
+            ],
+            informational_cc_role_codes=["HR_HEAD"],
+            is_finance=False,
+        )
+        .on_conflict_do_update(
+            constraint="uq_approval_processes_code",
+            set_={
+                "channel_role_codes": [
+                    "DIRECTOR", "VC", "REGISTRAR",
+                    "FINANCE_OFFICER", "CONTROLLER_OF_EXAMINATIONS",
+                ],
+                "informational_cc_role_codes": ["HR_HEAD"],
+            },
+        ),
+    )
+    counts["approval_processes"] += leave_inserted
+
+    # ── LeaveSanctionAuthorityRule — load from YAML (M8) ─────────────────────
+    # Idempotent: upsert on natural key; soft-deletes orphans.
+    from pathlib import Path as _Path
+
+    from durgam.repositories.leave import LeaveSanctionRuleRepository
+    from durgam.services.leave_sanction_rule import LeaveSanctionRuleService
+
+    _leave_repo = LeaveSanctionRuleRepository(session)
+    _leave_svc = LeaveSanctionRuleService(session, _leave_repo)
+    _yaml_path = _Path(__file__).parent.parent / "seeds" / "leave_sanction_matrix.yaml"
+    _leave_actor = sys_admin_user.id if sys_admin_user else _seed_actor_id
+    _matrix_counts = _leave_svc.load_from_yaml(_yaml_path, actor_id=_leave_actor)
+    counts["leave_sanction_rules_inserted"] = _matrix_counts["inserted"]
+    counts["leave_sanction_rules_updated"] = _matrix_counts["updated"]
+    counts["leave_sanction_rules_orphaned"] = _matrix_counts["orphaned_soft_deleted"]
+    log.info(
+        "leave_matrix_seeded",
+        inserted=_matrix_counts["inserted"],
+        updated=_matrix_counts["updated"],
+        orphaned=_matrix_counts["orphaned_soft_deleted"],
+    )
 
     session.commit()
     return counts
