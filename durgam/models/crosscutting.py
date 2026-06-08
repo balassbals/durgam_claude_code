@@ -125,6 +125,13 @@ class ApprovalRequest(TimestampedSoftDelete, table=True):
     decided_at: datetime | None = Field(
         default=None, sa_type=_TIMESTAMPTZ, nullable=True
     )
+    # M8 Path-A dynamic channel: leave (and future processes) may resolve a
+    # per-request channel at submit-time rather than reading process.channel_role_codes.
+    # Each entry: {"role_code": str, "recommend_only": bool, "scope_type": str | None}
+    # When None, the engine falls back to process.channel_role_codes (all M7 processes).
+    resolved_channel_json: list[dict[str, Any]] | None = Field(
+        default=None, sa_column=Column(JSONB, nullable=True)
+    )
 
 
 class ApprovalStep(SQLModel, table=True):

@@ -644,6 +644,18 @@ the direct and table-based pathways.
 
 ---
 
+### TD-033 — non_regular_faculty.approval_request_id FK drift between migration and model
+
+**Location:** `durgam/models/config_anchors.py` (`approval_request_id` field on `NonRegularFaculty`); migration `6484a8b6dcee_add_approval_request_id_to_non_regular_.py`.
+
+**What it is:** A prior migration created the FK with `ondelete='SET NULL'`, but the SQLModel field declaration on `NonRegularFaculty.approval_request_id` lacks the matching `ondelete='SET NULL'` annotation. Alembic autogenerate detects this as drift on every subsequent revision and attempts to drop and recreate the FK with the model's (incorrect) default behaviour. Caught and stripped from the Phase 1 M8 migration (`56c90a7f65bd`); the drift itself is unresolved.
+
+**Why this is not a production issue:** Runtime cascade behaviour is governed by the DB schema, which currently carries the correct `ondelete='SET NULL'`. The drift is a model-annotation gap, not a runtime defect. The 1017-test regression suite passes unchanged.
+
+**Trigger to re-open:** Next milestone that touches `non_regular_faculty` or that needs a clean autogen baseline. Resolution: update the SQLModel field to declare `ondelete='SET NULL'` so model and DB agree; this generates an empty autogen diff (a clean fixture for future migrations).
+
+---
+
 ## Resolved
 
 ### TD-002 — SAWarning: transaction already deassociated from connection (resolved in m0-cleanup)

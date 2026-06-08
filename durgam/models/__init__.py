@@ -45,6 +45,12 @@ from .program import (
     ProgramSpecialisation,
 )
 from .school import School
+from .leave import (
+    LeaveBalance,
+    LateAttendanceMarker,
+    LeaveRequest,
+    LeaveSanctionAuthorityRule,
+)
 from .vision_mission import (
     DepartmentMission,
     DepartmentVisionMission,
@@ -115,4 +121,9 @@ __all__ = [
     "UniversityMission",
     "DepartmentVisionMission",
     "DepartmentMission",
+    # M8 Leave
+    "LeaveBalance",
+    "LeaveRequest",
+    "LateAttendanceMarker",
+    "LeaveSanctionAuthorityRule",
 ]
