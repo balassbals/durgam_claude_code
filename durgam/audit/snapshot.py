@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 from uuid import UUID
 
@@ -35,7 +35,9 @@ def _serialize_value(value: Any) -> Any:
         return None
     if isinstance(value, UUID):
         return str(value)
-    if isinstance(value, datetime):
+    if isinstance(value, datetime):  # datetime before date — datetime is a subclass of date
+        return value.isoformat()
+    if isinstance(value, date):
         return value.isoformat()
     if isinstance(value, (list, dict)):
         return value
