@@ -361,7 +361,7 @@ class LeavePageState(BaseState):
 
         with open_session() as session:
             from durgam.services.leave_request import LeaveRequestError
-            from durgam.services.leave_rules import LeaveChannelError, LeaveRuleError
+            from durgam.services.leave_rules import LeaveBalanceError, LeaveChannelError, LeaveEligibilityError, LeaveRuleError
 
             try:
                 svc = _build_svc(session)
@@ -381,7 +381,7 @@ class LeavePageState(BaseState):
                     in_charge_designation=self.in_charge_designation or None,
                 )
                 session.commit()
-            except (LeaveRequestError, LeaveRuleError, LeaveChannelError) as e:
+            except (LeaveRequestError, LeaveRuleError, LeaveChannelError, LeaveBalanceError, LeaveEligibilityError) as e:
                 self.form_error = str(e)
                 self.submitting = False
                 return
