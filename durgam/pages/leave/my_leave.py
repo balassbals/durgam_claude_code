@@ -123,8 +123,9 @@ _IN_FLIGHT_COLS: list[TableColumn] = [
     TableColumn(key="leave_type",      label="Type"),
     TableColumn(key="starts_on",       label="From"),
     TableColumn(key="ends_on",         label="To"),
-    TableColumn(key="chargeable_days", label="Days", hidden_on_card=True),
+    TableColumn(key="chargeable_days", label="Days",     hidden_on_card=True),
     TableColumn(key="state",           label="State"),
+    TableColumn(key="progress_text",   label="Progress", hidden_on_card=True),
 ]
 
 

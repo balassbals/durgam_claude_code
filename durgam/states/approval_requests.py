@@ -87,6 +87,8 @@ class MyRequestsState(BaseState):
                     proc_cache[r.process_id] = proc_repo.get_by_id(r.process_id)
                 proc = proc_cache[r.process_id]
                 channel_len = len(proc.channel_role_codes) if proc and proc.channel_role_codes else 0
+                if r.resolved_channel_json:
+                    channel_len = len(r.resolved_channel_json)
                 enriched.append({
                     "id": str(r.id),
                     "title": r.title,
@@ -179,6 +181,8 @@ class ApproverInboxState(BaseState):
                     continue
 
                 channel_len = len(proc.channel_role_codes) if proc.channel_role_codes else 0
+                if r.resolved_channel_json:
+                    channel_len = len(r.resolved_channel_json)
                 requestor = session.get(User, r.requestor_user_id)
                 requestor_display = (
                     (requestor.full_name or requestor.username) if requestor else "Unknown"

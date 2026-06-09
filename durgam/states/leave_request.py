@@ -43,6 +43,34 @@ def _fmt_date(d: date | None) -> str:
     return d.isoformat()
 
 
+def _build_leave_progress(ar: Any, proc_channel: list[str], steps_map: dict) -> str:
+    """Compact progress line for an in-flight leave request."""
+    if ar is None:
+        return ""
+    resolved = ar.resolved_channel_json or []
+    total = len(resolved) if resolved else len(proc_channel)
+    current = ar.current_stage
+    if resolved and 0 < current <= len(resolved):
+        awaiting = resolved[current - 1].get("role_code", "?")
+    elif proc_channel and 0 < current <= len(proc_channel):
+        awaiting = proc_channel[current - 1]
+    else:
+        awaiting = "?"
+    steps = steps_map.get(ar.id, [])
+    forwarded = [s for s in steps if s.decision == "forwarded"]
+    if forwarded:
+        last = forwarded[-1]
+        rec_role = last.approver_role_code
+        comment = (last.comment or "").strip()
+        text = f"Stage {current} of {total} — Rec. by {rec_role}"
+        if comment:
+            text += f": '{comment[:60]}'"
+        text += f". Awaiting {awaiting}."
+    else:
+        text = f"Stage {current} of {total} — Awaiting {awaiting}."
+    return text
+
+
 def _build_svc(session):
     from durgam.repositories.leave import (
         LeaveBalanceRepository,
@@ -171,6 +199,40 @@ class LeavePageState(BaseState):
             )
 
             terminal = {"approved", "rejected", "withdrawn", "cancelled"}
+
+            # Enrich in-flight rows with approval progress.
+            from durgam.models.crosscutting import ApprovalProcess, ApprovalRequest
+            from durgam.repositories.approval_step import ApprovalStepRepository
+
+            inflight_ar_ids = [
+                r.approval_request_id for r in requests if r.state not in terminal
+            ]
+            ar_map: dict = {}
+            if inflight_ar_ids:
+                for ar_row in session.exec(
+                    select(ApprovalRequest).where(
+                        ApprovalRequest.id.in_(inflight_ar_ids)  # type: ignore[union-attr]
+                    )
+                ).all():
+                    ar_map[ar_row.id] = ar_row
+
+            leave_proc = session.exec(
+                select(ApprovalProcess).where(
+                    ApprovalProcess.code == "LEAVE_APPROVAL",  # type: ignore[union-attr]
+                    ApprovalProcess.is_deleted == False,  # noqa: E712
+                )
+            ).first()
+            proc_channel_codes: list[str] = (
+                leave_proc.channel_role_codes
+                if leave_proc and leave_proc.channel_role_codes
+                else []
+            )
+
+            step_repo = ApprovalStepRepository(session)
+            steps_map: dict = {}
+            for ar_id in inflight_ar_ids:
+                steps_map[ar_id] = step_repo.list_for_request(ar_id)
+
             for r in requests:
                 row = {
                     "id": str(r.id),
@@ -184,6 +246,8 @@ class LeavePageState(BaseState):
                 if r.state in terminal:
                     self.history.append(row)
                 else:
+                    ar = ar_map.get(r.approval_request_id)
+                    row["progress_text"] = _build_leave_progress(ar, proc_channel_codes, steps_map)
                     self.in_flight.append(row)
 
         self.loading = False

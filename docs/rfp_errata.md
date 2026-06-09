@@ -677,3 +677,23 @@ import UIs.
 **Trigger to re-open**: A future milestone (likely M8.1 follow-up or M9 prep) that has bandwidth for a model migration + two form updates + a post-approval hook + tests.
 
 **Cross-cutting**: depends on E-017 (withdraw post-approval) for the case where the parent ApprovalRequest is withdrawn after terminal-approval — the auto-created SCL LeaveRequest would also need reversal.
+## E-021 — HoD/AhoD recommend-via stage for FACULTY leave requests
+
+**Status**: Acknowledged. Deferred to M10 (Faculty/Department assignment milestone).
+
+**Source**: Bala's clarification during M8 gate verification (2026-06-09).
+
+**Gap in v3 RFP**: §11.10 sanctioning matrix specifies FACULTY → DIRECTOR (campus-scoped) for CL/EL/HPL/CML/ML. The institutional reality: every faculty leave request must first pass through the requestor's HoD or AhoD as a recommend-only stage, before reaching the Director. The current v1 matrix routes FACULTY directly to DIRECTOR, skipping the department-head review.
+
+**Required matrix rewrite**:
+- For each of CL/EL/HPL/CML/ML where applicant_role_code=FACULTY: add `recommend_via_role_code=HOD` and (optionally) handle AhoD fallback when HoD is vacant.
+- Director and Professor/Assoc Professor are NOT routed through HoD (they don't have one above them in the department chain).
+- For SCL: today FACULTY routes through DIRECTOR-recommend → VC-final. Per Bala, HoD should also be in this chain. Possible new shape: FACULTY → HOD (recommend) → DIRECTOR (recommend) → VC (final). Three-stage SCL channel.
+
+**Required engine support**:
+- The matrix's `recommend_via_role_code` field currently holds a single role. To support HoD/AhoD fallback ("use HoD; if no HoD then AhoD"), either: (a) extend the schema to a list, (b) introduce a "tier" abstraction where Phase 4's resolve_channel walks a fallback list, or (c) ship with HoD-only (no AhoD fallback) and accept the gap for departments with vacant HoD.
+- True department-scoped HoD resolution ("the HoD of THIS faculty's department, not any HoD") requires the Faculty/Department assignment model that ships in M10. Until then, even if the matrix said "recommend_via=HOD", the engine cannot resolve to the correct HoD instance.
+
+**Trigger to re-open**: M10 Faculty module ships with Department assignment for Faculty users and a proper department-scope chain in the engine. At that point: update the YAML matrix, add a one-time migration to fix existing requests, document the AhoD fallback policy.
+
+**Cross-cutting**: depends on M10 Faculty/Department model + on E-019 (campus-scoped Director routing — same scope-resolution machinery).

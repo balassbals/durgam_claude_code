@@ -728,6 +728,7 @@ def seed(session: Session) -> dict[str, int]:
     #   placement_officer_user / Placement_Dev1!XZ — PLACEMENT_OFFICER (M5b-R2)
     #   cesrc_coord_user / Cesrc_Dev1!XZ — CESRC_COORDINATOR (M5b-R2)
     #   center_coord_user / Center_Dev1!XZ — CENTRE_COORDINATOR (M5b-R2)
+    #   vc_user / ViceChancellor_Dev1!XZ — VC unscoped (M8)
     users_data = [
         # M8 employment fields added: gender ('M'|'F'|'O'|None), joined_on (date|None),
         # employee_type (regular_teaching|regular_non_teaching|honorary_*|superannuated_*|visiting_fellow)
@@ -982,6 +983,17 @@ def seed(session: Session) -> dict[str, int]:
             "gender": "M",
             "joined_on": date(2018, 6, 1),
             "employee_type": "regular_non_teaching",
+        },
+        # M8 demo user
+        {
+            "email": "vc@sssihl.edu.in",
+            "username": "vc_user",
+            "full_name": "Vice-Chancellor",
+            "role_code": "VC",
+            "plain_password": "ViceChancellor_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2015, 6, 1),
+            "employee_type": "regular_teaching",
         },
     ]
     user_inserted = 0
