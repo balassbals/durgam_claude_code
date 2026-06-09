@@ -1001,10 +1001,8 @@ class RequestDetailState(BaseState):
                         LeaveRepository,
                         LeaveSanctionRuleRepository,
                     )
-                    from durgam.repositories.approval_process import ApprovalProcessRepository
                     from durgam.repositories.approval_request import ApprovalRequestRepository
-                    from durgam.repositories.approval_step import ApprovalStepRepository
-                    from durgam.repositories.notification import NotificationRepository
+                    from durgam.services.approval_request import ApprovalRequestService
                     from durgam.services.leave_request import LeaveRequestError, LeaveRequestService
 
                     try:
@@ -1032,13 +1030,7 @@ class RequestDetailState(BaseState):
                                 leave_repo=LeaveRepository(session),
                                 balance_repo=LeaveBalanceRepository(session),
                                 rule_repo=LeaveSanctionRuleRepository(session),
-                                approval_service=ApprovalRequestService(
-                                    session=session,
-                                    proc_repo=ApprovalProcessRepository(session),
-                                    request_repo=req_repo,
-                                    step_repo=ApprovalStepRepository(session),
-                                    notification_repo=NotificationRepository(session),
-                                ),
+                                approval_service=ApprovalRequestService(session),
                             )
                             try:
                                 leave_svc.set_sanctioned_days(

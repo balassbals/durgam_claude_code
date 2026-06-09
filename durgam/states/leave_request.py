@@ -44,31 +44,20 @@ def _fmt_date(d: date | None) -> str:
 
 
 def _build_svc(session):
-    from durgam.repositories.approval_process import ApprovalProcessRepository
-    from durgam.repositories.approval_request import ApprovalRequestRepository
-    from durgam.repositories.approval_step import ApprovalStepRepository
     from durgam.repositories.leave import (
         LeaveBalanceRepository,
         LeaveRepository,
         LeaveSanctionRuleRepository,
     )
-    from durgam.repositories.notification import NotificationRepository
     from durgam.services.approval_request import ApprovalRequestService
     from durgam.services.leave_request import LeaveRequestService
 
-    approval_svc = ApprovalRequestService(
-        session=session,
-        proc_repo=ApprovalProcessRepository(session),
-        request_repo=ApprovalRequestRepository(session),
-        step_repo=ApprovalStepRepository(session),
-        notification_repo=NotificationRepository(session),
-    )
     return LeaveRequestService(
         session=session,
         leave_repo=LeaveRepository(session),
         balance_repo=LeaveBalanceRepository(session),
         rule_repo=LeaveSanctionRuleRepository(session),
-        approval_service=approval_svc,
+        approval_service=ApprovalRequestService(session),
     )
 
 

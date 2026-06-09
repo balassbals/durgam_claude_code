@@ -241,6 +241,7 @@ def seed(session: Session) -> dict[str, int]:
         {"resource": "leave_sanction_rule", "action": "read",      "scope": "*"},
         # Late attendance marker (M8 — HR admin logs markers pre-attendance module)
         {"resource": "late_attendance",  "action": "write",     "scope": "*"},
+        {"resource": "late_attendance",  "action": "read",      "scope": "*"},
         {"resource": "late_attendance",  "action": "read",      "scope": "department"},
         # Audit log (M2 placeholder)
         {"resource": "audit_log",        "action": "read",      "scope": "*"},
@@ -456,6 +457,9 @@ def seed(session: Session) -> dict[str, int]:
         ("program_import",             "write",     "*"),
         # M5b — non-regular faculty approval (Registrar family is also institutional approver)
         ("non_regular_faculty",        "approve",   "*"),
+        # M8 — Registrar family can view + configure the leave sanction matrix
+        ("leave_sanction_rule",        "configure", "*"),
+        ("leave_sanction_rule",        "read",      "*"),
     ]
 
     _HOD_SPECIFIC = [
@@ -508,6 +512,10 @@ def seed(session: Session) -> dict[str, int]:
         ("ug_timetable",               "delete",    "*"),
         # M5b — non-regular faculty approval (Director is institutional approver §7.1)
         ("non_regular_faculty",        "approve",   "*"),
+        # M8 — Director family logs late-attendance markers for their campus (scope:* for v1;
+        # campus-scoped filtering deferred to post-M10 once Faculty/Campus assignment hardens)
+        ("late_attendance",            "write",     "*"),
+        ("late_attendance",            "read",      "*"),
     ]
 
     # M4 — IQAC can read/write calendar, read student category

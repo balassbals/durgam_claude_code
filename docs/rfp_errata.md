@@ -564,3 +564,43 @@ import UIs.
   adjusting the routing is a `scripts/seed.py` change, not a code change. The approval
   engine handles any channel length and role composition without code changes. Flag
   for stakeholder confirmation before production deployment.
+
+---
+
+## E-015 — VC approval visibility via Registrar; post-approval notification fan-out
+
+**Status**: Acknowledged. Deferred to a follow-up milestone (likely a small M8.1 hotfix or rolled into M9 prep).
+
+**Source**: Bala's institutional clarification during M8 gate verification (2026-06-09).
+
+**Gap in v3 RFP**: §11.10 sanctioning authority matrix lists VC as the formal sanctioner for many (leave_type, applicant) combinations but does not capture two operational realities:
+
+1. The Registrar acts as a visibility/relay role for VC-bound approvals — the Registrar sees all pending VC-final leave requests and prompts the VC out-of-band. This is a CC/notification flow, not a formal approval gate. Implementation: extend `LEAVE_APPROVAL.cc_role_codes` to include REGISTRAR (and probably DEPUTY_REGISTRAR, REGISTRAR_OFFICE) alongside the existing HR_HEAD.
+
+2. On terminal approval of a leave, the following roles must be notified in addition to the requestor: REGISTRAR (and Registrar's office tier), the campus DIRECTOR for the requestor's campus, and the HoD (and AHoD if AHoD is on the channel) of the requestor's department. This is a notification policy beyond what M4's calendar emails or M7's CC-on-approval shipped.
+
+**Disposition**: A follow-up milestone will:
+- Add REGISTRAR tier to `LEAVE_APPROVAL.cc_role_codes`.
+- Add a notification rule (or service extension) that on terminal approval of a LeaveRequest emits notifications to: requestor, REGISTRAR tier, campus DIRECTOR, requestor's HoD/AHoD. Depends on the resolution of TD-032 (notification dispatch worker) — without a dispatch worker, rows accumulate but don't deliver. Either resolve TD-032 first or accept that the notification rows are written but undelivered until then.
+- Decide whether Registrar is purely informational (current direction) or whether a formal "Registrar review" stage should be added to the channel before VC. Per Bala's wording ("registrar must be able to see so that he can inform vc"), informational/CC is the current direction.
+
+---
+
+## E-016 — Legacy leave balance import for live deployment
+
+**Status**: Acknowledged. Deferred to a follow-up milestone.
+
+**Source**: Bala's institutional clarification during M8 gate verification (2026-06-09): the institute has been running for many years; the leave subsystem must boot on top of existing employee histories, not greenfield.
+
+**Gap in v3 RFP**: §11 assumes greenfield deployment. No provision exists for migrating existing employees' accumulated leave balances. Accumulating leaves (EL, HPL, CML) span tenure across academic years; AY-scoped leaves (CL, SCL) need current-AY-to-date populated. Without a bootstrap mechanism, every employee starts with zero balances when M8 is enabled, which would silently misrepresent everyone's actual entitlements.
+
+**Disposition**: A follow-up milestone will provide a bulk-import + per-employee-form admin page at `/admin/leave/balance-import`:
+
+- Target roles: SYSTEM_ADMIN, REGISTRAR, DEPUTY_REGISTRAR, REGISTRAR_OFFICE, DIRECTOR, DEPUTY_DIRECTOR, DIRECTOR_OFFICE.
+- Input shape: CSV with columns `employee_username`, `leave_type`, `opening_balance`, `credited`, `availed`, `encashed`. Plus a per-employee form for individual corrections.
+- Target: for each row, upsert the `LeaveBalance` row keyed on (employee_user_id, leave_type, active academic_year_id). Recompute `closing_balance` per the standard formula.
+- Audit: one auditlog row per upserted balance row with diff_json.
+- Idempotency: re-running the same CSV produces zero net change.
+- Concurrency with the credit job: a manual import while the credit job is running is unlikely (manual is one-time at go-live), but the import must respect the same `_check_ay_locked()` guard the credit job uses.
+
+**Conceptual model confirmation** (for the implementer): the M8 `LeaveBalance` model already supports tenure-accumulating leaves correctly. Each row is `(employee, leave_type, academic_year_id)` scoped, and `opening_balance` is the carry-over from the prior AY's `closing_balance`. The credit job adds to `credited` over time; accumulation caps (300 EL / 180 HPL) are enforced in the credit job. The bootstrap is purely "populate opening_balance for the current active AY for each (employee, leave_type) pair to reflect each employee's historical accumulation."
