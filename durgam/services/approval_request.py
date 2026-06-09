@@ -27,6 +27,7 @@ from durgam.repositories.approval_request import ApprovalRequestRepository
 from durgam.repositories.approval_step import ApprovalStepRepository
 from durgam.services.approval_routing import (
     ApprovalRoutingError,
+    get_requestor_scope_chain,
     resolve_stage_approvers,
 )
 
@@ -54,6 +55,7 @@ class ApprovalRequestService:
         title: str,
         payload: dict[str, Any] | None = None,
         upward_attachment_file_ids: list[UUID] | None = None,
+        resolved_channel: list[dict[str, Any]] | None = None,
     ) -> ApprovalRequest:
         process = self._proc_repo.get_by_id(process_id)
         if process is None:
@@ -68,6 +70,7 @@ class ApprovalRequestService:
             requestor_user_id=requestor_user_id,
             title=title.strip(),
             payload_json=payload,
+            resolved_channel_json=resolved_channel,  # E1: M8 leave-rule driven channel
             state="submitted",
             current_stage=1,
             created_by=requestor_user_id,
@@ -83,7 +86,8 @@ class ApprovalRequestService:
             "approval_upward",
         )
 
-        channel = process.channel_role_codes or []
+        # E1: use resolved_channel_json when set (M8), else process channel (M7).
+        channel = self._get_channel_for_stage(request, process)
         auto_approved = False
         while self._should_skip_stage(request, process):
             old_stage = request.current_stage
@@ -212,8 +216,11 @@ class ApprovalRequestService:
 
         self._validate_downward_attachments(process, downward_attachment_file_ids)
 
-        channel = process.channel_role_codes or []
-        role_code = channel[request.current_stage - 1]
+        # E5: use resolved channel; extract role_code and recommend_only from entry.
+        channel = self._get_channel_for_stage(request, process)
+        entry = channel[request.current_stage - 1]
+        role_code = entry["role_code"] if isinstance(entry, dict) else entry
+        recommend_only = entry.get("recommend_only", False) if isinstance(entry, dict) else False
         now = datetime.now(UTC)
 
         step = ApprovalStep(
@@ -221,7 +228,7 @@ class ApprovalRequestService:
             stage=request.current_stage,
             approver_role_code=role_code,
             approver_user_id=approver_user_id,
-            decision="approved",
+            decision="recommended" if recommend_only else "approved",
             comment=comment,
             decided_at=now,
         )
@@ -233,7 +240,8 @@ class ApprovalRequestService:
             "approval_downward",
         )
 
-        is_terminal = request.current_stage >= len(channel)
+        # recommend_only stages are never terminal; they advance without final callbacks.
+        is_terminal = (not recommend_only) and (request.current_stage >= len(channel))
 
         if is_terminal:
             self._req_repo.update_state(request, "approved", decided_at=now)
@@ -387,8 +395,10 @@ class ApprovalRequestService:
                 "You are not an approver for the current stage."
             )
 
-        channel = process.channel_role_codes or []
-        role_code = channel[request.current_stage - 1]
+        # E6: extract role_code via helper (handles M8 dict entries).
+        channel = self._get_channel_for_stage(request, process)
+        entry = channel[request.current_stage - 1]
+        role_code = entry["role_code"] if isinstance(entry, dict) else entry
         now = datetime.now(UTC)
 
         step = ApprovalStep(
@@ -437,6 +447,8 @@ class ApprovalRequestService:
             session=self._session,
         )
 
+        self._run_post_rejection(request, process, approver_user_id)  # E6
+
         log.info(
             "approval_request_rejected",
             request_id=str(request.id),
@@ -477,6 +489,7 @@ class ApprovalRequestService:
                 process=process,
                 action="withdraw",
             )
+            self._run_post_withdrawal(request, process)  # E7
 
         write_audit_row(
             actor_user_id=requestor_user_id,
@@ -638,20 +651,109 @@ class ApprovalRequestService:
         if file_ids:
             self._session.flush()
 
+    def _get_channel_for_stage(
+        self, request: ApprovalRequest, process: ApprovalProcess
+    ) -> list:
+        """Return the channel list for routing this request.
+
+        Prefers request.resolved_channel_json when it is a non-empty list
+        (M8 leave-rule-driven channels); falls back to process.channel_role_codes
+        (M7 static-template channels).
+
+        Uses isinstance(list) rather than truthiness so MagicMock(spec=...) in
+        unit tests does not accidentally trigger the M8 path.
+        """
+        channel = request.resolved_channel_json
+        if isinstance(channel, list) and channel:
+            return channel
+        return process.channel_role_codes or []
+
     def _resolve_approvers(
         self,
         request: ApprovalRequest,
         process: ApprovalProcess,
     ) -> list[User]:
-        try:
-            return resolve_stage_approvers(
-                request=request,
-                process=process,
-                session=self._session,
-            )
-        except ApprovalRoutingError as e:
-            log.warning("approver_resolution_failed", error=str(e))
+        channel = self._get_channel_for_stage(request, process)
+        stage_idx = request.current_stage - 1
+        if stage_idx < 0 or stage_idx >= len(channel):
             return []
+        entry = channel[stage_idx]
+        role_code = entry["role_code"] if isinstance(entry, dict) else entry
+
+        if not isinstance(request.resolved_channel_json, list):
+            # M7 path: delegate to the existing routing function unchanged.
+            try:
+                return resolve_stage_approvers(
+                    request=request, process=process, session=self._session
+                )
+            except ApprovalRoutingError as e:
+                log.warning("approver_resolution_failed", error=str(e))
+                return []
+
+        # M8 path: extracted role_code + scope-chain routing.
+        return self._lookup_approvers_for_role(role_code, request)
+
+    def _lookup_approvers_for_role(
+        self, role_code: str, request: ApprovalRequest
+    ) -> list[User]:
+        """Scope-chain approver lookup used on the M8 path (resolved_channel_json set).
+
+        Mirrors the algorithm in resolve_stage_approvers, called with an already-extracted
+        role_code (dict entries in resolved_channel_json have been unwrapped by the caller).
+        """
+        role = self._session.exec(
+            select(Role).where(
+                Role.code == role_code,
+                Role.is_deleted == False,  # noqa: E712
+            )
+        ).first()
+        if role is None:
+            log.warning("_lookup_approvers_for_role: role not found", role_code=role_code)
+            return []
+
+        scope_chain = get_requestor_scope_chain(request.requestor_user_id, self._session)
+
+        for scope_type, scope_id in scope_chain:
+            if scope_type is None:
+                holders = self._session.exec(
+                    select(UserRole).where(
+                        UserRole.role_id == role.id,
+                        UserRole.scope_type.is_(None),  # type: ignore[union-attr]
+                    )
+                ).all()
+            else:
+                holders = self._session.exec(
+                    select(UserRole).where(
+                        UserRole.role_id == role.id,
+                        UserRole.scope_type == scope_type,
+                        UserRole.scope_id == scope_id,
+                    )
+                ).all()
+
+            if holders:
+                users: list[User] = []
+                seen: set[UUID] = set()
+                for h in holders:
+                    if h.user_id not in seen:
+                        user = self._session.exec(
+                            select(User).where(
+                                User.id == h.user_id,
+                                User.is_deleted == False,  # noqa: E712
+                                User.is_active == True,  # noqa: E712
+                            )
+                        ).first()
+                        if user is not None:
+                            users.append(user)
+                            seen.add(h.user_id)
+                if users:
+                    return users
+
+        log.warning(
+            "_lookup_approvers_for_role: no holder found",
+            role_code=role_code,
+            request_id=str(request.id),
+        )
+        return []
 
     def _should_skip_stage(
         self,
@@ -659,7 +761,7 @@ class ApprovalRequestService:
         process: ApprovalProcess,
     ) -> bool:
         """True if the requestor is the sole approver at the current stage."""
-        channel = process.channel_role_codes or []
+        channel = self._get_channel_for_stage(request, process)
         if request.current_stage < 1 or request.current_stage > len(channel):
             return False
         approvers = self._resolve_approvers(request, process)
@@ -715,6 +817,29 @@ class ApprovalRequestService:
         ).first()
         return ur is not None
 
+    def finalize_leave_if_auto_approved(
+        self,
+        request_id: UUID,
+        approver_user_id: UUID,
+    ) -> None:
+        """Re-run the leave-finalization callback for auto-approved requests.
+
+        Called by LeaveRequestService.submit() to handle the skip-self case where
+        the approval engine auto-approves during submit() BEFORE the LeaveRequest
+        row is flushed to the DB. After the row is persisted, this re-runs
+        _finalize_leave_from_approval so state and balance are correctly updated.
+        """
+        request = self._req_repo.get_by_id(request_id)
+        if request is None or request.state != "approved":
+            return
+        process = self._proc_repo.get_by_id(request.process_id)
+        if process is None or process.code != "LEAVE_APPROVAL":
+            return
+        # Idempotent: _finalize_leave_from_approval checks sanctioned_days and skips balance
+        # debit if already applied, so re-calling is safe as long as availed is not doubled.
+        # Since the first call returned early (leave_req not in DB), availed was not debited yet.
+        self._finalize_leave_from_approval(request, approver_user_id)
+
     def _run_post_approval(
         self,
         request: ApprovalRequest,
@@ -723,6 +848,72 @@ class ApprovalRequestService:
     ) -> None:
         if process.code == "NRF_APPROVAL":
             self._create_nrf_from_approval(request, approver_user_id)
+        elif process.code == "LEAVE_APPROVAL":  # E9
+            self._finalize_leave_from_approval(request, approver_user_id)
+
+    def _run_post_rejection(
+        self,
+        request: ApprovalRequest,
+        process: ApprovalProcess,
+        rejector_user_id: UUID,
+    ) -> None:
+        """Dispatch domain-specific post-rejection side effects."""
+        if process.code == "LEAVE_APPROVAL":
+            self._update_leave_state(request, "rejected")
+
+    def _run_post_withdrawal(
+        self,
+        request: ApprovalRequest,
+        process: ApprovalProcess,
+    ) -> None:
+        """Dispatch domain-specific post-withdrawal side effects."""
+        if process.code == "LEAVE_APPROVAL":
+            self._update_leave_state(request, "withdrawn")
+
+    def _update_leave_state(self, request: ApprovalRequest, new_state: str) -> None:
+        """Mirror approval state onto the linked LeaveRequest, if any."""
+        from durgam.repositories.leave import LeaveRepository  # deferred import per M7 pattern
+        leave_id = (request.payload_json or {}).get("leave_request_id")
+        if not leave_id:
+            return
+        repo = LeaveRepository(self._session)
+        leave_req = repo.get(UUID(leave_id))
+        if leave_req is None:
+            return
+        leave_req.state = new_state
+        repo.save(leave_req)
+
+    def _finalize_leave_from_approval(
+        self, request: ApprovalRequest, approver_user_id: UUID
+    ) -> None:
+        """LEAVE_APPROVAL terminal-approval callback: debit balance and mark LeaveRequest approved."""
+        from durgam.repositories.leave import LeaveBalanceRepository, LeaveRepository  # deferred
+        leave_id = (request.payload_json or {}).get("leave_request_id")
+        if not leave_id:
+            return
+        leave_repo = LeaveRepository(self._session)
+        leave_req = leave_repo.get(UUID(leave_id))
+        if leave_req is None:
+            return
+        # If approver did not partial-modify, sanctioned == chargeable
+        if leave_req.sanctioned_days is None:
+            leave_req.sanctioned_days = leave_req.chargeable_days
+        leave_req.state = "approved"
+        leave_repo.save(leave_req)
+        # Debit balance for types that draw from a running balance
+        if leave_req.leave_type not in {"EOL", "SL"}:
+            bal_repo = LeaveBalanceRepository(self._session)
+            # CML debits HPL balance at 2x per §11.6.d; check_balance already enforced ceiling
+            bal_leave_type = "HPL" if leave_req.leave_type == "CML" else leave_req.leave_type
+            debit_factor = 2.0 if leave_req.leave_type == "CML" else 1.0
+            balance = bal_repo.get_or_create(
+                leave_req.requestor_user_id,
+                bal_leave_type,
+                leave_req.academic_year_id,
+                actor_id=approver_user_id,
+            )
+            balance.availed += leave_req.sanctioned_days * debit_factor
+            bal_repo.save(balance)
 
     _NRF_REQUIRED_KEYS = frozenset({
         "department_id", "name", "designation", "organization",

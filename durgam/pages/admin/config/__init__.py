@@ -52,6 +52,7 @@ register(NavEntry(
         ("write",     "purchase_committee_template",     None),
         ("write",     "approval_process",                None),
         ("write",     "designation",                     None),
+        ("configure", "leave_sanction_rule",             None),
     ),
 ))
 register(NavEntry(
@@ -278,4 +279,13 @@ register(NavEntry(
     group="Config",
     permission_action="write",
     permission_resource="approval_process",
+))
+# ── M8 nav entries ─────────────────────────────────────────────────────────────
+register(NavEntry(
+    label="Leave Matrix",
+    href="/admin/config/leave-sanction-matrix",
+    icon="table-2",
+    group="Config",
+    permission_action="configure",
+    permission_resource="leave_sanction_rule",
 ))

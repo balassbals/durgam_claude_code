@@ -644,6 +644,54 @@ the direct and table-based pathways.
 
 ---
 
+### TD-033 — non_regular_faculty.approval_request_id FK drift between migration and model
+
+**Location:** `durgam/models/config_anchors.py` (`approval_request_id` field on `NonRegularFaculty`); migration `6484a8b6dcee_add_approval_request_id_to_non_regular_.py`.
+
+**What it is:** A prior migration created the FK with `ondelete='SET NULL'`, but the SQLModel field declaration on `NonRegularFaculty.approval_request_id` lacks the matching `ondelete='SET NULL'` annotation. Alembic autogenerate detects this as drift on every subsequent revision and attempts to drop and recreate the FK with the model's (incorrect) default behaviour. Caught and stripped from the Phase 1 M8 migration (`56c90a7f65bd`); the drift itself is unresolved.
+
+**Why this is not a production issue:** Runtime cascade behaviour is governed by the DB schema, which currently carries the correct `ondelete='SET NULL'`. The drift is a model-annotation gap, not a runtime defect. The 1017-test regression suite passes unchanged.
+
+**Trigger to re-open:** Next milestone that touches `non_regular_faculty` or that needs a clean autogen baseline. Resolution: update the SQLModel field to declare `ondelete='SET NULL'` so model and DB agree; this generates an empty autogen diff (a clean fixture for future migrations).
+
+---
+
+### TD-035 — Teacher EL credit formula incomplete pending Attendance Module (M13)
+
+**Location:** `durgam/tasks/leave_jobs.py` (`credit_periodic_el_hpl` task, `_credit_el` helper); RFP §11.5.
+
+**What it is:** EL credit for vacation (teaching) employees has three components per RFP §11.5: (a) one day per completed month of service, (b) extra days for vacation-duty performed during summer/winter vacation periods, (c) adjustments for leave-without-pay periods. Only component (a) is implemented. Components (b) and (c) require the `VacationDutyRecord` and `LWPRecord` tables which are deferred to M13 (Attendance Module). The current formula (`days_since_last_credit / 30.0`) is an under-credit for teachers who performed vacation duty; it is never an over-credit, so balances are conservative.
+
+**Why this is not a production issue:** The formula is conservative — no teacher is given more leave than they earned. The shortfall can be corrected retroactively when M13 ships by running the credit job with historical reference dates or via a one-time adjustment script.
+
+**Trigger to re-open:** M13 Attendance Module ships `VacationDutyRecord` and `LWPRecord`. Resolution: extend `_credit_el` to query these tables and add components (b) and (c) to the teacher formula.
+
+---
+
+### TD-036 — CL annual credit at AY start not implemented
+
+**Location**: `durgam/tasks/leave_jobs.py` (no job exists yet for CL annual credit); related: `durgam/repositories/leave.py` `LeaveBalanceRepository.get_or_create` (lazy-creates with all-zero fields).
+
+**What it is**: Per RFP §11.3 / PDF §XXVIII clause 14, every employee receives 10 (vacation/teaching) or 12 (non-vacation) days of CL at the start of each academic year (proportionate for partial year). Phase 6 shipped four periodic jobs but none of them credits CL at AY start; `LeaveBalance.get_or_create` creates rows with `closing_balance=0`. As a result, no employee can request CL via the UI until their balance is manually seeded.
+
+**Why this is gating real-world use**: A faculty user logs in, sees CL closing=0, submits a CL request, gets "Insufficient CL balance". The bootstrap admin page (E-016) will populate this for the go-live moment, but at each subsequent AY rollover the entitlement also needs to be re-credited automatically.
+
+**Trigger to re-open**: Either E-016 bootstrap admin page ships with a "credit annual CL entitlement" button, OR a new Celery beat job `credit_annual_cl` runs on the AY rollover date (which is itself tracked by the AY rollover lock Celery job).
+
+---
+
+### TD-034 — `db_session` fixture not isolated from `seeded_db_engine` in bare-pytest discovery
+
+**Location:** `tests/conftest.py` (`db_session` fixture + `seeded_db_engine` session-scoped fixture); affected tests: 8× `tests/unit/test_audit_label_resolver.py::Test*Resolver::test_label` (M6b); 2× `tests/unit/test_leave_sanction_rule.py::test_load_from_yaml_inserts_all_rules` + `::test_load_from_yaml_idempotent` (M8 Phase 4).
+
+**What it is:** `db_session` and `seeded_session` point at the same physical `durgam_test` database. `db_session` rolls back per-test, but only undoes writes made by THAT test — not seed data committed by `seeded_db_engine` initialization. In bare `pytest` discovery (alphabetical: `e2e/` → `integration/` → `property/` → `unit/`), integration tests run first and trigger `seeded_db_engine`, populating the shared DB. Unit tests that follow and assert "clean DB" (e.g., zero pre-existing rules) see the seed data and fail. The same suite passes when invoked as `pytest tests/unit/ tests/integration/` because that path order doesn't trigger `seeded_db_engine` before the affected unit tests.
+
+**Why this is not a production issue:** The gate ritual in `docs/prompts/gate_verification.md` invokes `pytest tests/unit/ tests/integration/` (scoped), where all 10 affected tests pass. No production code path depends on the fixture's behaviour. The failures only manifest in bare `pytest` discovery, which is not part of any gate.
+
+**Trigger to re-open:** A milestone that needs to support bare `pytest` invocation in CI, OR a contributor running bare `pytest` locally is misled by the failures. Resolution: redesign `db_session` to use a savepoint-based truly clean DB (separate test DB per worker, or savepoint-and-truncate strategy), or rewrite the 10 affected tests to be insensitive to pre-existing seed data.
+
+---
+
 ## Resolved
 
 ### TD-002 — SAWarning: transaction already deassociated from connection (resolved in m0-cleanup)

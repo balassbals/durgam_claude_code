@@ -24,11 +24,10 @@ class TestSeed:
         db_session.commit()
 
         # Assert TOTAL row counts after seed (stable regardless of pre-existing data).
-        # M5b R2: 27 roles (26 prior − 4 DEAN variants + 5 new: FACULTY, LIBRARIAN,
-        # PLACEMENT_OFFICER, CESRC_COORDINATOR, CENTRE_COORDINATOR).
-        assert _count(db_session, Role) == 27, "Expected 27 seeded roles at M5b"
-        # M7: 101 triples (100 prior + approval_request:approve:*).
-        assert _count(db_session, Permission) == 101, "Expected 101 seeded permission triples at M7"
+        # M8 Phase 4: 32 roles (30 prior + PROFESSOR, ASSOC_PROFESSOR).
+        assert _count(db_session, Role) == 32, "Expected 32 seeded roles at M8 Phase 4"
+        # M8: 114 triples (101 prior + 13 new M8 leave/sanction/late-attendance triples).
+        assert _count(db_session, Permission) == 115, "Expected 115 seeded permission triples at M8 hotfix"
         assert _count(db_session, User) >= 25, "Expected at least 25 seeded users"
         assert _count(db_session, RolePermission) >= 100, "Expected at least 100 role→permission rows"
         ay = db_session.exec(select(AcademicYear).where(AcademicYear.code == "2025-26")).first()

@@ -119,9 +119,10 @@ def seed(session: Session) -> dict[str, int]:
 
     # ── Roles ─────────────────────────────────────────────────────────────────
     # Role levels reflect organisational hierarchy (OQ-M4-4):
-    # SYSTEM_ADMIN=100 · VC family=90-85 · REGISTRAR/FINANCE=80 · DIRECTOR/CPC_CHAIR=75
+    # SYSTEM_ADMIN=100 · VC family=90-85 · REGISTRAR/FINANCE/COE=80 · DIRECTOR/CPC_CHAIR=75
     # · REGISTRAR sub=77-73 · DEPUTY_DIRECTOR=72 · IQAC=71 · DEAN_*=70
-    # · DIRECTOR_OFFICE=69 · HOD family=50-42 · STUDENT=10 · BASIC_USER=1
+    # · DIRECTOR_OFFICE=69 · HR_HEAD=60 · HOD family=50-42 · HR_OFFICE=45
+    # · LIBRARIAN etc=40 · FACULTY=30 · STUDENT=10 · BASIC_USER=1
     # on_conflict_do_update so re-seeding repairs any level drift (e.g. DEAN 50→70).
     roles_data = [
         # Technical admin (cross-cutting; not in org hierarchy)
@@ -130,6 +131,8 @@ def seed(session: Session) -> dict[str, int]:
         {"code": "REGISTRAR",            "name": "Registrar",               "level": 80},
         {"code": "DEPUTY_REGISTRAR",     "name": "Deputy Registrar",        "level": 77},
         {"code": "REGISTRAR_OFFICE",     "name": "Registrar Office",        "level": 73},
+        # Controller of Examinations (university level; M8)
+        {"code": "CONTROLLER_OF_EXAMINATIONS", "name": "Controller of Examinations", "level": 80},
         # Director family (campus-level; M4)
         {"code": "DIRECTOR",             "name": "Director",                "level": 75},
         {"code": "DEPUTY_DIRECTOR",      "name": "Deputy Director",         "level": 72},
@@ -143,6 +146,9 @@ def seed(session: Session) -> dict[str, int]:
         # Academic affairs (M5b — assignment config ownership)
         {"code": "DEAN_ACADEMIC_AFFAIRS",       "name": "Dean of Academic Affairs",                    "level": 70},
         {"code": "DEAN_ACADEMIC_AFFAIRS_OFFICE", "name": "Dean of Academic Affairs Office",            "level": 69},
+        # HR family (M8 — late attendance tracking + leave admin)
+        {"code": "HR_HEAD",              "name": "HR Head",                            "level": 60},
+        {"code": "HR_OFFICE",            "name": "HR Office",                          "level": 45},
         # HoD family
         {"code": "HOD",                  "name": "Head of Department",                 "level": 50},
         {"code": "AHOD",                 "name": "Associate Head of Department",       "level": 45},
@@ -154,6 +160,11 @@ def seed(session: Session) -> dict[str, int]:
         {"code": "FINANCE_OFFICER",      "name": "Finance Officer",                    "level": 80},
         # CPC (M5b — Central Purchase Committee)
         {"code": "CPC_CHAIRPERSON",      "name": "Central Purchase Committee Chairperson", "level": 75},
+        # Faculty designation roles (M8 — used in leave sanctioning matrix pre-M10 Faculty)
+        # v1: users hold PROFESSOR or ASSOC_PROFESSOR role in addition to FACULTY when applicable.
+        # Lecturer-tier faculty hold only FACULTY (routes to Director per §22.I.iii).
+        {"code": "PROFESSOR",            "name": "Professor",                          "level": 75},
+        {"code": "ASSOC_PROFESSOR",      "name": "Associate Professor",                "level": 73},
         # Faculty (dept-scoped via UserRole; M10 Faculty model deferred)
         {"code": "FACULTY",              "name": "Faculty",                            "level": 30},
         # Library, placements, centres
@@ -211,9 +222,27 @@ def seed(session: Session) -> dict[str, int]:
         {"resource": "department",       "action": "read",      "scope": "school"},
         {"resource": "department",       "action": "read",      "scope": "department"},
         {"resource": "department",       "action": "write",     "scope": "department"},
-        # Leave request (M2 placeholder)
+        # Leave request (M2 placeholder — dept-scoped; extended in M8)
         {"resource": "leave_request",    "action": "read",      "scope": "department"},
         {"resource": "leave_request",    "action": "approve",   "scope": "department"},
+        # Leave request — M8 full set
+        {"resource": "leave_request",    "action": "create",    "scope": "*"},
+        {"resource": "leave_request",    "action": "read",      "scope": "own"},
+        {"resource": "leave_request",    "action": "read",      "scope": "*"},
+        {"resource": "leave_request",    "action": "approve",   "scope": "*"},
+        {"resource": "leave_request",    "action": "withdraw",  "scope": "own"},
+        {"resource": "leave_request",    "action": "cancel",    "scope": "*"},
+        # Leave balance (M8)
+        {"resource": "leave_balance",    "action": "read",      "scope": "own"},
+        {"resource": "leave_balance",    "action": "read",      "scope": "*"},
+        {"resource": "leave_balance",    "action": "write",     "scope": "*"},
+        # Leave sanction rule (M8 — sys admin configures the sanctioning matrix)
+        {"resource": "leave_sanction_rule", "action": "configure", "scope": "*"},
+        {"resource": "leave_sanction_rule", "action": "read",      "scope": "*"},
+        # Late attendance marker (M8 — HR admin logs markers pre-attendance module)
+        {"resource": "late_attendance",  "action": "write",     "scope": "*"},
+        {"resource": "late_attendance",  "action": "read",      "scope": "*"},
+        {"resource": "late_attendance",  "action": "read",      "scope": "department"},
         # Audit log (M2 placeholder)
         {"resource": "audit_log",        "action": "read",      "scope": "*"},
         # ── M3 new triples ────────────────────────────────────────────────────
@@ -389,6 +418,15 @@ def seed(session: Session) -> dict[str, int]:
         ("class_coordinator_assignment", "read", "*"),
     ]
 
+    # M8 — permissions for all employees who can submit leave requests.
+    # Excludes STUDENT and BASIC_USER (no leave entitlement).
+    _LEAVE_REQUESTOR = [
+        ("leave_request", "create",   "*"),
+        ("leave_request", "read",     "own"),
+        ("leave_request", "withdraw", "own"),
+        ("leave_balance", "read",     "own"),
+    ]
+
     _REGISTRAR_SPECIFIC = [
         ("university_vision_mission",  "write",     "*"),
         ("class_timings_config",       "configure", "*"),
@@ -419,6 +457,9 @@ def seed(session: Session) -> dict[str, int]:
         ("program_import",             "write",     "*"),
         # M5b — non-regular faculty approval (Registrar family is also institutional approver)
         ("non_regular_faculty",        "approve",   "*"),
+        # M8 — Registrar family can view + configure the leave sanction matrix
+        ("leave_sanction_rule",        "configure", "*"),
+        ("leave_sanction_rule",        "read",      "*"),
     ]
 
     _HOD_SPECIFIC = [
@@ -471,6 +512,10 @@ def seed(session: Session) -> dict[str, int]:
         ("ug_timetable",               "delete",    "*"),
         # M5b — non-regular faculty approval (Director is institutional approver §7.1)
         ("non_regular_faculty",        "approve",   "*"),
+        # M8 — Director family logs late-attendance markers for their campus (scope:* for v1;
+        # campus-scoped filtering deferred to post-M10 once Faculty/Campus assignment hardens)
+        ("late_attendance",            "write",     "*"),
+        ("late_attendance",            "read",      "*"),
     ]
 
     # M4 — IQAC can read/write calendar, read student category
@@ -528,26 +573,48 @@ def seed(session: Session) -> dict[str, int]:
         ("approval_request",            "approve", "*"),
     ]
 
+    # M8 — Controller of Examinations: same approval scope as VC/Registrar for leave
+    _CONTROLLER_OF_EXAMINATIONS_SPECIFIC = [
+        ("leave_request",              "read",      "department"),
+        ("leave_request",              "approve",   "*"),
+        ("approval_request",           "approve",   "*"),
+    ]
+
+    # M8 — HR Head: leave admin (read all requests + balances + write late-attendance)
+    _HR_HEAD_SPECIFIC = [
+        ("leave_request",              "read",      "*"),
+        ("leave_balance",              "read",      "*"),
+        ("late_attendance",            "write",     "*"),
+        ("late_attendance",            "read",      "department"),
+    ]
+
+    # M8 — HR Office: read leave requests + balances (no write on late attendance)
+    _HR_OFFICE_SPECIFIC = [
+        ("leave_request",              "read",      "*"),
+        ("leave_balance",              "read",      "*"),
+        ("late_attendance",            "read",      "department"),
+    ]
+
     role_perm_map: dict[str, list[tuple[str, str, str]]] = {
-        "REGISTRAR":            _PUBLIC_READ + _REGISTRAR_SPECIFIC + [
+        "REGISTRAR":            _PUBLIC_READ + _LEAVE_REQUESTOR + _REGISTRAR_SPECIFIC + [
             ("approval_request",           "approve",   "*"),
         ],
-        "DEPUTY_REGISTRAR":     _PUBLIC_READ + _REGISTRAR_SPECIFIC + [
+        "DEPUTY_REGISTRAR":     _PUBLIC_READ + _LEAVE_REQUESTOR + _REGISTRAR_SPECIFIC + [
             ("approval_request",           "approve",   "*"),
         ],
-        "REGISTRAR_OFFICE":     _PUBLIC_READ + _REGISTRAR_SPECIFIC,
-        "DIRECTOR":             _PUBLIC_READ + _DIRECTOR_SPECIFIC,
-        "DEPUTY_DIRECTOR":      _PUBLIC_READ + _DIRECTOR_SPECIFIC,
-        "DIRECTOR_OFFICE":      _PUBLIC_READ + _DIRECTOR_SPECIFIC,
-        "IQAC_COORDINATOR":     _PUBLIC_READ + _IQAC_SPECIFIC,
-        "DEAN":                 _PUBLIC_READ + _DEAN_SPECIFIC + [
+        "REGISTRAR_OFFICE":     _PUBLIC_READ + _LEAVE_REQUESTOR + _REGISTRAR_SPECIFIC,
+        "DIRECTOR":             _PUBLIC_READ + _LEAVE_REQUESTOR + _DIRECTOR_SPECIFIC,
+        "DEPUTY_DIRECTOR":      _PUBLIC_READ + _LEAVE_REQUESTOR + _DIRECTOR_SPECIFIC,
+        "DIRECTOR_OFFICE":      _PUBLIC_READ + _LEAVE_REQUESTOR + _DIRECTOR_SPECIFIC,
+        "IQAC_COORDINATOR":     _PUBLIC_READ + _LEAVE_REQUESTOR + _IQAC_SPECIFIC,
+        "DEAN":                 _PUBLIC_READ + _LEAVE_REQUESTOR + _DEAN_SPECIFIC + [
             ("approval_request",           "approve",   "*"),
         ],
-        "DEAN_STUDENT_WELFARE": _PUBLIC_READ + _DEAN_SW_SPECIFIC,
-        "DEAN_STUDENT_WELFARE_OFFICE": _PUBLIC_READ + _DEAN_SW_SPECIFIC,
-        "DEAN_ACADEMIC_AFFAIRS": _PUBLIC_READ + _DEAN_AA_SPECIFIC,
-        "DEAN_ACADEMIC_AFFAIRS_OFFICE": _PUBLIC_READ + _DEAN_AA_SPECIFIC,
-        "HOD":                  _PUBLIC_READ + _HOD_SPECIFIC + [
+        "DEAN_STUDENT_WELFARE": _PUBLIC_READ + _LEAVE_REQUESTOR + _DEAN_SW_SPECIFIC,
+        "DEAN_STUDENT_WELFARE_OFFICE": _PUBLIC_READ + _LEAVE_REQUESTOR + _DEAN_SW_SPECIFIC,
+        "DEAN_ACADEMIC_AFFAIRS": _PUBLIC_READ + _LEAVE_REQUESTOR + _DEAN_AA_SPECIFIC,
+        "DEAN_ACADEMIC_AFFAIRS_OFFICE": _PUBLIC_READ + _LEAVE_REQUESTOR + _DEAN_AA_SPECIFIC,
+        "HOD":                  _PUBLIC_READ + _LEAVE_REQUESTOR + _HOD_SPECIFIC + [
             ("class_teacher_assignment",   "read",      "*"),
             ("class_teacher_assignment",   "write",     "*"),
             ("class_teacher_assignment",   "delete",    "*"),
@@ -555,7 +622,7 @@ def seed(session: Session) -> dict[str, int]:
             ("class_coordinator_assignment", "write",   "*"),
             ("class_coordinator_assignment", "delete",  "*"),
         ],
-        "AHOD":                 _PUBLIC_READ + _HOD_SPECIFIC + [
+        "AHOD":                 _PUBLIC_READ + _LEAVE_REQUESTOR + _HOD_SPECIFIC + [
             ("class_teacher_assignment",   "read",      "*"),
             ("class_teacher_assignment",   "write",     "*"),
             ("class_teacher_assignment",   "delete",    "*"),
@@ -563,7 +630,7 @@ def seed(session: Session) -> dict[str, int]:
             ("class_coordinator_assignment", "write",   "*"),
             ("class_coordinator_assignment", "delete",  "*"),
         ],
-        "HOD_OFFICE":           _PUBLIC_READ + [
+        "HOD_OFFICE":           _PUBLIC_READ + _LEAVE_REQUESTOR + [
             ("calendar_entry",             "read",      "*"),
             ("calendar_entry",             "write",     "*"),
             ("student_category_count",     "read",      "*"),
@@ -577,19 +644,26 @@ def seed(session: Session) -> dict[str, int]:
             ("course_import",              "write",     "*"),
         ],
         # M5b/M7 — approver/channel roles
-        "VC":                   _PUBLIC_READ + [
+        "VC":                   _PUBLIC_READ + _LEAVE_REQUESTOR + [
             ("approval_request",           "approve",   "*"),
         ],
-        "VC_OFFICE":            _PUBLIC_READ,
-        "FINANCE_OFFICER":      _PUBLIC_READ + _FINANCE_SPECIFIC,
-        "CPC_CHAIRPERSON":      _PUBLIC_READ + [
+        "VC_OFFICE":            _PUBLIC_READ + _LEAVE_REQUESTOR,
+        "FINANCE_OFFICER":      _PUBLIC_READ + _LEAVE_REQUESTOR + _FINANCE_SPECIFIC,
+        "CPC_CHAIRPERSON":      _PUBLIC_READ + _LEAVE_REQUESTOR + [
             ("approval_request",           "approve",   "*"),
         ],
-        "FACULTY":              _PUBLIC_READ,
-        "LIBRARIAN":            _PUBLIC_READ,
-        "PLACEMENT_OFFICER":    _PUBLIC_READ,
-        "CESRC_COORDINATOR":    _PUBLIC_READ,
-        "CENTRE_COORDINATOR":   _PUBLIC_READ,
+        # M8 — new roles
+        "CONTROLLER_OF_EXAMINATIONS": _PUBLIC_READ + _LEAVE_REQUESTOR + _CONTROLLER_OF_EXAMINATIONS_SPECIFIC,
+        "HR_HEAD":              _PUBLIC_READ + _LEAVE_REQUESTOR + _HR_HEAD_SPECIFIC,
+        "HR_OFFICE":            _PUBLIC_READ + _LEAVE_REQUESTOR + _HR_OFFICE_SPECIFIC,
+        # Faculty designation roles (M8 — inherit PUBLIC_READ + LEAVE_REQUESTOR)
+        "PROFESSOR":            _PUBLIC_READ + _LEAVE_REQUESTOR + [("approval_request", "approve", "*")],
+        "ASSOC_PROFESSOR":      _PUBLIC_READ + _LEAVE_REQUESTOR + [("approval_request", "approve", "*")],
+        "FACULTY":              _PUBLIC_READ + _LEAVE_REQUESTOR,
+        "LIBRARIAN":            _PUBLIC_READ + _LEAVE_REQUESTOR,
+        "PLACEMENT_OFFICER":    _PUBLIC_READ + _LEAVE_REQUESTOR,
+        "CESRC_COORDINATOR":    _PUBLIC_READ + _LEAVE_REQUESTOR,
+        "CENTRE_COORDINATOR":   _PUBLIC_READ + _LEAVE_REQUESTOR,
         "STUDENT":              _PUBLIC_READ,
         "BASIC_USER":           _PUBLIC_READ,
     }
@@ -654,13 +728,20 @@ def seed(session: Session) -> dict[str, int]:
     #   placement_officer_user / Placement_Dev1!XZ — PLACEMENT_OFFICER (M5b-R2)
     #   cesrc_coord_user / Cesrc_Dev1!XZ — CESRC_COORDINATOR (M5b-R2)
     #   center_coord_user / Center_Dev1!XZ — CENTRE_COORDINATOR (M5b-R2)
+    #   vc_user / ViceChancellor_Dev1!XZ — VC unscoped (M8)
     users_data = [
+        # M8 employment fields added: gender ('M'|'F'|'O'|None), joined_on (date|None),
+        # employee_type (regular_teaching|regular_non_teaching|honorary_*|superannuated_*|visiting_fellow)
+        # faculty_user is gender="F", joined_on=date(2022,6,1) — maternity-eligible fixture (≥1y service).
         {
             "email": "sys.admin@sssihl.edu.in",
             "username": "sys_admin",
             "full_name": "System Administrator",
             "role_code": "SYSTEM_ADMIN",
             "plain_password": "SysAdmin_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2015, 6, 1),
+            "employee_type": "regular_non_teaching",
         },
         {
             "email": "dean.sci@sssihl.edu.in",
@@ -668,6 +749,9 @@ def seed(session: Session) -> dict[str, int]:
             "full_name": "Dean Sciences",
             "role_code": "DEAN",
             "plain_password": "DeanSci_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2018, 6, 1),
+            "employee_type": "regular_teaching",
         },
         {
             "email": "student.001@sssihl.edu.in",
@@ -699,6 +783,9 @@ def seed(session: Session) -> dict[str, int]:
             "full_name": "University Registrar",
             "role_code": "REGISTRAR",
             "plain_password": "Registrar_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2018, 6, 1),
+            "employee_type": "regular_non_teaching",
         },
         {
             "email": "hod.dmacs@sssihl.edu.in",
@@ -708,6 +795,9 @@ def seed(session: Session) -> dict[str, int]:
             # Only BASIC_USER is assigned here; see the scoped-roles block below.
             "role_code": "BASIC_USER",
             "plain_password": "HodDmacs_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2018, 6, 1),
+            "employee_type": "regular_teaching",
         },
         # M4 demo users
         {
@@ -717,6 +807,9 @@ def seed(session: Session) -> dict[str, int]:
             # DIRECTOR role is campus-scoped — assigned after campuses are seeded.
             "role_code": "BASIC_USER",
             "plain_password": "DirectorPsn_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2015, 6, 1),
+            "employee_type": "regular_teaching",
         },
         {
             "email": "iqac.coordinator@sssihl.edu.in",
@@ -724,6 +817,9 @@ def seed(session: Session) -> dict[str, int]:
             "full_name": "IQAC Coordinator",
             "role_code": "IQAC_COORDINATOR",
             "plain_password": "IqacCoord_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2018, 6, 1),
+            "employee_type": "regular_non_teaching",
         },
         {
             "email": "dean.sw@sssihl.edu.in",
@@ -731,6 +827,9 @@ def seed(session: Session) -> dict[str, int]:
             "full_name": "Dean of Student Welfare",
             "role_code": "DEAN_STUDENT_WELFARE",
             "plain_password": "DeanSW_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2018, 6, 1),
+            "employee_type": "regular_non_teaching",
         },
         # M5b demo users
         {
@@ -739,6 +838,9 @@ def seed(session: Session) -> dict[str, int]:
             "full_name": "Finance Officer",
             "role_code": "FINANCE_OFFICER",
             "plain_password": "Finance_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2018, 6, 1),
+            "employee_type": "regular_non_teaching",
         },
         {
             "email": "dean.aa@sssihl.edu.in",
@@ -746,6 +848,9 @@ def seed(session: Session) -> dict[str, int]:
             "full_name": "Dean of Academic Affairs",
             "role_code": "DEAN_ACADEMIC_AFFAIRS",
             "plain_password": "DeanAA_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2018, 6, 1),
+            "employee_type": "regular_non_teaching",
         },
         # M5b-R2 demo users (13 new)
         {
@@ -754,6 +859,9 @@ def seed(session: Session) -> dict[str, int]:
             "full_name": "Registrar Office Staff",
             "role_code": "REGISTRAR_OFFICE",
             "plain_password": "RegOffice_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2018, 6, 1),
+            "employee_type": "regular_non_teaching",
         },
         {
             "email": "deputy.registrar@sssihl.edu.in",
@@ -761,6 +869,9 @@ def seed(session: Session) -> dict[str, int]:
             "full_name": "Deputy Registrar",
             "role_code": "DEPUTY_REGISTRAR",
             "plain_password": "DeputyReg_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2018, 6, 1),
+            "employee_type": "regular_non_teaching",
         },
         {
             "email": "hod.office.dmacs@sssihl.edu.in",
@@ -768,6 +879,9 @@ def seed(session: Session) -> dict[str, int]:
             "full_name": "HoD Office DMACS",
             "role_code": "BASIC_USER",
             "plain_password": "HodOffice_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2018, 6, 1),
+            "employee_type": "regular_non_teaching",
         },
         {
             "email": "ahod.dmacs@sssihl.edu.in",
@@ -775,6 +889,9 @@ def seed(session: Session) -> dict[str, int]:
             "full_name": "Associate HoD Mathematics and Computer Science",
             "role_code": "BASIC_USER",
             "plain_password": "AhodDmacs_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2018, 6, 1),
+            "employee_type": "regular_teaching",
         },
         {
             "email": "director.office.psn@sssihl.edu.in",
@@ -782,6 +899,9 @@ def seed(session: Session) -> dict[str, int]:
             "full_name": "Director Office Prasanthi Nilayam",
             "role_code": "BASIC_USER",
             "plain_password": "DirOffice_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2018, 6, 1),
+            "employee_type": "regular_non_teaching",
         },
         {
             "email": "deputy.director.psn@sssihl.edu.in",
@@ -789,6 +909,9 @@ def seed(session: Session) -> dict[str, int]:
             "full_name": "Deputy Director Prasanthi Nilayam",
             "role_code": "BASIC_USER",
             "plain_password": "DeputyDir_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2018, 6, 1),
+            "employee_type": "regular_teaching",
         },
         {
             "email": "dsw.office@sssihl.edu.in",
@@ -796,6 +919,9 @@ def seed(session: Session) -> dict[str, int]:
             "full_name": "Dean Student Welfare Office Staff",
             "role_code": "DEAN_STUDENT_WELFARE_OFFICE",
             "plain_password": "DSWOffice_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2018, 6, 1),
+            "employee_type": "regular_non_teaching",
         },
         {
             "email": "daa.office@sssihl.edu.in",
@@ -803,6 +929,9 @@ def seed(session: Session) -> dict[str, int]:
             "full_name": "Dean Academic Affairs Office Staff",
             "role_code": "DEAN_ACADEMIC_AFFAIRS_OFFICE",
             "plain_password": "DaaOffice_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2018, 6, 1),
+            "employee_type": "regular_non_teaching",
         },
         {
             "email": "faculty.dmacs@sssihl.edu.in",
@@ -810,6 +939,10 @@ def seed(session: Session) -> dict[str, int]:
             "full_name": "Faculty Member DMACS",
             "role_code": "BASIC_USER",
             "plain_password": "Faculty_Dev1!XZ",
+            # M8: gender="F", joined_on 2022-06-01 → ≥1y service by 2026-06-08 → ML-eligible fixture
+            "gender": "F",
+            "joined_on": date(2022, 6, 1),
+            "employee_type": "regular_teaching",
         },
         {
             "email": "librarian@sssihl.edu.in",
@@ -817,6 +950,9 @@ def seed(session: Session) -> dict[str, int]:
             "full_name": "University Librarian",
             "role_code": "LIBRARIAN",
             "plain_password": "Librarian_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2018, 6, 1),
+            "employee_type": "regular_non_teaching",
         },
         {
             "email": "placement@sssihl.edu.in",
@@ -824,6 +960,9 @@ def seed(session: Session) -> dict[str, int]:
             "full_name": "Placement Officer",
             "role_code": "PLACEMENT_OFFICER",
             "plain_password": "Placement_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2018, 6, 1),
+            "employee_type": "regular_non_teaching",
         },
         {
             "email": "cesrc@sssihl.edu.in",
@@ -831,6 +970,9 @@ def seed(session: Session) -> dict[str, int]:
             "full_name": "CESRC Coordinator",
             "role_code": "CESRC_COORDINATOR",
             "plain_password": "Cesrc_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2018, 6, 1),
+            "employee_type": "regular_non_teaching",
         },
         {
             "email": "centre.coord@sssihl.edu.in",
@@ -838,6 +980,20 @@ def seed(session: Session) -> dict[str, int]:
             "full_name": "Centre of Excellence Coordinator",
             "role_code": "CENTRE_COORDINATOR",
             "plain_password": "Center_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2018, 6, 1),
+            "employee_type": "regular_non_teaching",
+        },
+        # M8 demo user
+        {
+            "email": "vc@sssihl.edu.in",
+            "username": "vc_user",
+            "full_name": "Vice-Chancellor",
+            "role_code": "VC",
+            "plain_password": "ViceChancellor_Dev1!XZ",
+            "gender": "M",
+            "joined_on": date(2015, 6, 1),
+            "employee_type": "regular_teaching",
         },
     ]
     user_inserted = 0
@@ -846,6 +1002,10 @@ def seed(session: Session) -> dict[str, int]:
         plain = u.pop("plain_password")
         is_active = u.pop("is_active", True)
         must_change = u.pop("must_change_password", False)
+        # M8 employment fields — default to None/non-teaching for users that don't specify
+        gender = u.pop("gender", None)
+        joined_on_val = u.pop("joined_on", None)
+        employee_type = u.pop("employee_type", "regular_non_teaching")
         new_hash = hash_password(plain)
 
         stmt = (
@@ -855,6 +1015,9 @@ def seed(session: Session) -> dict[str, int]:
                 password_hash=new_hash,
                 is_active=is_active,
                 must_change_password=must_change,
+                gender=gender,
+                joined_on=joined_on_val,
+                employee_type=employee_type,
             )
             .on_conflict_do_update(
                 constraint="uq_users_email",
@@ -864,6 +1027,9 @@ def seed(session: Session) -> dict[str, int]:
                     "must_change_password": must_change,
                     "failed_login_count": 0,
                     "locked_until": None,
+                    "gender": gender,
+                    "joined_on": joined_on_val,
+                    "employee_type": employee_type,
                 },
             )
         )
@@ -2113,6 +2279,66 @@ def seed(session: Session) -> dict[str, int]:
         .on_conflict_do_nothing(constraint="uq_approval_processes_code"),
     )
     counts["approval_processes"] += dsw_inserted
+
+    # ── ApprovalProcess — LEAVE_APPROVAL (M8) ───────────────────────────────
+    # Generic leave-request approval. Per-request channel is resolved at
+    # submit-time via LeaveSanctionAuthorityRule (Path A architecture).
+    # channel_role_codes = union of all sanctioner roles in the leave matrix;
+    # this drives is_channel_approver() nav gating without hard-coding any
+    # specific channel — the actual approval channel is in resolved_channel_json
+    # on each individual ApprovalRequest row.
+    leave_inserted = _exec_insert(
+        session,
+        pg_insert(ApprovalProcess)
+        .values(
+            code="LEAVE_APPROVAL",
+            title="Leave Approval",
+            # Any authenticated user may apply for leave; requestor gating is via
+            # the leave UI, not the ApprovalProcess template.
+            requestor_role_codes=None,
+            # Union of all sanctioner roles in the leave matrix — drives
+            # is_channel_approver() nav gating so these roles see the Approvals link.
+            channel_role_codes=[
+                "DIRECTOR", "VC", "REGISTRAR",
+                "FINANCE_OFFICER", "CONTROLLER_OF_EXAMINATIONS",
+            ],
+            informational_cc_role_codes=["HR_HEAD"],
+            is_finance=False,
+        )
+        .on_conflict_do_update(
+            constraint="uq_approval_processes_code",
+            set_={
+                "channel_role_codes": [
+                    "DIRECTOR", "VC", "REGISTRAR",
+                    "FINANCE_OFFICER", "CONTROLLER_OF_EXAMINATIONS",
+                ],
+                "informational_cc_role_codes": ["HR_HEAD"],
+            },
+        ),
+    )
+    counts["approval_processes"] += leave_inserted
+
+    # ── LeaveSanctionAuthorityRule — load from YAML (M8) ─────────────────────
+    # Idempotent: upsert on natural key; soft-deletes orphans.
+    from pathlib import Path as _Path
+
+    from durgam.repositories.leave import LeaveSanctionRuleRepository
+    from durgam.services.leave_sanction_rule import LeaveSanctionRuleService
+
+    _leave_repo = LeaveSanctionRuleRepository(session)
+    _leave_svc = LeaveSanctionRuleService(session, _leave_repo)
+    _yaml_path = _Path(__file__).parent.parent / "seeds" / "leave_sanction_matrix.yaml"
+    _leave_actor = sys_admin_user.id if sys_admin_user else _seed_actor_id
+    _matrix_counts = _leave_svc.load_from_yaml(_yaml_path, actor_id=_leave_actor)
+    counts["leave_sanction_rules_inserted"] = _matrix_counts["inserted"]
+    counts["leave_sanction_rules_updated"] = _matrix_counts["updated"]
+    counts["leave_sanction_rules_orphaned"] = _matrix_counts["orphaned_soft_deleted"]
+    log.info(
+        "leave_matrix_seeded",
+        inserted=_matrix_counts["inserted"],
+        updated=_matrix_counts["updated"],
+        orphaned=_matrix_counts["orphaned_soft_deleted"],
+    )
 
     session.commit()
     return counts

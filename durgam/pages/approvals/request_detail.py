@@ -200,6 +200,172 @@ def _description_section() -> rx.Component:
     )
 
 
+def _leave_type_badge(code: rx.Var) -> rx.Component:
+    return rx.match(
+        code,
+        ("CL",  rx.badge("Casual Leave",         color_scheme="blue",   size="2")),
+        ("SCL", rx.badge("Special Casual Leave",  color_scheme="violet", size="2")),
+        ("EL",  rx.badge("Earned Leave",          color_scheme="green",  size="2")),
+        ("HPL", rx.badge("Half Pay Leave",        color_scheme="orange", size="2")),
+        ("CML", rx.badge("Commuted Leave",        color_scheme="amber",  size="2")),
+        ("EOL", rx.badge("Extraordinary Leave",   color_scheme="red",    size="2")),
+        ("ML",  rx.badge("Maternity Leave",       color_scheme="pink",   size="2")),
+        ("SL",  rx.badge("Study Leave",           color_scheme="indigo", size="2")),
+        rx.badge(code, size="2"),
+    )
+
+
+def _leave_details_section() -> rx.Component:
+    return rx.vstack(
+        rx.text(
+            "Leave Request Details",
+            font_weight="700",
+            font_size="1rem",
+            color="var(--color-primary)",
+            font_family="var(--font-sans)",
+        ),
+        rx.box(
+            _kv_row("Leave Type", _leave_type_badge(RequestDetailState.leave_type)),
+            _kv_row("From", RequestDetailState.leave_starts_on),
+            _kv_row("To",   RequestDetailState.leave_ends_on),
+            _kv_row("Chargeable Days", RequestDetailState.leave_chargeable_days),
+            rx.cond(
+                RequestDetailState.leave_sanctioned_days_current > 0,
+                _kv_row("Sanctioned Days", RequestDetailState.leave_sanctioned_days_current),
+                rx.fragment(),
+            ),
+            _kv_row("Leave State", RequestDetailState.leave_state),
+            width="100%",
+        ),
+        # Balance summary
+        rx.cond(
+            RequestDetailState.leave_requestor_balance,
+            rx.box(
+                rx.text(
+                    "Requestor's Current Balance",
+                    font_size="0.8rem",
+                    font_weight="600",
+                    color="var(--color-muted)",
+                    margin_bottom="0.5rem",
+                ),
+                rx.hstack(
+                    rx.vstack(
+                        rx.text("Closing", font_size="0.75rem", color="var(--color-muted)"),
+                        rx.text(RequestDetailState.leave_requestor_balance["closing"], font_weight="600"),
+                        align="center",
+                    ),
+                    rx.vstack(
+                        rx.text("Availed", font_size="0.75rem", color="var(--color-muted)"),
+                        rx.text(RequestDetailState.leave_requestor_balance["availed"], font_weight="600"),
+                        align="center",
+                    ),
+                    rx.vstack(
+                        rx.text("Credited", font_size="0.75rem", color="var(--color-muted)"),
+                        rx.text(RequestDetailState.leave_requestor_balance["credited"], font_weight="600"),
+                        align="center",
+                    ),
+                    gap="2rem",
+                ),
+                background="var(--color-surface-2, #f9f6f2)",
+                border="1px solid var(--color-rule)",
+                border_radius="6px",
+                padding="0.75rem",
+                margin_top="0.5rem",
+            ),
+            rx.fragment(),
+        ),
+        # Uploaded documents
+        rx.cond(
+            RequestDetailState.leave_has_medical_cert
+            | RequestDetailState.leave_has_fitness_cert
+            | RequestDetailState.leave_has_bond,
+            rx.vstack(
+                rx.text(
+                    "Uploaded Documents",
+                    font_size="0.85rem",
+                    font_weight="600",
+                    color="var(--color-muted)",
+                    margin_top="0.5rem",
+                ),
+                rx.cond(
+                    RequestDetailState.leave_has_medical_cert,
+                    rx.link(
+                        "Medical Certificate",
+                        href=DOWNLOAD_PREFIX + RequestDetailState.leave_medical_cert_file_id,
+                        target="_blank",
+                        font_size="0.85rem",
+                    ),
+                    rx.fragment(),
+                ),
+                rx.cond(
+                    RequestDetailState.leave_has_fitness_cert,
+                    rx.link(
+                        "Fitness Certificate",
+                        href=DOWNLOAD_PREFIX + RequestDetailState.leave_fitness_cert_file_id,
+                        target="_blank",
+                        font_size="0.85rem",
+                    ),
+                    rx.fragment(),
+                ),
+                rx.cond(
+                    RequestDetailState.leave_has_bond,
+                    rx.link(
+                        "Bond",
+                        href=DOWNLOAD_PREFIX + RequestDetailState.leave_bond_file_id,
+                        target="_blank",
+                        font_size="0.85rem",
+                    ),
+                    rx.fragment(),
+                ),
+                align="start",
+                gap="0.25rem",
+            ),
+            rx.fragment(),
+        ),
+        # Sanctioned-days input (for sanctioner who can decide, non-recommend stage)
+        rx.cond(
+            RequestDetailState.can_decide & ~RequestDetailState.current_stage_is_recommend_only,
+            rx.vstack(
+                rx.text(
+                    "Partial Sanction (optional)",
+                    font_size="0.85rem",
+                    font_weight="500",
+                    color="var(--color-muted)",
+                ),
+                rx.hstack(
+                    rx.input(
+                        type="number",
+                        step="0.5",
+                        placeholder=f"Up to {RequestDetailState.leave_chargeable_days} days",
+                        value=RequestDetailState.sanctioned_days_input,
+                        on_change=RequestDetailState.set_sanctioned_days_input,
+                        size="2",
+                        width="160px",
+                    ),
+                    rx.text(
+                        "Leave blank to sanction the full chargeable amount.",
+                        font_size="0.78rem",
+                        color="var(--color-muted)",
+                    ),
+                    gap="0.75rem",
+                    align="center",
+                    flex_wrap="wrap",
+                ),
+                align="start",
+                gap="0.25rem",
+            ),
+            rx.fragment(),
+        ),
+        align="start",
+        gap="0.5rem",
+        width="100%",
+        padding="1.25rem",
+        background="white",
+        border="1px solid var(--color-rule)",
+        border_radius="6px",
+    )
+
+
 def _nrf_details_section() -> rx.Component:
     return rx.vstack(
         rx.text(
@@ -592,9 +758,17 @@ def _decision_section() -> rx.Component:
                 font_family="var(--font-sans)",
             ),
             rx.hstack(
-                primary_btn(
-                    approve_label,
-                    on_click=RequestDetailState.open_approve_dialog,
+                rx.cond(
+                    RequestDetailState.current_stage_is_recommend_only,
+                    primary_btn(
+                        "Recommend to next stage",
+                        on_click=RequestDetailState.recommend_stage,
+                        disabled=RequestDetailState.decision_submitting,
+                    ),
+                    primary_btn(
+                        approve_label,
+                        on_click=RequestDetailState.open_approve_dialog,
+                    ),
                 ),
                 destructive_btn(
                     "Reject",
@@ -676,6 +850,11 @@ def request_detail_page() -> rx.Component:
                         rx.cond(
                             RequestDetailState.request["process_code"].to(str) == "NRF_APPROVAL",
                             _nrf_details_section(),
+                            rx.fragment(),
+                        ),
+                        rx.cond(
+                            RequestDetailState.is_leave_request,
+                            _leave_details_section(),
                             rx.fragment(),
                         ),
                         _attachments_section(

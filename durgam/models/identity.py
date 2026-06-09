@@ -1,6 +1,6 @@
 """Identity, roles, and permission models (§8.1)."""
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, ClassVar, cast
 from uuid import UUID
 
@@ -35,6 +35,18 @@ class User(TimestampedSoftDelete, table=True):
     pan_enc: str | None = Field(default=None, max_length=128)
     failed_login_count: int = Field(default=0, nullable=False)
     locked_until: datetime | None = Field(default=None, sa_type=_TIMESTAMPTZ, nullable=True)
+
+    # M8 employment fields — required for leave eligibility checks
+    gender: str | None = Field(default=None, max_length=1, nullable=True)
+    # 'M' | 'F' | 'O' | None; required for ML eligibility (§11.8)
+
+    joined_on: date | None = Field(default=None, nullable=True)
+    # Employment start date; required for service-years check (ML ≥1y, SL ≥5y)
+
+    employee_type: str = Field(default="regular_non_teaching", max_length=32, nullable=False)
+    # Values: regular_teaching | regular_non_teaching | honorary_teaching |
+    #         honorary_non_teaching | superannuated_teaching |
+    #         superannuated_non_teaching | visiting_fellow
 
     roles: list["UserRole"] = Relationship(back_populates="user")
 

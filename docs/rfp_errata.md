@@ -564,3 +564,168 @@ import UIs.
   adjusting the routing is a `scripts/seed.py` change, not a code change. The approval
   engine handles any channel length and role composition without code changes. Flag
   for stakeholder confirmation before production deployment.
+
+---
+
+## E-015 — VC approval visibility via Registrar; post-approval notification fan-out
+
+**Status**: Acknowledged. Deferred to a follow-up milestone (likely a small M8.1 hotfix or rolled into M9 prep).
+
+**Source**: Bala's institutional clarification during M8 gate verification (2026-06-09).
+
+**Gap in v3 RFP**: §11.10 sanctioning authority matrix lists VC as the formal sanctioner for many (leave_type, applicant) combinations but does not capture two operational realities:
+
+1. The Registrar acts as a visibility/relay role for VC-bound approvals — the Registrar sees all pending VC-final leave requests and prompts the VC out-of-band. This is a CC/notification flow, not a formal approval gate. Implementation: extend `LEAVE_APPROVAL.cc_role_codes` to include REGISTRAR (and probably DEPUTY_REGISTRAR, REGISTRAR_OFFICE) alongside the existing HR_HEAD.
+
+2. On terminal approval of a leave, the following roles must be notified in addition to the requestor: REGISTRAR (and Registrar's office tier), the campus DIRECTOR for the requestor's campus, and the HoD (and AHoD if AHoD is on the channel) of the requestor's department. This is a notification policy beyond what M4's calendar emails or M7's CC-on-approval shipped.
+
+**Disposition**: A follow-up milestone will:
+- Add REGISTRAR tier to `LEAVE_APPROVAL.cc_role_codes`.
+- Add a notification rule (or service extension) that on terminal approval of a LeaveRequest emits notifications to: requestor, REGISTRAR tier, campus DIRECTOR, requestor's HoD/AHoD. Depends on the resolution of TD-032 (notification dispatch worker) — without a dispatch worker, rows accumulate but don't deliver. Either resolve TD-032 first or accept that the notification rows are written but undelivered until then.
+- Decide whether Registrar is purely informational (current direction) or whether a formal "Registrar review" stage should be added to the channel before VC. Per Bala's wording ("registrar must be able to see so that he can inform vc"), informational/CC is the current direction.
+
+---
+
+## E-016 — Legacy leave balance import for live deployment
+
+**Status**: Acknowledged. Deferred to a follow-up milestone.
+
+**Source**: Bala's institutional clarification during M8 gate verification (2026-06-09): the institute has been running for many years; the leave subsystem must boot on top of existing employee histories, not greenfield.
+
+**Gap in v3 RFP**: §11 assumes greenfield deployment. No provision exists for migrating existing employees' accumulated leave balances. Accumulating leaves (EL, HPL, CML) span tenure across academic years; AY-scoped leaves (CL, SCL) need current-AY-to-date populated. Without a bootstrap mechanism, every employee starts with zero balances when M8 is enabled, which would silently misrepresent everyone's actual entitlements.
+
+**Disposition**: A follow-up milestone will provide a bulk-import + per-employee-form admin page at `/admin/leave/balance-import`:
+
+- Target roles: SYSTEM_ADMIN, REGISTRAR, DEPUTY_REGISTRAR, REGISTRAR_OFFICE, DIRECTOR, DEPUTY_DIRECTOR, DIRECTOR_OFFICE.
+- Input shape: CSV with columns `employee_username`, `leave_type`, `opening_balance`, `credited`, `availed`, `encashed`. Plus a per-employee form for individual corrections.
+- Target: for each row, upsert the `LeaveBalance` row keyed on (employee_user_id, leave_type, active academic_year_id). Recompute `closing_balance` per the standard formula.
+- Audit: one auditlog row per upserted balance row with diff_json.
+- Idempotency: re-running the same CSV produces zero net change.
+- Concurrency with the credit job: a manual import while the credit job is running is unlikely (manual is one-time at go-live), but the import must respect the same `_check_ay_locked()` guard the credit job uses.
+
+**Conceptual model confirmation** (for the implementer): the M8 `LeaveBalance` model already supports tenure-accumulating leaves correctly. Each row is `(employee, leave_type, academic_year_id)` scoped, and `opening_balance` is the carry-over from the prior AY's `closing_balance`. The credit job adds to `credited` over time; accumulation caps (300 EL / 180 HPL) are enforced in the credit job. The bootstrap is purely "populate opening_balance for the current active AY for each (employee, leave_type) pair to reflect each employee's historical accumulation."
+
+---
+
+## E-017 — Withdraw leave after approval
+
+**Status**: Acknowledged. Deferred.
+
+**Source**: Bala's clarification during M8 gate verification (2026-06-09).
+
+**Gap in v3 RFP**: §11 specifies withdraw (cancel by requestor) only for pending/in-review leave requests. v1 implementation supports withdraw only in non-terminal states. Bala's institutional reality: an approved leave should also be withdrawable if circumstances change (employee decides to attend office despite approved leave). On withdraw-post-approval the requestor must provide a reason, the LeaveBalance.availed must be reverted (re-credit the days), and notifications must fan out to HoD/AHoD/Director.
+
+**Disposition**: A follow-up milestone will (a) extend LeaveRequestService.withdraw to accept a `reason` argument when current state is "approved", (b) re-credit the balance via the same path used for partial sanction reversal (decrement availed, increment closing_balance, audit row), (c) enqueue notifications to the requestor's HoD/AHoD (current campus) and campus Director. Depends on TD-032 resolution for actual delivery; until then notification rows accumulate.
+
+---
+
+## E-018 — Matrix CRUD form UX (dropdowns + priority help text)
+
+**Status**: Acknowledged. Deferred.
+
+**Source**: Bala's clarification during M8 gate verification (2026-06-09).
+
+**Gap in v3 RFP**: §11.15 specifies admin matrix editability but is silent on form UX. v1 form uses free-text inputs for applicant_role_code, sanctioner_role_code, recommend_via_role_code, and scope_type — error-prone (typos allow garbage rules). The priority integer field also lacks inline explanation.
+
+**Disposition**: A follow-up milestone will convert the four role/scope text inputs to dropdowns populated from the live roles table (and a fixed scope_type enum), and add inline help text for priority: "Lower numbers win. Specific rules (e.g., applicant_role_code=PROFESSOR) should use lower priority (10-30); wildcard rules (e.g., applicant_role_code=*) should use higher priority (100+)."
+
+---
+
+## E-019 — Campus-scoped Director approval routing
+
+**Status**: Acknowledged. Deferred to M10.
+
+**Source**: Bala's clarification during M8 gate verification (2026-06-09).
+
+**Gap in v3 RFP**: §11.10 matrix rules have `scope_type=campus` on FACULTY→DIRECTOR rules, but the v1 approval engine routes any DIRECTOR with the right role to approve any FACULTY's leave. True campus enforcement requires the Faculty/Campus assignment model that ships in M10. Until then, all Directors see all Faculty leave requests in their inbox.
+
+**Disposition**: M10 will add campus-scoped routing to the approval engine — when `scope_type=campus` is set on the rule, the approver must hold the role in the SAME campus as the requestor. The existing `LeaveSanctionAuthorityRule.scope_type='campus'` already in the YAML matrix becomes meaningful at that point.
+
+---
+
+## E-020 — ApprovalProcess-driven SCL auto-credit
+
+**Status**: Acknowledged. Deferred.
+
+**Source**: Bala's clarification during M8 gate verification (2026-06-09).
+
+**Gap in v3 RFP**: §11.4 defines SCL as granted by the management for specific purposes (training, conferences, presentations) but does not specify the operational pathway. v1 implementation requires a faculty member who has been approved for, say, a conference to submit a SECOND request (via /leave → Apply → SCL) to record their SCL days — duplicative and error-prone. The institutional intent (per Bala's clarification) is that the SAME approval which granted the activity (conference, training, workshop) should also automatically register the SCL days against the requestor's leave records, without a separate leave submission.
+
+**Required design**:
+
+1. Extend `ApprovalProcess` (durgam/models/crosscutting.py) with two new fields:
+   - `requires_scl: bool = False` — flag exposed in the admin approval-process form.
+   - `default_scl_days: float | None = None` — default day count, pre-filled in the requestor's submit form, overridable.
+
+2. Admin approval-process create/edit form (M7 admin page) exposes both fields.
+
+3. M7 generic submit-request form (`SubmitRequestState`) conditionally renders an "SCL days needed" input when the chosen ApprovalProcess has `requires_scl=True`. The requestor's selected value is stored on the ApprovalRequest (likely on `payload_json`).
+
+4. `ApprovalRequestService._run_post_approval` gets a new branch: when `process.requires_scl=True` and the stage just approved is terminal, auto-create a `LeaveRequest` with:
+   - `leave_type='SCL'`
+   - `state='approved'`
+   - `sanctioned_days = chargeable_days = payload_json['scl_days_requested']` (or the process default if absent)
+   - `requestor_user_id = approval_request.requestor_user_id`
+   - `approval_request_id = approval_request.id` (links back)
+   - `academic_year_id = active AY at terminal-approval time`
+   - `starts_on / ends_on`: needs design decision — likely picked up from the requestor's "event dates" if the process collects them, or just a single-row marker dated to today.
+   - `reason = f"Auto-credited from {process.title} approval"`
+5. Audit row written. Notification enqueued to requestor.
+
+6. The Phase 8.2 SCL balance skip (check_balance) already makes the auto-credit balance-neutral — there's no balance ceiling for SCL. The history table on /leave shows the SCL row automatically.
+
+**Trigger to re-open**: A future milestone (likely M8.1 follow-up or M9 prep) that has bandwidth for a model migration + two form updates + a post-approval hook + tests.
+
+**Cross-cutting**: depends on E-017 (withdraw post-approval) for the case where the parent ApprovalRequest is withdrawn after terminal-approval — the auto-created SCL LeaveRequest would also need reversal.
+## E-021 — HoD/AhoD recommend-via stage for FACULTY leave requests
+
+**Status**: Acknowledged. Deferred to M10 (Faculty/Department assignment milestone).
+
+**Source**: Bala's clarification during M8 gate verification (2026-06-09).
+
+**Gap in v3 RFP**: §11.10 sanctioning matrix specifies FACULTY → DIRECTOR (campus-scoped) for CL/EL/HPL/CML/ML. The institutional reality: every faculty leave request must first pass through the requestor's HoD or AhoD as a recommend-only stage, before reaching the Director. The current v1 matrix routes FACULTY directly to DIRECTOR, skipping the department-head review.
+
+**Required matrix rewrite**:
+- For each of CL/EL/HPL/CML/ML where applicant_role_code=FACULTY: add `recommend_via_role_code=HOD` and (optionally) handle AhoD fallback when HoD is vacant.
+- Director and Professor/Assoc Professor are NOT routed through HoD (they don't have one above them in the department chain).
+- For SCL: today FACULTY routes through DIRECTOR-recommend → VC-final. Per Bala, HoD should also be in this chain. Possible new shape: FACULTY → HOD (recommend) → DIRECTOR (recommend) → VC (final). Three-stage SCL channel.
+
+**Required engine support**:
+- The matrix's `recommend_via_role_code` field currently holds a single role. To support HoD/AhoD fallback ("use HoD; if no HoD then AhoD"), either: (a) extend the schema to a list, (b) introduce a "tier" abstraction where Phase 4's resolve_channel walks a fallback list, or (c) ship with HoD-only (no AhoD fallback) and accept the gap for departments with vacant HoD.
+- True department-scoped HoD resolution ("the HoD of THIS faculty's department, not any HoD") requires the Faculty/Department assignment model that ships in M10. Until then, even if the matrix said "recommend_via=HOD", the engine cannot resolve to the correct HoD instance.
+
+**Trigger to re-open**: M10 Faculty module ships with Department assignment for Faculty users and a proper department-scope chain in the engine. At that point: update the YAML matrix, add a one-time migration to fix existing requests, document the AhoD fallback policy.
+
+**Cross-cutting**: depends on M10 Faculty/Department model + on E-019 (campus-scoped Director routing — same scope-resolution machinery).
+
+## E-022 — Admin manual edit of leave records
+
+**Status**: Acknowledged. Deferred.
+
+**Source**: Bala's clarification during M8 gate verification (2026-06-09).
+
+**Gap in v3 RFP**: §11 specifies the standard request-and-approve workflow but does not address operational realities where administrative staff need to correct leave records manually — e.g., a typo in sanctioned_days, a balance row needing adjustment after a payroll reconciliation, a faculty who went on emergency leave without applying and the absence needs to be recorded retroactively, or a cancellation reason being updated. v1 implementation has no admin UI for these manual edits; the only path is direct SQL by sys_admin.
+
+**Required design**:
+
+1. New admin page `/admin/leave/balance-edit`:
+   - Search/filter UI for LeaveBalance rows (by employee, leave_type, AY).
+   - Per-row edit form for: opening_balance, credited, availed, forfeited, encashed. closing_balance is recomputed (not directly editable).
+   - Each save writes an auditlog row with diff_json.
+   - Permission: DIRECTOR/DEPUTY_DIRECTOR/DIRECTOR_OFFICE (campus-scoped), REGISTRAR/DEPUTY_REGISTRAR/REGISTRAR_OFFICE (university-scope), SYSTEM_ADMIN.
+
+2. New admin page `/admin/leave/request-edit`:
+   - Search/filter UI for LeaveRequest rows.
+   - Per-row edit form for: dates, sanctioned_days, state (with explicit valid transitions), cancellation_reason, in_charge_designation, address_during_leave.
+   - Cannot edit approval-related fields (approval_request_id is fixed once submitted).
+   - Each save writes audit + propagates side-effects: if state changes from approved → cancelled, re-credit balance via the same path E-017 will use.
+   - Permission same as above.
+
+3. New admin action: "Create retroactive LeaveRequest":
+   - For faculty who went on leave without applying, the admin can record the leave after the fact in a directly-approved state.
+   - LeaveBalance debit happens immediately.
+   - Audit row marks this as a retroactive entry.
+
+**Cross-cutting**: depends on E-017 (withdraw post-approval — same balance reversal logic), E-016 (bootstrap balance import — overlapping admin scope), E-019 (campus-scoped routing — same scope-check machinery).
+
+**Trigger to re-open**: A follow-up milestone with bandwidth for two admin pages + one cross-cutting transition path. Likely M8.1 follow-up or M9 prep, jointly with E-016/E-017.
