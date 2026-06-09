@@ -52,7 +52,7 @@ def test_approver_inbox_reachable_via_nav(page: Page) -> None:
     page.get_by_role("link", name="Approvals", exact=True).click()
     page.wait_for_load_state("networkidle")
 
-    expect(page.get_by_role("heading", name="Approvals Inbox")).to_be_visible(timeout=15_000)
+    expect(page.get_by_role("heading", name="Approval Inbox")).to_be_visible(timeout=15_000)
 
 
 def test_approvals_inbox_page_loads_without_error(page: Page) -> None:
@@ -63,7 +63,7 @@ def test_approvals_inbox_page_loads_without_error(page: Page) -> None:
     page.goto(f"{BASE_URL}/approvals/inbox")
     page.wait_for_load_state("networkidle")
 
-    expect(page.get_by_role("heading", name="Approvals Inbox")).to_be_visible(timeout=15_000)
+    expect(page.get_by_role("heading", name="Approval Inbox")).to_be_visible(timeout=15_000)
     # Inbox may be empty (no pending leave requests in CI seed); that's fine.
     # What must NOT appear is an error page or redirect to login.
     expect(page.get_by_text("Something went wrong", exact=False)).not_to_be_visible()
@@ -87,4 +87,4 @@ def test_student_cannot_reach_approvals_inbox(page: Page) -> None:
     except Exception:
         pass  # if still on /approvals/inbox, the expect below will fail
 
-    expect(page.get_by_role("heading", name="Approvals Inbox")).not_to_be_visible()
+    expect(page.get_by_role("heading", name="Approval Inbox")).not_to_be_visible()
