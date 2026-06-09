@@ -417,6 +417,15 @@ def seed(session: Session) -> dict[str, int]:
         ("class_coordinator_assignment", "read", "*"),
     ]
 
+    # M8 — permissions for all employees who can submit leave requests.
+    # Excludes STUDENT and BASIC_USER (no leave entitlement).
+    _LEAVE_REQUESTOR = [
+        ("leave_request", "create",   "*"),
+        ("leave_request", "read",     "own"),
+        ("leave_request", "withdraw", "own"),
+        ("leave_balance", "read",     "own"),
+    ]
+
     _REGISTRAR_SPECIFIC = [
         ("university_vision_mission",  "write",     "*"),
         ("class_timings_config",       "configure", "*"),
@@ -579,25 +588,25 @@ def seed(session: Session) -> dict[str, int]:
     ]
 
     role_perm_map: dict[str, list[tuple[str, str, str]]] = {
-        "REGISTRAR":            _PUBLIC_READ + _REGISTRAR_SPECIFIC + [
+        "REGISTRAR":            _PUBLIC_READ + _LEAVE_REQUESTOR + _REGISTRAR_SPECIFIC + [
             ("approval_request",           "approve",   "*"),
         ],
-        "DEPUTY_REGISTRAR":     _PUBLIC_READ + _REGISTRAR_SPECIFIC + [
+        "DEPUTY_REGISTRAR":     _PUBLIC_READ + _LEAVE_REQUESTOR + _REGISTRAR_SPECIFIC + [
             ("approval_request",           "approve",   "*"),
         ],
-        "REGISTRAR_OFFICE":     _PUBLIC_READ + _REGISTRAR_SPECIFIC,
-        "DIRECTOR":             _PUBLIC_READ + _DIRECTOR_SPECIFIC,
-        "DEPUTY_DIRECTOR":      _PUBLIC_READ + _DIRECTOR_SPECIFIC,
-        "DIRECTOR_OFFICE":      _PUBLIC_READ + _DIRECTOR_SPECIFIC,
-        "IQAC_COORDINATOR":     _PUBLIC_READ + _IQAC_SPECIFIC,
-        "DEAN":                 _PUBLIC_READ + _DEAN_SPECIFIC + [
+        "REGISTRAR_OFFICE":     _PUBLIC_READ + _LEAVE_REQUESTOR + _REGISTRAR_SPECIFIC,
+        "DIRECTOR":             _PUBLIC_READ + _LEAVE_REQUESTOR + _DIRECTOR_SPECIFIC,
+        "DEPUTY_DIRECTOR":      _PUBLIC_READ + _LEAVE_REQUESTOR + _DIRECTOR_SPECIFIC,
+        "DIRECTOR_OFFICE":      _PUBLIC_READ + _LEAVE_REQUESTOR + _DIRECTOR_SPECIFIC,
+        "IQAC_COORDINATOR":     _PUBLIC_READ + _LEAVE_REQUESTOR + _IQAC_SPECIFIC,
+        "DEAN":                 _PUBLIC_READ + _LEAVE_REQUESTOR + _DEAN_SPECIFIC + [
             ("approval_request",           "approve",   "*"),
         ],
-        "DEAN_STUDENT_WELFARE": _PUBLIC_READ + _DEAN_SW_SPECIFIC,
-        "DEAN_STUDENT_WELFARE_OFFICE": _PUBLIC_READ + _DEAN_SW_SPECIFIC,
-        "DEAN_ACADEMIC_AFFAIRS": _PUBLIC_READ + _DEAN_AA_SPECIFIC,
-        "DEAN_ACADEMIC_AFFAIRS_OFFICE": _PUBLIC_READ + _DEAN_AA_SPECIFIC,
-        "HOD":                  _PUBLIC_READ + _HOD_SPECIFIC + [
+        "DEAN_STUDENT_WELFARE": _PUBLIC_READ + _LEAVE_REQUESTOR + _DEAN_SW_SPECIFIC,
+        "DEAN_STUDENT_WELFARE_OFFICE": _PUBLIC_READ + _LEAVE_REQUESTOR + _DEAN_SW_SPECIFIC,
+        "DEAN_ACADEMIC_AFFAIRS": _PUBLIC_READ + _LEAVE_REQUESTOR + _DEAN_AA_SPECIFIC,
+        "DEAN_ACADEMIC_AFFAIRS_OFFICE": _PUBLIC_READ + _LEAVE_REQUESTOR + _DEAN_AA_SPECIFIC,
+        "HOD":                  _PUBLIC_READ + _LEAVE_REQUESTOR + _HOD_SPECIFIC + [
             ("class_teacher_assignment",   "read",      "*"),
             ("class_teacher_assignment",   "write",     "*"),
             ("class_teacher_assignment",   "delete",    "*"),
@@ -605,7 +614,7 @@ def seed(session: Session) -> dict[str, int]:
             ("class_coordinator_assignment", "write",   "*"),
             ("class_coordinator_assignment", "delete",  "*"),
         ],
-        "AHOD":                 _PUBLIC_READ + _HOD_SPECIFIC + [
+        "AHOD":                 _PUBLIC_READ + _LEAVE_REQUESTOR + _HOD_SPECIFIC + [
             ("class_teacher_assignment",   "read",      "*"),
             ("class_teacher_assignment",   "write",     "*"),
             ("class_teacher_assignment",   "delete",    "*"),
@@ -613,7 +622,7 @@ def seed(session: Session) -> dict[str, int]:
             ("class_coordinator_assignment", "write",   "*"),
             ("class_coordinator_assignment", "delete",  "*"),
         ],
-        "HOD_OFFICE":           _PUBLIC_READ + [
+        "HOD_OFFICE":           _PUBLIC_READ + _LEAVE_REQUESTOR + [
             ("calendar_entry",             "read",      "*"),
             ("calendar_entry",             "write",     "*"),
             ("student_category_count",     "read",      "*"),
@@ -627,26 +636,26 @@ def seed(session: Session) -> dict[str, int]:
             ("course_import",              "write",     "*"),
         ],
         # M5b/M7 — approver/channel roles
-        "VC":                   _PUBLIC_READ + [
+        "VC":                   _PUBLIC_READ + _LEAVE_REQUESTOR + [
             ("approval_request",           "approve",   "*"),
         ],
-        "VC_OFFICE":            _PUBLIC_READ,
-        "FINANCE_OFFICER":      _PUBLIC_READ + _FINANCE_SPECIFIC,
-        "CPC_CHAIRPERSON":      _PUBLIC_READ + [
+        "VC_OFFICE":            _PUBLIC_READ + _LEAVE_REQUESTOR,
+        "FINANCE_OFFICER":      _PUBLIC_READ + _LEAVE_REQUESTOR + _FINANCE_SPECIFIC,
+        "CPC_CHAIRPERSON":      _PUBLIC_READ + _LEAVE_REQUESTOR + [
             ("approval_request",           "approve",   "*"),
         ],
         # M8 — new roles
-        "CONTROLLER_OF_EXAMINATIONS": _PUBLIC_READ + _CONTROLLER_OF_EXAMINATIONS_SPECIFIC,
-        "HR_HEAD":              _PUBLIC_READ + _HR_HEAD_SPECIFIC,
-        "HR_OFFICE":            _PUBLIC_READ + _HR_OFFICE_SPECIFIC,
-        # Faculty designation roles (M8 — inherit PUBLIC_READ; approval routes per leave matrix)
-        "PROFESSOR":            _PUBLIC_READ + [("approval_request", "approve", "*")],
-        "ASSOC_PROFESSOR":      _PUBLIC_READ + [("approval_request", "approve", "*")],
-        "FACULTY":              _PUBLIC_READ,
-        "LIBRARIAN":            _PUBLIC_READ,
-        "PLACEMENT_OFFICER":    _PUBLIC_READ,
-        "CESRC_COORDINATOR":    _PUBLIC_READ,
-        "CENTRE_COORDINATOR":   _PUBLIC_READ,
+        "CONTROLLER_OF_EXAMINATIONS": _PUBLIC_READ + _LEAVE_REQUESTOR + _CONTROLLER_OF_EXAMINATIONS_SPECIFIC,
+        "HR_HEAD":              _PUBLIC_READ + _LEAVE_REQUESTOR + _HR_HEAD_SPECIFIC,
+        "HR_OFFICE":            _PUBLIC_READ + _LEAVE_REQUESTOR + _HR_OFFICE_SPECIFIC,
+        # Faculty designation roles (M8 — inherit PUBLIC_READ + LEAVE_REQUESTOR)
+        "PROFESSOR":            _PUBLIC_READ + _LEAVE_REQUESTOR + [("approval_request", "approve", "*")],
+        "ASSOC_PROFESSOR":      _PUBLIC_READ + _LEAVE_REQUESTOR + [("approval_request", "approve", "*")],
+        "FACULTY":              _PUBLIC_READ + _LEAVE_REQUESTOR,
+        "LIBRARIAN":            _PUBLIC_READ + _LEAVE_REQUESTOR,
+        "PLACEMENT_OFFICER":    _PUBLIC_READ + _LEAVE_REQUESTOR,
+        "CESRC_COORDINATOR":    _PUBLIC_READ + _LEAVE_REQUESTOR,
+        "CENTRE_COORDINATOR":   _PUBLIC_READ + _LEAVE_REQUESTOR,
         "STUDENT":              _PUBLIC_READ,
         "BASIC_USER":           _PUBLIC_READ,
     }

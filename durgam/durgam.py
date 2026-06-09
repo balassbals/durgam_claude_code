@@ -251,3 +251,11 @@ app.add_page(request_detail_page, route="/approvals/request/[approval_request_id
              on_load=RequestDetailState.load_detail)
 app.add_page(inbox_page, route="/approvals/inbox",
              on_load=ApproverInboxState.load_inbox)
+
+# ── M8 Leave Requestor UI (Phase 7) ───────────────────────────────────────────
+from durgam.pages.leave import __init__ as _leave_nav_register  # noqa: F401
+from durgam.pages.leave.my_leave import my_leave_page
+from durgam.states.leave_request import LeavePageState
+
+app.add_page(my_leave_page, route="/leave",
+             on_load=LeavePageState.load_my_leave)

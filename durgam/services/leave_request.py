@@ -356,6 +356,52 @@ class LeaveRequestService:
     ) -> list[LeaveBalance]:
         return self._balance_repo.list_for_user(user_id, academic_year_id)
 
+    def preview_chargeable_days(
+        self,
+        *,
+        leave_type: str,
+        starts_on: date,
+        ends_on: date,
+        academic_year_id: UUID,
+        half_day: bool = False,
+        half_day_which: str | None = None,
+    ) -> float:
+        """Return the chargeable leave day count without running eligibility/balance checks.
+
+        Used by the Apply form to show the user how many days will be charged before submit.
+        """
+        holidays_list = self._session.exec(
+            select(Holiday).where(
+                Holiday.academic_year_id == academic_year_id,
+                Holiday.is_deleted == False,  # noqa: E712
+            )
+        ).all()
+        holidays: set[date] = {h.holiday_date for h in holidays_list}
+        return compute_leave_days(starts_on, ends_on, leave_type, half_day, half_day_which, holidays)
+
+    def preview_channel(
+        self,
+        requestor_user_id: UUID,
+        leave_type: str,
+    ) -> list[dict]:
+        """Return the approval channel stages without committing any state.
+
+        Returns the same structure as resolve_channel: list of dicts with
+        role_code, recommend_only, scope_type keys.
+        Raises LeaveChannelError if no rule matches.
+        """
+        user_role_rows = self._session.exec(
+            select(UserRole).where(UserRole.user_id == requestor_user_id)
+        ).all()
+        user_roles: list[str] = []
+        for ur in user_role_rows:
+            role = self._session.get(Role, ur.role_id)
+            if role is not None and not role.is_deleted:
+                user_roles.append(role.code)
+
+        rules = self._rule_repo.list_active()
+        return resolve_channel(user_roles, leave_type, rules)
+
     # ── Private helpers ─────────────────────────────────────────────────
 
     def _match_rule(

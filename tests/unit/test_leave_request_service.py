@@ -334,3 +334,35 @@ def test_cancel_writes_audit_with_reason(mock_deps, req_id, requestor_id):
     call_kwargs = mock_write.call_args.kwargs
     assert call_kwargs["action"] == "cancel"
     assert call_kwargs["after"]["cancellation_reason"] == "Admin override"
+
+
+# ---------------------------------------------------------------------------
+# preview_chargeable_days
+# ---------------------------------------------------------------------------
+
+def test_preview_chargeable_days_returns_count(mock_deps, ay_id):
+    """preview_chargeable_days delegates to compute_leave_days (no eligibility checks)."""
+    svc = _svc(mock_deps)
+    with patch("durgam.services.leave_request.compute_leave_days", return_value=3.0) as mock_cd:
+        result = svc.preview_chargeable_days(
+            leave_type="CL",
+            starts_on=date(2026, 7, 1),
+            ends_on=date(2026, 7, 3),
+            academic_year_id=ay_id,
+        )
+    assert result == 3.0
+    mock_cd.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# preview_channel
+# ---------------------------------------------------------------------------
+
+def test_preview_channel_returns_channel(mock_deps, requestor_id):
+    """preview_channel returns resolve_channel output without side effects."""
+    expected = [{"role_code": "HOD", "recommend_only": False, "scope_type": "department"}]
+    svc = _svc(mock_deps)
+    with patch("durgam.services.leave_request.resolve_channel", return_value=expected) as mock_rc:
+        result = svc.preview_channel(requestor_id, "CL")
+    assert result == expected
+    mock_rc.assert_called_once()
