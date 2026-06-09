@@ -656,6 +656,18 @@ the direct and table-based pathways.
 
 ---
 
+### TD-034 — `db_session` fixture not isolated from `seeded_db_engine` in bare-pytest discovery
+
+**Location:** `tests/conftest.py` (`db_session` fixture + `seeded_db_engine` session-scoped fixture); affected tests: 8× `tests/unit/test_audit_label_resolver.py::Test*Resolver::test_label` (M6b); 2× `tests/unit/test_leave_sanction_rule.py::test_load_from_yaml_inserts_all_rules` + `::test_load_from_yaml_idempotent` (M8 Phase 4).
+
+**What it is:** `db_session` and `seeded_session` point at the same physical `durgam_test` database. `db_session` rolls back per-test, but only undoes writes made by THAT test — not seed data committed by `seeded_db_engine` initialization. In bare `pytest` discovery (alphabetical: `e2e/` → `integration/` → `property/` → `unit/`), integration tests run first and trigger `seeded_db_engine`, populating the shared DB. Unit tests that follow and assert "clean DB" (e.g., zero pre-existing rules) see the seed data and fail. The same suite passes when invoked as `pytest tests/unit/ tests/integration/` because that path order doesn't trigger `seeded_db_engine` before the affected unit tests.
+
+**Why this is not a production issue:** The gate ritual in `docs/prompts/gate_verification.md` invokes `pytest tests/unit/ tests/integration/` (scoped), where all 10 affected tests pass. No production code path depends on the fixture's behaviour. The failures only manifest in bare `pytest` discovery, which is not part of any gate.
+
+**Trigger to re-open:** A milestone that needs to support bare `pytest` invocation in CI, OR a contributor running bare `pytest` locally is misled by the failures. Resolution: redesign `db_session` to use a savepoint-based truly clean DB (separate test DB per worker, or savepoint-and-truncate strategy), or rewrite the 10 affected tests to be insensitive to pre-existing seed data.
+
+---
+
 ## Resolved
 
 ### TD-002 — SAWarning: transaction already deassociated from connection (resolved in m0-cleanup)
