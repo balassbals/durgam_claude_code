@@ -665,6 +665,11 @@ class RequestDetailState(BaseState):
                 self.loading = False
                 return
             channel_len = len(proc.channel_role_codes) if proc and proc.channel_role_codes else 0
+            # For leave requests the per-request channel (resolved_channel_json) is the
+            # source of truth for length — it may be shorter than proc.channel_role_codes
+            # which is the union of all sanctioner roles used only for nav gating.
+            if req.resolved_channel_json:
+                channel_len = len(req.resolved_channel_json)
 
             requestor = session.get(User, req.requestor_user_id)
             requestor_name = requestor.full_name or requestor.username if requestor else "Unknown"
@@ -776,11 +781,18 @@ class RequestDetailState(BaseState):
             from durgam.services.approval_routing import resolve_stage_approvers
 
             channel = proc.channel_role_codes or [] if proc else []
-            self.is_terminal_stage = req.current_stage >= len(channel)
+            # resolved_channel_json holds the per-request channel for leave requests;
+            # it is authoritative for length and role-code lookup.
+            resolved_channel = req.resolved_channel_json or []
+            effective_len = len(resolved_channel) if resolved_channel else len(channel)
+            self.is_terminal_stage = req.current_stage >= effective_len
 
-            if req.state in ("submitted", "in_review") and proc and channel:
+            if req.state in ("submitted", "in_review") and proc and (channel or resolved_channel):
                 stage_idx = req.current_stage - 1
-                if 0 <= stage_idx < len(channel):
+                if resolved_channel and 0 <= stage_idx < len(resolved_channel):
+                    entry = resolved_channel[stage_idx]
+                    self.current_stage_role_code = entry.get("role_code", "") if isinstance(entry, dict) else ""
+                elif 0 <= stage_idx < len(channel):
                     self.current_stage_role_code = channel[stage_idx]
 
                 try:
@@ -799,7 +811,7 @@ class RequestDetailState(BaseState):
                     try:
                         next_stage = req.current_stage + 1
                         next_idx = next_stage - 1
-                        if next_idx < len(channel):
+                        if next_idx < effective_len:
                             simulated_req = type(req).model_validate(req)
                             simulated_req.current_stage = next_stage
                             next_approvers = resolve_stage_approvers(

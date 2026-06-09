@@ -124,7 +124,7 @@ def check_balance(leave_type: str, chargeable_days: float, balance: Any) -> None
     is: HPL closing_balance - (chargeable_days × 2) >= 0.
     All other types: closing_balance - chargeable_days >= 0.
     """
-    if leave_type in ("EOL", "SL"):
+    if leave_type in ("EOL", "SL", "SCL"):
         return
 
     if leave_type == "CML":

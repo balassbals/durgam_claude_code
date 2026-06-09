@@ -58,6 +58,20 @@ def test_sl_check_balance_never_raises(days: float, balance_days: float) -> None
     check_balance("SL", days, bal)  # must not raise
 
 
+# ── Property 2a: SCL check_balance never raises ────────────────────────────────
+
+@given(days=_FINITE_FLOAT, balance_days=_BALANCE_FLOAT)
+@settings(deadline=None, max_examples=100)
+def test_scl_check_balance_never_raises(days: float, balance_days: float) -> None:
+    """For any (days, balance_days), SCL balance check NEVER raises.
+
+    SCL is granted by management on approval (§11.4); it is not drawn from a
+    running balance. check_balance must always return without raising.
+    """
+    bal = SimpleNamespace(leave_type="SCL", closing_balance=balance_days)
+    check_balance("SCL", days, bal)  # must not raise
+
+
 # ── Property 3: check_balance consistent for regular types ─────────────────────
 
 @given(

@@ -57,19 +57,28 @@ class LateAttendanceAdminState(BaseState):
 
         from durgam.repositories.user import UserRepository
 
+        user_id_str: str = ""
+        user_display: str = ""
+
         with open_session() as session:
             repo = UserRepository(session)
             user = repo.get_by_username(username)
+            if user is not None:
+                # Read all needed attrs inside the session block before it closes.
+                user_id_str = str(user.id)
+                user_display = (
+                    f"{user.full_name} ({user.username})" if user.full_name else user.username
+                )
 
-        if user is None:
+        if not user_id_str:
             self.form_employee_user_id = ""
             self.form_employee_display = ""
             self.flash = f"No employee found with username '{username}'."
             self.flash_type = "error"
             return
 
-        self.form_employee_user_id = str(user.id)
-        self.form_employee_display = f"{user.full_name} ({user.username})" if user.full_name else user.username
+        self.form_employee_user_id = user_id_str
+        self.form_employee_display = user_display
         self.flash = ""
         self.flash_type = "info"
 

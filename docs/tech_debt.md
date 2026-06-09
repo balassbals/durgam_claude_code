@@ -668,6 +668,18 @@ the direct and table-based pathways.
 
 ---
 
+### TD-036 — CL annual credit at AY start not implemented
+
+**Location**: `durgam/tasks/leave_jobs.py` (no job exists yet for CL annual credit); related: `durgam/repositories/leave.py` `LeaveBalanceRepository.get_or_create` (lazy-creates with all-zero fields).
+
+**What it is**: Per RFP §11.3 / PDF §XXVIII clause 14, every employee receives 10 (vacation/teaching) or 12 (non-vacation) days of CL at the start of each academic year (proportionate for partial year). Phase 6 shipped four periodic jobs but none of them credits CL at AY start; `LeaveBalance.get_or_create` creates rows with `closing_balance=0`. As a result, no employee can request CL via the UI until their balance is manually seeded.
+
+**Why this is gating real-world use**: A faculty user logs in, sees CL closing=0, submits a CL request, gets "Insufficient CL balance". The bootstrap admin page (E-016) will populate this for the go-live moment, but at each subsequent AY rollover the entitlement also needs to be re-credited automatically.
+
+**Trigger to re-open**: Either E-016 bootstrap admin page ships with a "credit annual CL entitlement" button, OR a new Celery beat job `credit_annual_cl` runs on the AY rollover date (which is itself tracked by the AY rollover lock Celery job).
+
+---
+
 ### TD-034 — `db_session` fixture not isolated from `seeded_db_engine` in bare-pytest discovery
 
 **Location:** `tests/conftest.py` (`db_session` fixture + `seeded_db_engine` session-scoped fixture); affected tests: 8× `tests/unit/test_audit_label_resolver.py::Test*Resolver::test_label` (M6b); 2× `tests/unit/test_leave_sanction_rule.py::test_load_from_yaml_inserts_all_rules` + `::test_load_from_yaml_idempotent` (M8 Phase 4).

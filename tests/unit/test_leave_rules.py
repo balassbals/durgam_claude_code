@@ -218,6 +218,12 @@ def test_check_balance_sl_never_raises() -> None:
     check_balance("SL", 180.0, _bal("SL", 0.0))  # no raise
 
 
+def test_check_balance_scl_never_raises() -> None:
+    """SCL check never raises even with zero balance (§11.4 management-granted on approval)."""
+    bal = SimpleNamespace(leave_type="SCL", closing_balance=0.0)
+    check_balance("SCL", 30.0, bal)  # must not raise
+
+
 def test_check_balance_cml_uses_hpl_balance() -> None:
     """CML debits HPL at 2× rate (§11.6.d): 5 CML days → debit 10 from HPL."""
     hpl = _bal("HPL", 20.0)

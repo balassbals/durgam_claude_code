@@ -604,3 +604,76 @@ import UIs.
 - Concurrency with the credit job: a manual import while the credit job is running is unlikely (manual is one-time at go-live), but the import must respect the same `_check_ay_locked()` guard the credit job uses.
 
 **Conceptual model confirmation** (for the implementer): the M8 `LeaveBalance` model already supports tenure-accumulating leaves correctly. Each row is `(employee, leave_type, academic_year_id)` scoped, and `opening_balance` is the carry-over from the prior AY's `closing_balance`. The credit job adds to `credited` over time; accumulation caps (300 EL / 180 HPL) are enforced in the credit job. The bootstrap is purely "populate opening_balance for the current active AY for each (employee, leave_type) pair to reflect each employee's historical accumulation."
+
+---
+
+## E-017 — Withdraw leave after approval
+
+**Status**: Acknowledged. Deferred.
+
+**Source**: Bala's clarification during M8 gate verification (2026-06-09).
+
+**Gap in v3 RFP**: §11 specifies withdraw (cancel by requestor) only for pending/in-review leave requests. v1 implementation supports withdraw only in non-terminal states. Bala's institutional reality: an approved leave should also be withdrawable if circumstances change (employee decides to attend office despite approved leave). On withdraw-post-approval the requestor must provide a reason, the LeaveBalance.availed must be reverted (re-credit the days), and notifications must fan out to HoD/AHoD/Director.
+
+**Disposition**: A follow-up milestone will (a) extend LeaveRequestService.withdraw to accept a `reason` argument when current state is "approved", (b) re-credit the balance via the same path used for partial sanction reversal (decrement availed, increment closing_balance, audit row), (c) enqueue notifications to the requestor's HoD/AHoD (current campus) and campus Director. Depends on TD-032 resolution for actual delivery; until then notification rows accumulate.
+
+---
+
+## E-018 — Matrix CRUD form UX (dropdowns + priority help text)
+
+**Status**: Acknowledged. Deferred.
+
+**Source**: Bala's clarification during M8 gate verification (2026-06-09).
+
+**Gap in v3 RFP**: §11.15 specifies admin matrix editability but is silent on form UX. v1 form uses free-text inputs for applicant_role_code, sanctioner_role_code, recommend_via_role_code, and scope_type — error-prone (typos allow garbage rules). The priority integer field also lacks inline explanation.
+
+**Disposition**: A follow-up milestone will convert the four role/scope text inputs to dropdowns populated from the live roles table (and a fixed scope_type enum), and add inline help text for priority: "Lower numbers win. Specific rules (e.g., applicant_role_code=PROFESSOR) should use lower priority (10-30); wildcard rules (e.g., applicant_role_code=*) should use higher priority (100+)."
+
+---
+
+## E-019 — Campus-scoped Director approval routing
+
+**Status**: Acknowledged. Deferred to M10.
+
+**Source**: Bala's clarification during M8 gate verification (2026-06-09).
+
+**Gap in v3 RFP**: §11.10 matrix rules have `scope_type=campus` on FACULTY→DIRECTOR rules, but the v1 approval engine routes any DIRECTOR with the right role to approve any FACULTY's leave. True campus enforcement requires the Faculty/Campus assignment model that ships in M10. Until then, all Directors see all Faculty leave requests in their inbox.
+
+**Disposition**: M10 will add campus-scoped routing to the approval engine — when `scope_type=campus` is set on the rule, the approver must hold the role in the SAME campus as the requestor. The existing `LeaveSanctionAuthorityRule.scope_type='campus'` already in the YAML matrix becomes meaningful at that point.
+
+---
+
+## E-020 — ApprovalProcess-driven SCL auto-credit
+
+**Status**: Acknowledged. Deferred.
+
+**Source**: Bala's clarification during M8 gate verification (2026-06-09).
+
+**Gap in v3 RFP**: §11.4 defines SCL as granted by the management for specific purposes (training, conferences, presentations) but does not specify the operational pathway. v1 implementation requires a faculty member who has been approved for, say, a conference to submit a SECOND request (via /leave → Apply → SCL) to record their SCL days — duplicative and error-prone. The institutional intent (per Bala's clarification) is that the SAME approval which granted the activity (conference, training, workshop) should also automatically register the SCL days against the requestor's leave records, without a separate leave submission.
+
+**Required design**:
+
+1. Extend `ApprovalProcess` (durgam/models/crosscutting.py) with two new fields:
+   - `requires_scl: bool = False` — flag exposed in the admin approval-process form.
+   - `default_scl_days: float | None = None` — default day count, pre-filled in the requestor's submit form, overridable.
+
+2. Admin approval-process create/edit form (M7 admin page) exposes both fields.
+
+3. M7 generic submit-request form (`SubmitRequestState`) conditionally renders an "SCL days needed" input when the chosen ApprovalProcess has `requires_scl=True`. The requestor's selected value is stored on the ApprovalRequest (likely on `payload_json`).
+
+4. `ApprovalRequestService._run_post_approval` gets a new branch: when `process.requires_scl=True` and the stage just approved is terminal, auto-create a `LeaveRequest` with:
+   - `leave_type='SCL'`
+   - `state='approved'`
+   - `sanctioned_days = chargeable_days = payload_json['scl_days_requested']` (or the process default if absent)
+   - `requestor_user_id = approval_request.requestor_user_id`
+   - `approval_request_id = approval_request.id` (links back)
+   - `academic_year_id = active AY at terminal-approval time`
+   - `starts_on / ends_on`: needs design decision — likely picked up from the requestor's "event dates" if the process collects them, or just a single-row marker dated to today.
+   - `reason = f"Auto-credited from {process.title} approval"`
+5. Audit row written. Notification enqueued to requestor.
+
+6. The Phase 8.2 SCL balance skip (check_balance) already makes the auto-credit balance-neutral — there's no balance ceiling for SCL. The history table on /leave shows the SCL row automatically.
+
+**Trigger to re-open**: A future milestone (likely M8.1 follow-up or M9 prep) that has bandwidth for a model migration + two form updates + a post-approval hook + tests.
+
+**Cross-cutting**: depends on E-017 (withdraw post-approval) for the case where the parent ApprovalRequest is withdrawn after terminal-approval — the auto-created SCL LeaveRequest would also need reversal.

@@ -379,7 +379,7 @@ def _apply_modal() -> rx.Component:
                         checked=LeavePageState.headquarters_left,
                         on_change=LeavePageState.set_headquarters_left,
                     ),
-                    rx.text("HQ Left", font_size="0.85rem"),
+                    rx.text("Out of station", font_size="0.85rem"),
                     gap="0.5rem",
                     align="center",
                 ),
