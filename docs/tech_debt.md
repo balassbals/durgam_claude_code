@@ -656,6 +656,18 @@ the direct and table-based pathways.
 
 ---
 
+### TD-035 — Teacher EL credit formula incomplete pending Attendance Module (M13)
+
+**Location:** `durgam/tasks/leave_jobs.py` (`credit_periodic_el_hpl` task, `_credit_el` helper); RFP §11.5.
+
+**What it is:** EL credit for vacation (teaching) employees has three components per RFP §11.5: (a) one day per completed month of service, (b) extra days for vacation-duty performed during summer/winter vacation periods, (c) adjustments for leave-without-pay periods. Only component (a) is implemented. Components (b) and (c) require the `VacationDutyRecord` and `LWPRecord` tables which are deferred to M13 (Attendance Module). The current formula (`days_since_last_credit / 30.0`) is an under-credit for teachers who performed vacation duty; it is never an over-credit, so balances are conservative.
+
+**Why this is not a production issue:** The formula is conservative — no teacher is given more leave than they earned. The shortfall can be corrected retroactively when M13 ships by running the credit job with historical reference dates or via a one-time adjustment script.
+
+**Trigger to re-open:** M13 Attendance Module ships `VacationDutyRecord` and `LWPRecord`. Resolution: extend `_credit_el` to query these tables and add components (b) and (c) to the teacher formula.
+
+---
+
 ### TD-034 — `db_session` fixture not isolated from `seeded_db_engine` in bare-pytest discovery
 
 **Location:** `tests/conftest.py` (`db_session` fixture + `seeded_db_engine` session-scoped fixture); affected tests: 8× `tests/unit/test_audit_label_resolver.py::Test*Resolver::test_label` (M6b); 2× `tests/unit/test_leave_sanction_rule.py::test_load_from_yaml_inserts_all_rules` + `::test_load_from_yaml_idempotent` (M8 Phase 4).
