@@ -48,3 +48,12 @@ register(NavEntry(
         ("write", "course_import", None),
     ),
 ))
+# ── M8 nav entries ─────────────────────────────────────────────────────────────
+register(NavEntry(
+    label="Late Attendance",
+    href="/admin/leave/late-attendance",
+    icon="clock-alert",
+    group="Admin",
+    permission_action="write",
+    permission_resource="late_attendance",
+))

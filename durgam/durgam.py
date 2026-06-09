@@ -259,3 +259,14 @@ from durgam.states.leave_request import LeavePageState
 
 app.add_page(my_leave_page, route="/leave",
              on_load=LeavePageState.load_my_leave)
+
+# ── M8 Admin pages (Phase 8) ──────────────────────────────────────────────────
+from durgam.pages.admin.config.leave_matrix import admin_leave_sanction_matrix
+from durgam.pages.admin.leave_admin import admin_late_attendance
+from durgam.states.config_leave_matrix import LeaveMatrixState
+from durgam.states.leave_admin import LateAttendanceAdminState
+
+app.add_page(admin_leave_sanction_matrix, route="/admin/config/leave-sanction-matrix",
+             on_load=LeaveMatrixState.load_rules)
+app.add_page(admin_late_attendance, route="/admin/leave/late-attendance",
+             on_load=LateAttendanceAdminState.load_markers)

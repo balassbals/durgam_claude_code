@@ -506,6 +506,31 @@ class RequestDetailState(BaseState):
     process_requires_downward: bool = False
     process_max_downward: int = 0
 
+    # M8 — leave-specific detail (populated only when process_code == "LEAVE_APPROVAL")
+    is_leave_request: bool = False
+    leave_type: str = ""
+    leave_starts_on: str = ""
+    leave_ends_on: str = ""
+    leave_chargeable_days: float = 0.0
+    leave_sanctioned_days_current: float = 0.0
+    leave_state: str = ""
+    leave_requestor_balance: dict[str, Any] = {}
+    leave_has_medical_cert: bool = False
+    leave_has_fitness_cert: bool = False
+    leave_has_bond: bool = False
+    leave_medical_cert_file_id: str = ""
+    leave_fitness_cert_file_id: str = ""
+    leave_bond_file_id: str = ""
+
+    # Sanctioner partial-modify input
+    sanctioned_days_input: str = ""
+
+    # Recommend-only flag for current stage
+    current_stage_is_recommend_only: bool = False
+
+    def set_sanctioned_days_input(self, value: str) -> None:
+        self.sanctioned_days_input = value
+
     async def load_detail(self) -> None:
         redirect = _resolve_or_redirect(self)
         if redirect is not None:
@@ -536,6 +561,23 @@ class RequestDetailState(BaseState):
         self.process_allows_downward = False
         self.process_requires_downward = False
         self.process_max_downward = 0
+        # M8 leave-specific reset
+        self.is_leave_request = False
+        self.leave_type = ""
+        self.leave_starts_on = ""
+        self.leave_ends_on = ""
+        self.leave_chargeable_days = 0.0
+        self.leave_sanctioned_days_current = 0.0
+        self.leave_state = ""
+        self.leave_requestor_balance = {}
+        self.leave_has_medical_cert = False
+        self.leave_has_fitness_cert = False
+        self.leave_has_bond = False
+        self.leave_medical_cert_file_id = ""
+        self.leave_fitness_cert_file_id = ""
+        self.leave_bond_file_id = ""
+        self.sanctioned_days_input = ""
+        self.current_stage_is_recommend_only = False
 
         request_id_str = self.router.page.params.get("approval_request_id", "")
         if not request_id_str:
@@ -784,6 +826,56 @@ class RequestDetailState(BaseState):
                     self.process_requires_downward = proc.requires_downward_attachments
                     self.process_max_downward = proc.max_downward_attachments
 
+            # M8 — LEAVE_APPROVAL specific data loading
+            if proc and proc.code == "LEAVE_APPROVAL":
+                from durgam.models.leave import LeaveBalance, LeaveRequest
+                from durgam.repositories.leave import LeaveBalanceRepository, LeaveRepository
+
+                leave_req_id_str = (req.payload_json or {}).get("leave_request_id", "")
+                if leave_req_id_str:
+                    try:
+                        leave_req_id = UUID(leave_req_id_str)
+                        leave_repo = LeaveRepository(session)
+                        lr = leave_repo.get(leave_req_id)
+                        if lr is not None:
+                            self.is_leave_request = True
+                            self.leave_type = lr.leave_type
+                            self.leave_starts_on = lr.starts_on.isoformat()
+                            self.leave_ends_on = lr.ends_on.isoformat()
+                            self.leave_chargeable_days = lr.chargeable_days
+                            self.leave_sanctioned_days_current = lr.sanctioned_days or 0.0
+                            self.leave_state = lr.state
+                            self.leave_has_medical_cert = lr.medical_cert_file_id is not None
+                            self.leave_has_fitness_cert = lr.fitness_cert_file_id is not None
+                            self.leave_has_bond = lr.bond_file_id is not None
+                            self.leave_medical_cert_file_id = str(lr.medical_cert_file_id) if lr.medical_cert_file_id else ""
+                            self.leave_fitness_cert_file_id = str(lr.fitness_cert_file_id) if lr.fitness_cert_file_id else ""
+                            self.leave_bond_file_id = str(lr.bond_file_id) if lr.bond_file_id else ""
+
+                            # Load requestor's balance for this leave type
+                            bal_type = "HPL" if lr.leave_type == "CML" else lr.leave_type
+                            if bal_type not in {"EOL", "SL"}:
+                                bal_repo = LeaveBalanceRepository(session)
+                                bal = bal_repo.get(lr.requestor_user_id, bal_type, lr.academic_year_id)
+                                if bal is not None:
+                                    self.leave_requestor_balance = {
+                                        "leave_type": bal.leave_type,
+                                        "opening": bal.opening_balance,
+                                        "credited": bal.credited,
+                                        "availed": bal.availed,
+                                        "closing": bal.closing_balance,
+                                    }
+                    except (ValueError, Exception):
+                        pass  # malformed leave_request_id — leave is_leave_request=False
+
+                # Check if current stage is recommend-only
+                resolved = req.resolved_channel_json or []
+                stage_idx = req.current_stage - 1
+                if 0 <= stage_idx < len(resolved):
+                    entry = resolved[stage_idx]
+                    if isinstance(entry, dict) and entry.get("recommend_only"):
+                        self.current_stage_is_recommend_only = True
+
         self.loading = False
         self._load_nav_entries()
 
@@ -902,6 +994,63 @@ class RequestDetailState(BaseState):
 
         try:
             with open_session() as session:
+                # M8 — partial sanction: apply set_sanctioned_days before approval if specified
+                if self.is_leave_request and self.sanctioned_days_input.strip():
+                    from durgam.repositories.leave import (
+                        LeaveBalanceRepository,
+                        LeaveRepository,
+                        LeaveSanctionRuleRepository,
+                    )
+                    from durgam.repositories.approval_process import ApprovalProcessRepository
+                    from durgam.repositories.approval_request import ApprovalRequestRepository
+                    from durgam.repositories.approval_step import ApprovalStepRepository
+                    from durgam.repositories.notification import NotificationRepository
+                    from durgam.services.leave_request import LeaveRequestError, LeaveRequestService
+
+                    try:
+                        sd = float(self.sanctioned_days_input.strip())
+                    except ValueError:
+                        self.decision_error = "Sanctioned days must be a number."
+                        self.decision_submitting = False
+                        return
+                    if sd <= 0 or sd > self.leave_chargeable_days:
+                        self.decision_error = (
+                            f"Sanctioned days must be > 0 and ≤ {self.leave_chargeable_days}."
+                        )
+                        self.decision_submitting = False
+                        return
+
+                    leave_req_id_str = self.request.get("id", "")
+                    # Find the LeaveRequest via ApprovalRequest id
+                    req_repo = ApprovalRequestRepository(session)
+                    ar = req_repo.get_by_id(UUID(request_id_str))
+                    if ar is not None:
+                        leave_req_id_raw = (ar.payload_json or {}).get("leave_request_id", "")
+                        if leave_req_id_raw:
+                            leave_svc = LeaveRequestService(
+                                session=session,
+                                leave_repo=LeaveRepository(session),
+                                balance_repo=LeaveBalanceRepository(session),
+                                rule_repo=LeaveSanctionRuleRepository(session),
+                                approval_service=ApprovalRequestService(
+                                    session=session,
+                                    proc_repo=ApprovalProcessRepository(session),
+                                    request_repo=req_repo,
+                                    step_repo=ApprovalStepRepository(session),
+                                    notification_repo=NotificationRepository(session),
+                                ),
+                            )
+                            try:
+                                leave_svc.set_sanctioned_days(
+                                    UUID(leave_req_id_raw),
+                                    UUID(self.current_user_id),
+                                    sd,
+                                )
+                            except LeaveRequestError as e:
+                                self.decision_error = str(e)
+                                self.decision_submitting = False
+                                return
+
                 svc = ApprovalRequestService(session)
                 svc.approve(
                     request_id=UUID(request_id_str),
@@ -930,6 +1079,53 @@ class RequestDetailState(BaseState):
             return
 
         self.approve_dialog_open = False
+        self.decision_submitting = False
+        await self.load_detail()
+
+    async def recommend_stage(self) -> None:
+        """SCL-style recommend: calls approve() — engine records decision='recommended'
+        when the current channel entry has recommend_only=True."""
+        if not self.can_decide:
+            self.decision_error = "You cannot recommend at this stage."
+            return
+
+        self.decision_submitting = True
+        self.decision_error = ""
+
+        from durgam.services.approval_request import (
+            ApprovalRequestError,
+            ApprovalRequestService,
+        )
+
+        request_id_str = self.request.get("id", "")
+        if not request_id_str:
+            self.decision_submitting = False
+            return
+
+        try:
+            with open_session() as session:
+                svc = ApprovalRequestService(session)
+                svc.approve(
+                    request_id=UUID(request_id_str),
+                    approver_user_id=UUID(self.current_user_id),
+                    comment=self.decision_comment.strip() or None,
+                )
+                session.commit()
+        except ApprovalRequestError as e:
+            self.decision_error = str(e)
+            self.decision_submitting = False
+            return
+        except Exception as e:
+            log.error(
+                "recommend_stage_failed",
+                exc_info=True,
+                error_type=type(e).__name__,
+                error_message=str(e),
+            )
+            self.decision_error = "An unexpected error occurred."
+            self.decision_submitting = False
+            return
+
         self.decision_submitting = False
         await self.load_detail()
 

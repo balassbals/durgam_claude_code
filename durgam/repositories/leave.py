@@ -1,5 +1,5 @@
 """Leave-module repositories: LeaveRepository, LeaveBalanceRepository,
-LeaveSanctionRuleRepository (M8).
+LeaveSanctionRuleRepository, LateAttendanceMarkerRepository (M8).
 
 Follows the HolidayRepository pattern for AY-lock enforcement.
 """
@@ -13,6 +13,7 @@ from sqlmodel import Session, select
 
 from durgam.models.config_anchors import AcademicYear
 from durgam.models.leave import (
+    LateAttendanceMarker,
     LeaveBalance,
     LeaveSanctionAuthorityRule,
     LeaveRequest,
@@ -226,3 +227,67 @@ class LeaveRepository:
         self._session.flush()
         self._session.refresh(req)
         return req
+
+
+class LateAttendanceMarkerRepository:
+    """CRUD for LateAttendanceMarker (manual HR entry pre-M13 Attendance Module)."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def add(
+        self,
+        employee_user_id: UUID,
+        occurred_on: date_type,
+        recorded_by: UUID,
+        notes: str | None = None,
+    ) -> LateAttendanceMarker:
+        """Insert a new marker; raises IntegrityError on duplicate (uq_late_attendance_user_date)."""
+        now = datetime.now(UTC)
+        marker = LateAttendanceMarker(
+            id=uuid4(),
+            employee_user_id=employee_user_id,
+            occurred_on=occurred_on,
+            recorded_by=recorded_by,
+            notes=notes,
+            created_by=recorded_by,
+            updated_by=recorded_by,
+            created_at=now,
+            updated_at=now,
+        )
+        self._session.add(marker)
+        self._session.flush()
+        self._session.refresh(marker)
+        return marker
+
+    def list_recent(
+        self,
+        limit: int = 100,
+        filter_employee_id: UUID | None = None,
+        filter_month: str | None = None,
+    ) -> list[LateAttendanceMarker]:
+        """Return most-recent markers, optionally filtered by employee + YYYY-MM month."""
+        stmt = (
+            select(LateAttendanceMarker)
+            .where(LateAttendanceMarker.is_deleted == False)  # noqa: E712
+            .order_by(LateAttendanceMarker.occurred_on.desc())  # type: ignore[union-attr]
+            .limit(limit)
+        )
+        if filter_employee_id is not None:
+            stmt = stmt.where(LateAttendanceMarker.employee_user_id == filter_employee_id)
+        if filter_month:
+            # filter_month is YYYY-MM; match occurred_on prefix
+            try:
+                year, month = (int(p) for p in filter_month.split("-", 1))
+                from datetime import date as _date
+                month_start = _date(year, month, 1)
+                import calendar
+                last_day = calendar.monthrange(year, month)[1]
+                month_end = _date(year, month, last_day)
+                stmt = stmt.where(
+                    LateAttendanceMarker.occurred_on >= month_start,
+                    LateAttendanceMarker.occurred_on <= month_end,
+                )
+            except (ValueError, AttributeError):
+                pass
+        return list(self._session.exec(stmt).all())
