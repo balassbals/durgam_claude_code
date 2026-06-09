@@ -257,3 +257,31 @@ Rich management UI for Program sub-entities (PEO/PO/PSO editing forms, regulatio
 editors, scheme builder, specialisation editor, exit-level editor) defers to M13
 (Program & Course Management). The M3 gate clause is met by the seed alone; the data
 model exists and is verified by integration tests.
+
+---
+
+## M8 — Leave Rules (§11)
+
+**Gate passed: 2026-06-09.** All rows verified via fresh-clone ritual.
+
+| Feature | RFP §§ | Target | Status | Notes |
+|---------|--------|--------|--------|-------|
+| User employment fields (gender, joined_on, employee_type) | §11 | M8 | Shipped at M8 | Required for leave eligibility (ML gender check, service-duration check). |
+| New roles: CONTROLLER_OF_EXAMINATIONS, HR_HEAD, HR_OFFICE, PROFESSOR, ASSOC_PROFESSOR, FACULTY + VC seeded user | §11 | M8 | Shipped at M8 | 6 new roles + designation roles for leave sanctioning hierarchy. |
+| LeaveRequest model + LeaveBalance model | §11 | M8 | Shipped at M8 | Full TimestampedSoftDelete; AY-scoped; approval_request_id FK links to approval engine. |
+| LateAttendanceMarker model | §11 | M8 | Shipped at M8 | HR-entered markers feed CL monthly-forfeit Celery job. |
+| LeaveSanctionAuthorityRule (sanctioning matrix) | §11.10 | M8 | Shipped at M8 | 73 rules from YAML seed; applicant_role_code + leave_type + scope_type + recommend_via_role_code + sanctioner_role_code; priority-based resolution. |
+| Leave rules engine (eligibility, accrual, balance, channel resolution) | §11 | M8 | Shipped at M8 | LeaveRulesEngine: check_eligibility, check_balance, compute_chargeable_days (half-day, CML=HPL, holiday exclusion), resolve_sanctioning_channel. Property tests with hypothesis. |
+| LEAVE_APPROVAL ApprovalProcess seeded + per-request channel override | §11 | M8 | Shipped at M8 | resolved_channel_json on ApprovalRequest stores per-request channel derived at submit time; fallback to process.channel_role_codes for non-leave processes. |
+| Celery leave jobs (forfeit late-CL, lapse unavailed CL, credit EL/HPL, overstay check) | §11 | M8 | Shipped at M8 | 5 beat schedule entries. TD-036: CL annual credit at AY start not yet scheduled. |
+| Requestor UI: /leave (balance cards, in-flight, history, Apply modal, preview) | §11 | M8 | Shipped at M8 | balance cards hide numeric fields for SCL/EOL/SL ("As per approval"). Progress row always visible on in-flight + history. |
+| Approver UI: leave detail section in /approvals/request/{id}, Recommend button | §11 | M8 | Shipped at M8 | Shows leave type, dates, days, requestor balance (hidden for SCL/EOL/SL), uploaded docs. |
+| Leave Sanction Matrix admin (/admin/config/leave-sanction-matrix) | §11.15 | M8 | Shipped at M8 | Registrar tier; CRUD for LeaveSanctionAuthorityRule rows. |
+| Late Attendance admin (/admin/leave/late-attendance) | §11 | M8 | Shipped at M8 | Director tier; HR adds late-attendance markers by employee username. |
+| HoD/AhoD recommend-via stage for FACULTY leave | §11.10 | M10 | Deferred — E-021 | Requires M10 Faculty/Department assignment model for department-scoped HoD resolution. |
+| Campus-scoped Director routing | §11.10 | M10 | Deferred — E-019 | Engine routes any DIRECTOR; campus-scoped filter deferred to M10. |
+| ApprovalProcess-driven SCL auto-credit | §11.4 | Future | Deferred — E-020 | requires_scl flag + post-approval auto-LeaveRequest creation. |
+| Withdraw leave after approval | §11 | Future | Deferred — E-017 | Balance reversal + notification re-fan; shares scope with E-022. |
+| Admin manual edit of leave records | §11 | Future | Deferred — E-022 | Balance-edit page + retroactive entry; Director/Registrar tier; shares scope with E-016/E-017. |
+| Legacy balance import for live deployment | §11 | Future | Deferred — E-016 | Bulk-import flow for existing balances at go-live; requires E-022 admin UI. |
+| Notification dispatch for leave events | §11 | Future | TD-037 | Row enqueue appears to be a silent no-op for the leave subsystem (0 rows observed during full gate walkthrough); investigate before TD-032 dispatch worker lands. |

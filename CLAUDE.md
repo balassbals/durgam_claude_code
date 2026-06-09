@@ -4,7 +4,7 @@
 **Spec**: `docs/durgam_rfp_v3.pdf` — all section references (§8, §12, etc.) point to this file.
 **Python**: 3.13 (pinned via `.python-version`).
 **Theme**: Puttaparthi Saffron–Indigo–Ivory (§15.1). Single committed theme; no alternatives in v3.
-**Current milestone**: M8 (Leave Rules).
+**Current milestone**: between M8 (closed 2026-06-09) and M9 (pending scoping).
 
 ## Authority files (binding, in priority order)
 
@@ -1431,7 +1431,9 @@ Carried forward from M6b (`value="all"`, not `value=""`). See M6b patterns secti
 not duplicated here.
 
 ## Current milestone
-**M8 (Leave Rules).**
+**Between M8 (closed 2026-06-09) and M9 (pending scoping).**
+
+M8 is closed. Merged to main as e9851a0; tag: m8-close. The next milestone has not been selected yet; candidates are M9 (Announcement Module) or an M8.1 follow-up bundling E-016 + E-017 + E-022. When the next milestone opens, update both occurrences of this line.
 
 This line is the source of truth for "where are we." Before opening a milestone-completing PR, Claude Code MUST:
 1. Grep this file for "Current milestone" and update both occurrences (the top status line and this section).

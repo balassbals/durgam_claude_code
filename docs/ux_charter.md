@@ -227,3 +227,13 @@ introduces; trust that later milestones handle what is theirs.
 6. **Scope-aware displays.** Scoped roles render as "{role} ({scope label})" — e.g. "Dean (SCI — Sciences)" not just "DEAN". Use the shared scope-label resolver in durgam/scopes/registry.py. Apply uniformly across calendar owner_role displays, role-email scope columns, etc.
 
 7. **Pending/Approved badge for entities with approval workflow.** Non-regular faculty appears as "Pending" until approved; "Approved (by Director Name, on date)" after. Make the state visible at-a-glance in listings.
+
+## 14. Principles confirmed at M8
+
+1. **"As per approval" for non-balance leave types.** Leave types that carry no running balance (SCL — Special Casual Leave, EOL — Extra Ordinary Leave, SL — Study Leave) display an "As per approval" badge in balance cards instead of a numeric balance. A supporting caption reads "Granted on a case-by-case basis — no running balance." Never show a 0-balance card for these types — zero is misleading when the leave is discretionary. Pattern reference: `durgam/pages/leave/my_leave.py` `_balance_card()`.
+
+2. **In-flight progress always visible, not hidden in a table column.** Leave requests in-flight render as custom rows (not a data_table) with a dedicated progress text line beneath the request summary. This ensures progress context is visible on both desktop and mobile — a `hidden_on_card=True` column collapses on mobile and was confirmed unsuitable. Pattern: `_in_flight_row()` in `my_leave.py`.
+
+3. **History terminal state as a single summary sentence.** Terminal leave requests (approved, rejected, cancelled, withdrawn) show a one-sentence outcome in the history list: who decided, when, any comment (truncated at 60 chars), and the stage of the total. Avoids full approval timeline in the list; the detail page holds the full record. Pattern: `_build_leave_history_summary()` in `durgam/states/leave_request.py`.
+
+4. **Approval detail page: balance card visible for requestor's leave type only.** On the approval detail page (`/approvals/request/[id]`), do not show a balance card for the CURRENT USER's balance. Show only the requestor's balance (or suppress for non-balance types). Showing the approver's own balance is misleading and was confirmed a UX defect in gate walkthrough (E-022). Pattern reference: `_load_leave_detail` in `durgam/states/approval_requests.py`.

@@ -119,3 +119,32 @@ notifications (bottom-right, 4-second auto-dismiss, X close). Currently
 the redirect notification fires via `typed_flash()` on the home page's
 render, which is a different lifecycle from the in-page toast. Unify
 the rendering.
+
+---
+
+## M8 Leave Rules — polish backlog
+
+### E-018: Leave sanction matrix — CRUD dropdowns need pagination (defer to UI Polish)
+
+The `LeaveSanctionAuthorityRule` admin CRUD form loads all roles and departments as
+dropdown options. With 20+ roles and 30+ departments this is manageable, but will become
+slow at real-institution scale. Proposed fix: replace flat `<select>` with a searchable
+combobox for role/department pickers in the matrix editor. Deferred to UI Polish milestone
+as the current dropdowns function correctly.
+
+**Filed:** E-018 in `docs/rfp_errata.md`.
+
+### In-flight leave request rows — visual polish
+
+The `_in_flight_row()` component (`durgam/pages/leave/my_leave.py`) uses a plain
+`rx.box` with a border for each in-flight request. For UI Polish milestone:
+
+- Add a left-border color accent matching the leave-type color (CL = green, EL = blue,
+  SCL = amber, etc.) to make type scannable at-a-glance.
+- Consider a subtle "pulsing" or "active" indicator for the stage badge.
+- The progress text line (`Progress: Stage X of Y — Awaiting ROLE`) uses default font
+  size (`0.8rem`). Consider matching the approved palette card style with a muted chip
+  rather than plain text.
+
+**Observed at M8 Phase 8.4 gate walkthrough.** Current state is functional; polish
+deferred to UI Polish milestone.

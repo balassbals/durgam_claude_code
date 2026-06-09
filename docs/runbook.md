@@ -139,3 +139,30 @@ All jobs must pass before merging to main.
 | student_001 | student.001@sssihl.edu.in | STUDENT | student_001_dev |
 
 Password hashes use a dev-only SHA-256 scheme — never use in production.
+
+## M8 Leave Rules — operations
+
+### Celery beat entries (leave jobs)
+
+The following tasks are registered in `durgam/tasks/leave_jobs.py` and scheduled in `durgam/tasks/celery_app.py`:
+
+| Task | Schedule | Description |
+|------|----------|-------------|
+| `leave-forfeit-late-cl` | Nightly 00:30 UTC | Forfeits a CL for each employee who has a LateAttendanceMarker this month and hasn't already had a CL deducted. |
+| `leave-lapse-unavailed-cl` | Dec 31 23:00 UTC | Lapses unused CL at year end — sets closing_balance = 0 (CL doesn't carry forward). |
+| `leave-credit-el-hpl-jan` | Jan 1 02:00 UTC | Credits half-yearly EL and HPL for eligible employees (≥6 months service). |
+| `leave-credit-el-hpl-jul` | Jul 1 02:00 UTC | Same as above for the July half-year credit. |
+| `leave-check-overstay` | Nightly 01:00 UTC | Marks leave requests as overstayed when the end date has passed and they remain in-flight; sends notification to HR. |
+
+### Known gaps at M8 close
+
+- **TD-036**: CL annual credit at AY start is NOT scheduled. Until E-016 (legacy balance import) lands, leave balances must be seeded manually at go-live via direct SQL or a one-off import script.
+- **TD-037**: Notification rows for leave events appear to not be enqueued (0 rows in `notifications` table after full gate walkthrough including submit → approve → balance debit). Investigate before TD-032 (dispatch worker) becomes meaningful. See `docs/tech_debt.md` → TD-037.
+
+### Leave sanction matrix seed
+
+73 rules are loaded from `seeds/leave_sanction_matrix.yaml` by `uv run python scripts/seed.py`. The seed is idempotent — re-running upserts by (applicant_role_code, leave_type, scope_type, priority) natural key and soft-deletes orphaned rows. If the YAML is edited, re-run the seed; no migration is needed unless the schema changes.
+
+### vc_user (seeded demo user)
+
+The M8 seed adds `vc_user / ViceChancellor_Dev1!XZ` with the VC role. This user is the final-stage approver for SCL walkthroughs (FACULTY → DIRECTOR-recommend → VC-final channel). It is a read-only seeded fixture — do not use it in tests that mutate state.

@@ -473,3 +473,49 @@ At every milestone gate from M1 onward, the administrator personally
 performs this ritual. It is not optional and not delegable to the
 agent — only a human can judge whether the result is genuinely
 usable.
+
+---
+
+## M8 lessons
+
+### 1. Always run pytest with scoped paths, not bare `pytest`
+
+Running bare `pytest` (no path argument) triggers alphabetical discovery:
+`e2e/ → integration/ → property/ → unit/`. The `seeded_db_engine` session fixture
+is initialized when integration tests run, populating `durgam_test` with seed data.
+Unit tests that run after (e.g., `test_leave_sanction_rule.py`) assert a clean DB and
+fail on the pre-existing seed rows. Running `pytest tests/unit/ tests/integration/`
+avoids the cross-contamination. See TD-034.
+
+**Lesson**: always invoke as `uv run pytest tests/unit/ tests/integration/ -q --no-cov`
+for the gate-passing run. Never rely on bare `pytest` output as gate evidence.
+
+### 2. Detached-HEAD risk on fresh-clone gate ritual
+
+The fresh-clone gate ritual (`git clone <repo>`) puts git in a detached-HEAD state
+if the clone target is a branch not yet pushed to remote. Alembic migrations discovered
+via `--autogenerate` against a detached HEAD will not include the M8 migration files
+if the branch was checked out incorrectly.
+
+**Lesson**: after fresh clone, always run `git checkout <branch>` explicitly before
+`uv run alembic upgrade head`. Verify `alembic current` shows the expected M8 head
+revision, not an earlier head.
+
+### 3. `docker compose down -v` between walkthroughs
+
+Running multiple gate walkthroughs in the same day without `docker compose down -v`
+between them leaves the seed data in the DB. Re-running `scripts/seed.py` is idempotent
+for most entities, but some leave balance rows (e.g., CL opening balance after a
+walkthrough debit) may show a non-initial state on the second walkthrough. Symptom:
+"CL balance is 7 instead of 8" on the second run.
+
+**Lesson**: between full gate walkthroughs, run `docker compose down -v && docker compose up -d`
+to get a clean volume, then re-apply migrations and seed. This also validates the
+migration from-scratch path as a bonus.
+
+### 4. Notification smoke check — `SELECT COUNT(*) FROM notifications`
+
+After completing the submit → approve cycle in a walkthrough, run
+`SELECT COUNT(*) FROM notifications;` in psql. At M8 close this returns 0 due to TD-037.
+Before TD-032 (notification dispatch worker) lands, add this check to gate verification
+so the defect is caught immediately if it regresses to producing rows or advances.

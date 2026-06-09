@@ -692,6 +692,22 @@ the direct and table-based pathways.
 
 ---
 
+### TD-037 — Notification rows for leave events are not being enqueued
+
+**Location:** `durgam/services/approval_request.py` → `_enqueue_notifications()` (called from `submit`, `advance`, and `terminate` paths); `durgam/models/crosscutting.py` → `Notification` model.
+
+**What it is:** During the M8 gate walkthrough (full submit → recommend → approve cycle on SCL and CL walkthroughs), zero rows were found in the `notifications` table after all approval steps completed, despite `_enqueue_notifications()` being called on every state transition. The leave-rules notification calls (`LEAVE_SUBMITTED`, `LEAVE_APPROVED`, `LEAVE_REJECTED`, `LEAVE_CANCELLED`) are silently no-ops. The notification rows are constructed but never reach the DB.
+
+**Suspected root cause:** `_enqueue_notifications()` is called from within the service's own `session` context. If `session.add(notification_row)` is being called but an exception is swallowed (empty `except` block or an implicit rollback), the add is lost without error. The M8 service (`approval_request.py`) is frozen (Phase 5); the investigation was deferred rather than risk destabilizing M8.
+
+**Impact:** No notifications dispatched for leave events. The notification dispatch worker (TD-032, M14 scope) has no rows to process. Zero user-visible impact today because the dispatch worker does not yet exist, but every milestone that adds notification-consuming features will find an empty table.
+
+**Trigger to re-open:** Before implementing the notification dispatch worker (TD-032 — M14). Resolve TD-037 first so there is something to dispatch. Also re-open if a milestone gate walkthrough uses a `SELECT COUNT(*) FROM notifications` smoke check.
+
+**See also:** `docs/runbook.md` → "M8 Leave Rules — operations" → "Known gaps at M8 close — TD-037."
+
+---
+
 ## Resolved
 
 ### TD-002 — SAWarning: transaction already deassociated from connection (resolved in m0-cleanup)
