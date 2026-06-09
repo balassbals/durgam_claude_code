@@ -870,7 +870,7 @@ class RequestDetailState(BaseState):
 
                             # Load requestor's balance for this leave type
                             bal_type = "HPL" if lr.leave_type == "CML" else lr.leave_type
-                            if bal_type not in {"EOL", "SL"}:
+                            if bal_type not in {"EOL", "SL", "SCL"}:
                                 bal_repo = LeaveBalanceRepository(session)
                                 bal = bal_repo.get(lr.requestor_user_id, bal_type, lr.academic_year_id)
                                 if bal is not None:

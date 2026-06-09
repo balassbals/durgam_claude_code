@@ -697,3 +697,35 @@ import UIs.
 **Trigger to re-open**: M10 Faculty module ships with Department assignment for Faculty users and a proper department-scope chain in the engine. At that point: update the YAML matrix, add a one-time migration to fix existing requests, document the AhoD fallback policy.
 
 **Cross-cutting**: depends on M10 Faculty/Department model + on E-019 (campus-scoped Director routing — same scope-resolution machinery).
+
+## E-022 — Admin manual edit of leave records
+
+**Status**: Acknowledged. Deferred.
+
+**Source**: Bala's clarification during M8 gate verification (2026-06-09).
+
+**Gap in v3 RFP**: §11 specifies the standard request-and-approve workflow but does not address operational realities where administrative staff need to correct leave records manually — e.g., a typo in sanctioned_days, a balance row needing adjustment after a payroll reconciliation, a faculty who went on emergency leave without applying and the absence needs to be recorded retroactively, or a cancellation reason being updated. v1 implementation has no admin UI for these manual edits; the only path is direct SQL by sys_admin.
+
+**Required design**:
+
+1. New admin page `/admin/leave/balance-edit`:
+   - Search/filter UI for LeaveBalance rows (by employee, leave_type, AY).
+   - Per-row edit form for: opening_balance, credited, availed, forfeited, encashed. closing_balance is recomputed (not directly editable).
+   - Each save writes an auditlog row with diff_json.
+   - Permission: DIRECTOR/DEPUTY_DIRECTOR/DIRECTOR_OFFICE (campus-scoped), REGISTRAR/DEPUTY_REGISTRAR/REGISTRAR_OFFICE (university-scope), SYSTEM_ADMIN.
+
+2. New admin page `/admin/leave/request-edit`:
+   - Search/filter UI for LeaveRequest rows.
+   - Per-row edit form for: dates, sanctioned_days, state (with explicit valid transitions), cancellation_reason, in_charge_designation, address_during_leave.
+   - Cannot edit approval-related fields (approval_request_id is fixed once submitted).
+   - Each save writes audit + propagates side-effects: if state changes from approved → cancelled, re-credit balance via the same path E-017 will use.
+   - Permission same as above.
+
+3. New admin action: "Create retroactive LeaveRequest":
+   - For faculty who went on leave without applying, the admin can record the leave after the fact in a directly-approved state.
+   - LeaveBalance debit happens immediately.
+   - Audit row marks this as a retroactive entry.
+
+**Cross-cutting**: depends on E-017 (withdraw post-approval — same balance reversal logic), E-016 (bootstrap balance import — overlapping admin scope), E-019 (campus-scoped routing — same scope-check machinery).
+
+**Trigger to re-open**: A follow-up milestone with bandwidth for two admin pages + one cross-cutting transition path. Likely M8.1 follow-up or M9 prep, jointly with E-016/E-017.

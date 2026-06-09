@@ -9,7 +9,6 @@ from durgam.pages.components import (
     primary_btn,
     secondary_btn,
 )
-from durgam.pages.shared.data_table import TableColumn, data_table
 from durgam.states.auth import AuthState
 from durgam.states.leave_request import LEAVE_TYPE_OPTIONS, LeavePageState
 
@@ -55,28 +54,45 @@ def _balance_card(bal: rx.Var) -> rx.Component:
             rx.hstack(
                 rx.heading(bal["leave_type"], size="3", font_family="var(--font-sans)"),
                 rx.spacer(),
-                rx.badge(
-                    rx.text(bal["closing"], as_="span"),
-                    rx.text(" days", as_="span", font_size="0.75rem"),
-                    color_scheme="indigo",
-                    radius="medium",
-                    size="2",
+                rx.cond(
+                    bal["is_no_balance_type"],
+                    rx.badge(
+                        "As per approval",
+                        color_scheme="gray",
+                        radius="medium",
+                        size="2",
+                    ),
+                    rx.badge(
+                        rx.text(bal["closing"], as_="span"),
+                        rx.text(" days", as_="span", font_size="0.75rem"),
+                        color_scheme="indigo",
+                        radius="medium",
+                        size="2",
+                    ),
                 ),
                 align="center",
                 width="100%",
             ),
-            rx.grid(
-                rx.text("Opening", font_size="0.75rem", color="var(--color-muted)"),
-                rx.text(bal["opening"], font_size="0.75rem", text_align="right"),
-                rx.text("Credited", font_size="0.75rem", color="var(--color-muted)"),
-                rx.text(bal["credited"], font_size="0.75rem", text_align="right"),
-                rx.text("Availed", font_size="0.75rem", color="var(--color-muted)"),
-                rx.text(bal["availed"], font_size="0.75rem", text_align="right"),
-                rx.text("Forfeited", font_size="0.75rem", color="var(--color-muted)"),
-                rx.text(bal["forfeited"], font_size="0.75rem", text_align="right"),
-                columns="2",
-                gap="0.25rem",
-                width="100%",
+            rx.cond(
+                bal["is_no_balance_type"],
+                rx.text(
+                    "Granted on a case-by-case basis — no running balance.",
+                    font_size="0.75rem",
+                    color="var(--color-muted)",
+                ),
+                rx.grid(
+                    rx.text("Opening", font_size="0.75rem", color="var(--color-muted)"),
+                    rx.text(bal["opening"], font_size="0.75rem", text_align="right"),
+                    rx.text("Credited", font_size="0.75rem", color="var(--color-muted)"),
+                    rx.text(bal["credited"], font_size="0.75rem", text_align="right"),
+                    rx.text("Availed", font_size="0.75rem", color="var(--color-muted)"),
+                    rx.text(bal["availed"], font_size="0.75rem", text_align="right"),
+                    rx.text("Forfeited", font_size="0.75rem", color="var(--color-muted)"),
+                    rx.text(bal["forfeited"], font_size="0.75rem", text_align="right"),
+                    columns="2",
+                    gap="0.25rem",
+                    width="100%",
+                ),
             ),
             gap="0.5rem",
             align="start",
@@ -119,28 +135,50 @@ def _balance_section() -> rx.Component:
 
 # ── In-flight requests ───────────────────────────────────────────────
 
-_IN_FLIGHT_COLS: list[TableColumn] = [
-    TableColumn(key="leave_type",      label="Type"),
-    TableColumn(key="starts_on",       label="From"),
-    TableColumn(key="ends_on",         label="To"),
-    TableColumn(key="chargeable_days", label="Days",     hidden_on_card=True),
-    TableColumn(key="state",           label="State"),
-    TableColumn(key="progress_text",   label="Progress", hidden_on_card=True),
-]
-
-
-def _in_flight_actions(row: rx.Var) -> rx.Component:
-    return rx.cond(
-        row["state"] == "submitted",
-        rx.button(
-            "Withdraw",
-            on_click=LeavePageState.withdraw_leave(row["id"]),
-            variant="ghost",
-            size="1",
-            color="var(--color-destructive)",
-            cursor="pointer",
+def _in_flight_row(row: rx.Var) -> rx.Component:
+    return rx.box(
+        rx.flex(
+            _leave_type_label(row["leave_type"]),
+            rx.text(row["starts_on"], font_size="0.85rem", color="var(--color-muted)"),
+            rx.text("→", font_size="0.85rem", color="var(--color-muted)"),
+            rx.text(row["ends_on"], font_size="0.85rem", color="var(--color-muted)"),
+            rx.text(row["chargeable_days"], font_size="0.85rem"),
+            rx.text("days", font_size="0.85rem", color="var(--color-muted)"),
+            _state_badge(row["state"]),
+            rx.spacer(),
+            rx.cond(
+                row["state"] == "submitted",
+                rx.button(
+                    "Withdraw",
+                    on_click=LeavePageState.withdraw_leave(row["id"]),
+                    variant="ghost",
+                    size="1",
+                    color="var(--color-destructive)",
+                    cursor="pointer",
+                ),
+                rx.fragment(),
+            ),
+            wrap="wrap",
+            gap="0.5rem",
+            align="center",
+            width="100%",
         ),
-        rx.fragment(),
+        rx.cond(
+            row["progress_text"] != "",
+            rx.text(
+                "Progress: ",
+                rx.text(row["progress_text"], as_="span", font_weight="500"),
+                font_size="0.8rem",
+                color="var(--color-muted)",
+                margin_top="0.35rem",
+            ),
+            rx.fragment(),
+        ),
+        padding="0.75rem",
+        border="1px solid var(--color-rule)",
+        border_radius="6px",
+        background="white",
+        width="100%",
     )
 
 
@@ -154,13 +192,18 @@ def _in_flight_section() -> rx.Component:
             color="var(--color-text)",
             margin_bottom="0.75rem",
         ),
-        data_table(
-            rows=LeavePageState.in_flight,
-            columns=_IN_FLIGHT_COLS,
-            card_primary_key="leave_type",
-            is_mobile=False,
-            actions=_in_flight_actions,
-            empty_message="No active leave requests.",
+        rx.cond(
+            LeavePageState.in_flight.length() > 0,  # type: ignore[attr-defined]
+            rx.vstack(
+                rx.foreach(LeavePageState.in_flight, _in_flight_row),
+                width="100%",
+                gap="0.5rem",
+            ),
+            rx.text(
+                "No active leave requests.",
+                color="var(--color-muted)",
+                font_size="0.875rem",
+            ),
         ),
         margin_bottom="2rem",
     )
@@ -168,14 +211,37 @@ def _in_flight_section() -> rx.Component:
 
 # ── History ──────────────────────────────────────────────────────────
 
-_HISTORY_COLS: list[TableColumn] = [
-    TableColumn(key="leave_type",      label="Type"),
-    TableColumn(key="starts_on",       label="From"),
-    TableColumn(key="ends_on",         label="To"),
-    TableColumn(key="chargeable_days", label="Days",  hidden_on_card=True),
-    TableColumn(key="state",           label="State"),
-    TableColumn(key="reason",          label="Reason", hidden_on_card=True),
-]
+def _history_row(row: rx.Var) -> rx.Component:
+    return rx.box(
+        rx.flex(
+            _leave_type_label(row["leave_type"]),
+            rx.text(row["starts_on"], font_size="0.85rem", color="var(--color-muted)"),
+            rx.text("→", font_size="0.85rem", color="var(--color-muted)"),
+            rx.text(row["ends_on"], font_size="0.85rem", color="var(--color-muted)"),
+            rx.text(row["chargeable_days"], font_size="0.85rem"),
+            rx.text("days", font_size="0.85rem", color="var(--color-muted)"),
+            _state_badge(row["state"]),
+            wrap="wrap",
+            gap="0.5rem",
+            align="center",
+            width="100%",
+        ),
+        rx.cond(
+            row["history_text"] != "",
+            rx.text(
+                row["history_text"],
+                font_size="0.8rem",
+                color="var(--color-muted)",
+                margin_top="0.35rem",
+            ),
+            rx.fragment(),
+        ),
+        padding="0.75rem",
+        border="1px solid var(--color-rule)",
+        border_radius="6px",
+        background="white",
+        width="100%",
+    )
 
 
 def _history_section() -> rx.Component:
@@ -188,13 +254,18 @@ def _history_section() -> rx.Component:
             color="var(--color-text)",
             margin_bottom="0.75rem",
         ),
-        data_table(
-            rows=LeavePageState.history,
-            columns=_HISTORY_COLS,
-            card_primary_key="leave_type",
-            is_mobile=False,
-            actions=None,
-            empty_message="No past leave requests this academic year.",
+        rx.cond(
+            LeavePageState.history.length() > 0,  # type: ignore[attr-defined]
+            rx.vstack(
+                rx.foreach(LeavePageState.history, _history_row),
+                width="100%",
+                gap="0.5rem",
+            ),
+            rx.text(
+                "No past leave requests this academic year.",
+                color="var(--color-muted)",
+                font_size="0.875rem",
+            ),
         ),
     )
 

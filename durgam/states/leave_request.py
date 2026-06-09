@@ -71,6 +71,45 @@ def _build_leave_progress(ar: Any, proc_channel: list[str], steps_map: dict) -> 
     return text
 
 
+def _build_leave_history_summary(
+    ar: Any, proc_channel: list[str], steps_map: dict, r_state: str
+) -> str:
+    """One-line terminal summary for a completed leave request."""
+    if r_state == "withdrawn":
+        return "Withdrawn by requestor."
+    if r_state == "cancelled":
+        if ar is None:
+            return "Cancelled."
+        steps = steps_map.get(ar.id, [])
+        for s in reversed(steps):
+            if s.decision in ("cancelled", "rejected"):
+                comment = (s.comment or "").strip()
+                text = f"Cancelled by {s.approver_role_code}"
+                if comment:
+                    text += f": '{comment[:60]}'"
+                return text + "."
+        return "Cancelled."
+    if ar is None:
+        return ""
+    resolved = ar.resolved_channel_json or []
+    total = len(resolved) if resolved else len(proc_channel)
+    steps = steps_map.get(ar.id, [])
+    for s in reversed(steps):
+        if s.decision in ("approved", "rejected"):
+            comment = (s.comment or "").strip()
+            decided = s.decided_at.strftime("%Y-%m-%d") if s.decided_at else ""
+            word = "Approved" if s.decision == "approved" else "Rejected"
+            text = f"{word} by {s.approver_role_code}"
+            if decided:
+                text += f" ({decided})"
+            if comment:
+                text += f": '{comment[:60]}'"
+            text += f". Stage {s.stage} of {total}."
+            return text
+    decision_word = "Approved" if r_state == "approved" else "Rejected"
+    return f"{decision_word}."
+
+
 def _build_svc(session):
     from durgam.repositories.leave import (
         LeaveBalanceRepository,
@@ -173,6 +212,7 @@ class LeavePageState(BaseState):
                     LeaveBalance.is_deleted == False,  # noqa: E712
                 )
             ).all()
+            _no_balance_types = {"SCL", "EOL", "SL"}
             self.balances = [
                 {
                     "leave_type": b.leave_type,
@@ -182,6 +222,7 @@ class LeavePageState(BaseState):
                     "forfeited": b.forfeited,
                     "encashed": b.encashed,
                     "closing": b.closing_balance,
+                    "is_no_balance_type": b.leave_type in _no_balance_types,
                 }
                 for b in balances
             ]
@@ -200,18 +241,16 @@ class LeavePageState(BaseState):
 
             terminal = {"approved", "rejected", "withdrawn", "cancelled"}
 
-            # Enrich in-flight rows with approval progress.
+            # Enrich all rows with approval progress / history summary.
             from durgam.models.crosscutting import ApprovalProcess, ApprovalRequest
             from durgam.repositories.approval_step import ApprovalStepRepository
 
-            inflight_ar_ids = [
-                r.approval_request_id for r in requests if r.state not in terminal
-            ]
+            all_ar_ids = [r.approval_request_id for r in requests]
             ar_map: dict = {}
-            if inflight_ar_ids:
+            if all_ar_ids:
                 for ar_row in session.exec(
                     select(ApprovalRequest).where(
-                        ApprovalRequest.id.in_(inflight_ar_ids)  # type: ignore[union-attr]
+                        ApprovalRequest.id.in_(all_ar_ids)  # type: ignore[union-attr]
                     )
                 ).all():
                     ar_map[ar_row.id] = ar_row
@@ -230,7 +269,7 @@ class LeavePageState(BaseState):
 
             step_repo = ApprovalStepRepository(session)
             steps_map: dict = {}
-            for ar_id in inflight_ar_ids:
+            for ar_id in all_ar_ids:
                 steps_map[ar_id] = step_repo.list_for_request(ar_id)
 
             for r in requests:
@@ -243,10 +282,13 @@ class LeavePageState(BaseState):
                     "state": r.state,
                     "reason": r.reason or "",
                 }
+                ar = ar_map.get(r.approval_request_id)
                 if r.state in terminal:
+                    row["history_text"] = _build_leave_history_summary(
+                        ar, proc_channel_codes, steps_map, r.state
+                    )
                     self.history.append(row)
                 else:
-                    ar = ar_map.get(r.approval_request_id)
                     row["progress_text"] = _build_leave_progress(ar, proc_channel_codes, steps_map)
                     self.in_flight.append(row)
 
