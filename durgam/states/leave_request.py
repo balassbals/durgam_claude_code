@@ -12,6 +12,7 @@ from uuid import UUID
 import reflex as rx
 import structlog
 
+from durgam.auth.decorators import audit_action, require_role
 from durgam.db import open_session
 from durgam.states.base import BaseState
 
@@ -156,6 +157,11 @@ class LeavePageState(BaseState):
     submitting: bool = False
     form_error: str = ""
 
+    # ── Withdraw-approved modal state ────────────────────────────────
+    show_withdraw_modal: bool = False
+    withdraw_reason: str = ""
+    withdraw_request_id: str = ""
+
     # ── Computed vars ────────────────────────────────────────────────
 
     @rx.var
@@ -239,7 +245,9 @@ class LeavePageState(BaseState):
                 ).all()
             )
 
-            terminal = {"approved", "rejected", "withdrawn", "cancelled"}
+            # "approved" is in-flight while today <= ends_on (within the withdrawal
+            # window); it moves to history once the leave period has ended.
+            terminal = {"rejected", "withdrawn", "cancelled"}
 
             # Enrich all rows with approval progress / history summary.
             from durgam.models.crosscutting import ApprovalProcess, ApprovalRequest
@@ -283,13 +291,22 @@ class LeavePageState(BaseState):
                     "reason": r.reason or "",
                 }
                 ar = ar_map.get(r.approval_request_id)
-                if r.state in terminal:
+                is_approved_in_window = (
+                    r.state == "approved" and r.ends_on is not None and r.ends_on >= today
+                )
+                if r.state in terminal or (r.state == "approved" and not is_approved_in_window):
                     row["history_text"] = _build_leave_history_summary(
                         ar, proc_channel_codes, steps_map, r.state
                     )
                     self.history.append(row)
                 else:
-                    row["progress_text"] = _build_leave_progress(ar, proc_channel_codes, steps_map)
+                    if is_approved_in_window:
+                        row["progress_text"] = _build_leave_history_summary(
+                            ar, proc_channel_codes, steps_map, r.state
+                        )
+                    else:
+                        row["progress_text"] = _build_leave_progress(ar, proc_channel_codes, steps_map)
+                    row["within_withdraw_window"] = is_approved_in_window
                     self.in_flight.append(row)
 
         self.loading = False
@@ -315,6 +332,41 @@ class LeavePageState(BaseState):
 
         await self.load_my_leave()
         self.flash = "Leave request withdrawn."
+        self.flash_type = "success"
+
+    @require_role(action="withdraw", resource="leave_request", scope="own")
+    @audit_action(action="withdraw", resource="leave_request")
+    async def submit_withdrawal(self, form_data: dict) -> None:
+        """Withdraw an approved leave request (post-approval path)."""
+        reason = form_data.get("withdraw_reason", "").strip()
+        request_id = form_data.get("withdraw_request_id", "").strip()
+        if len(reason) < 10:
+            self.flash = "Reason must be at least 10 characters."
+            self.flash_type = "error"
+            return
+        if not request_id:
+            return
+        user_id = UUID(self.current_user_id)
+        with open_session() as session:
+            from durgam.services.leave_request import LeaveRequestError
+
+            try:
+                svc = _build_svc(session)
+                leave_req = svc.withdraw(
+                    UUID(request_id),
+                    actor_user_id=user_id,
+                    reason=reason,
+                )
+                self._set_audit(resource_id=request_id)
+                session.commit()
+            except (LeaveRequestError, ValueError) as e:
+                self.flash = str(e)
+                self.flash_type = "error"
+                return
+
+        self.close_withdraw_modal()
+        await self.load_my_leave()
+        self.flash = "Your leave has been withdrawn. Balance will be updated."
         self.flash_type = "success"
 
     # ── Apply modal setters (M7 rule — explicit setters required) ────
@@ -353,6 +405,21 @@ class LeavePageState(BaseState):
 
     def set_in_charge_designation(self, value: str) -> None:
         self.in_charge_designation = value
+
+    def set_withdraw_reason(self, value: str) -> None:
+        self.withdraw_reason = value
+
+    # ── Withdraw-approved modal lifecycle ────────────────────────────
+
+    def open_withdraw_modal(self, request_id: str) -> None:
+        self.withdraw_request_id = request_id
+        self.withdraw_reason = ""
+        self.show_withdraw_modal = True
+
+    def close_withdraw_modal(self) -> None:
+        self.show_withdraw_modal = False
+        self.withdraw_reason = ""
+        self.withdraw_request_id = ""
 
     # ── Modal lifecycle ──────────────────────────────────────────────
 
