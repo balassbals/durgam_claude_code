@@ -105,6 +105,7 @@ class LeaveRequest(TimestampedSoftDelete, table=True):
 
     approval_request_id: UUID = Field(foreign_key="approval_requests.id", nullable=False)
     cancellation_reason: str | None = Field(default=None, nullable=True)
+    withdrawal_reason: str | None = Field(default=None, max_length=1000, nullable=True)
 
     overstay_flagged: bool = Field(default=False, nullable=False)
     # Set True by nightly check_overstay job; full EOL auto-creation deferred to M13

@@ -166,6 +166,32 @@ class LeaveBalanceRepository:
         self._session.refresh(balance)
         return balance
 
+    def reverse_deduction(
+        self,
+        balance: LeaveBalance,
+        days: float,
+        actor_id: UUID,
+    ) -> tuple[LeaveBalance, dict, dict]:
+        """Reverse a deduction: decrement availed by days, increment closing_balance.
+
+        Returns (balance, before_snap, after_snap). Service writes the audit row.
+        Raises ValueError if days <= 0 or balance.availed < days (defensive guard).
+        """
+        if days <= 0 or balance.availed < days:
+            raise ValueError(
+                f"Cannot reverse {days} days against balance with {balance.availed:.2f} availed."
+            )
+        before_snap = audit_snapshot(balance)
+        balance.availed -= days
+        balance.closing_balance += days
+        balance.updated_at = datetime.now(UTC)
+        balance.updated_by = actor_id
+        self._session.add(balance)
+        self._session.flush()
+        self._session.refresh(balance)
+        after_snap = audit_snapshot(balance)
+        return balance, before_snap, after_snap
+
     def upsert_balance_from_import(
         self,
         user_id: UUID,
