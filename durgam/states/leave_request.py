@@ -168,6 +168,10 @@ class LeavePageState(BaseState):
     def is_director(self) -> bool:
         return any(r.get("role_code") == "DIRECTOR" for r in self._current_user_roles)
 
+    @rx.var
+    def withdraw_reason_valid(self) -> bool:
+        return len(self.withdraw_reason.strip()) >= 10
+
     # ── Flash helpers ────────────────────────────────────────────────
 
     def dismiss_flash(self) -> None:
@@ -334,10 +338,15 @@ class LeavePageState(BaseState):
         self.flash = "Leave request withdrawn."
         self.flash_type = "success"
 
-    @require_role(action="withdraw", resource="leave_request", scope="own")
-    @audit_action(action="withdraw", resource="leave_request")
     async def submit_withdrawal(self, form_data: dict) -> None:
-        """Withdraw an approved leave request (post-approval path)."""
+        """Withdraw an approved leave request (post-approval path).
+
+        No @require_role decorator — service enforces actor==requestor internally
+        (same pattern as withdraw_leave above). Service also writes the audit row.
+        """
+        guard = _resolve_or_redirect(self)
+        if guard is not None:
+            return guard
         reason = form_data.get("withdraw_reason", "").strip()
         request_id = form_data.get("withdraw_request_id", "").strip()
         if len(reason) < 10:
@@ -352,12 +361,11 @@ class LeavePageState(BaseState):
 
             try:
                 svc = _build_svc(session)
-                leave_req = svc.withdraw(
+                svc.withdraw(
                     UUID(request_id),
                     actor_user_id=user_id,
                     reason=reason,
                 )
-                self._set_audit(resource_id=request_id)
                 session.commit()
             except (LeaveRequestError, ValueError) as e:
                 self.flash = str(e)

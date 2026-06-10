@@ -315,14 +315,13 @@ def _withdraw_approved_modal() -> rx.Component:
                 ),
                 rx.text_area(
                     name="withdraw_reason",
-                    value=LeavePageState.withdraw_reason,
                     on_change=LeavePageState.set_withdraw_reason,
                     placeholder="Provide a reason (minimum 10 characters)...",
                     rows="4",
                     width="100%",
                 ),
                 rx.cond(
-                    LeavePageState.withdraw_reason.length() < 10,  # type: ignore[union-attr]
+                    ~LeavePageState.withdraw_reason_valid,
                     rx.text(
                         "Reason must be at least 10 characters.",
                         font_size="0.75rem",
@@ -340,7 +339,8 @@ def _withdraw_approved_modal() -> rx.Component:
                 primary_btn(
                     "Confirm Withdrawal",
                     type="submit",
-                    disabled=LeavePageState.withdraw_reason.length() < 10,  # type: ignore[union-attr]
+                    disabled=~LeavePageState.withdraw_reason_valid,
+                    opacity=rx.cond(LeavePageState.withdraw_reason_valid, "1", "0.5"),
                 ),
                 gap="0.75rem",
                 justify="end",
