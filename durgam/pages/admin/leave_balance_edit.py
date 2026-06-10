@@ -90,7 +90,7 @@ def _results_table() -> rx.Component:
                     rx.table.root(
                         rx.table.header(
                             rx.table.row(
-                                rx.table.column_header_cell("Username", **_TH_STYLE, position="sticky", left="0", background="var(--color-surface)", z_index="1"),
+                                rx.table.column_header_cell("Username", **_TH_STYLE, position="sticky", left="0", z_index="1", background_color="var(--color-card-bg, var(--color-background))"),
                                 rx.table.column_header_cell("Leave Type", **_TH_STYLE),
                                 rx.table.column_header_cell("AY", **_TH_STYLE),
                                 rx.table.column_header_cell("Opening", **_TH_STYLE),
@@ -131,8 +131,8 @@ def _balance_row(row: rx.Var) -> rx.Component:
             **_TD_STYLE,
             position="sticky",
             left="0",
-            background="white",
             z_index="1",
+            background_color="var(--color-card-bg, var(--color-background))",
         ),
         rx.table.cell(rx.text(row["leave_type"], font_size="0.82rem"), **_TD_STYLE),
         rx.table.cell(rx.text(row["ay_name"], font_size="0.82rem"), **_TD_STYLE),
