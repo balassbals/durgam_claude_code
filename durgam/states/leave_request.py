@@ -348,7 +348,7 @@ class LeavePageState(BaseState):
         if guard is not None:
             return guard
         reason = form_data.get("withdraw_reason", "").strip()
-        request_id = form_data.get("withdraw_request_id", "").strip()
+        request_id = self.withdraw_request_id.strip()
         if len(reason) < 10:
             self.flash = "Reason must be at least 10 characters."
             self.flash_type = "error"

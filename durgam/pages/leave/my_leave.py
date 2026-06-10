@@ -302,11 +302,6 @@ def _withdraw_approved_modal() -> rx.Component:
             margin_bottom="1rem",
         ),
         rx.form(
-            rx.input(
-                type="hidden",
-                name="withdraw_request_id",
-                value=LeavePageState.withdraw_request_id,
-            ),
             rx.vstack(
                 rx.text(
                     "Reason for withdrawal",
