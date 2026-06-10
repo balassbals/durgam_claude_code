@@ -928,6 +928,10 @@ class ApprovalRequestService:
             balance.availed += leave_req.sanctioned_days * debit_factor
             bal_repo.save(balance)
 
+        if leave_req.is_post_facto:
+            from durgam.services.leave_request import LeaveRequestService  # deferred — avoids circular init
+            LeaveRequestService._reverse_cl_forfeitures_for_postfacto(self._session, leave_req)
+
     _NRF_REQUIRED_KEYS = frozenset({
         "department_id", "name", "designation", "organization",
         "expertise", "available_from", "available_to",

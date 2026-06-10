@@ -252,6 +252,9 @@ def seed(session: Session) -> dict[str, int]:
         # Leave balance admin (M8.1 E-022)
         {"resource": "leave_balance_admin",  "action": "read",      "scope": "*"},
         {"resource": "leave_balance_admin",  "action": "write",     "scope": "*"},
+        # Leave request admin (M8.1 E-022 Phase 8)
+        {"resource": "leave_request_admin",  "action": "read",      "scope": "*"},
+        {"resource": "leave_request_admin",  "action": "write",     "scope": "*"},
         # Audit log (M2 placeholder)
         {"resource": "audit_log",        "action": "read",      "scope": "*"},
         # ── M3 new triples ────────────────────────────────────────────────────
@@ -621,17 +624,23 @@ def seed(session: Session) -> dict[str, int]:
         ("leave_balance_admin",        "write",     "*"),
     ]
 
+    # M8.1 E-022 Phase 8 — leave request admin edit
+    _LEAVE_REQUEST_ADMIN = [
+        ("leave_request_admin",        "read",      "*"),
+        ("leave_request_admin",        "write",     "*"),
+    ]
+
     role_perm_map: dict[str, list[tuple[str, str, str]]] = {
-        "REGISTRAR":            _PUBLIC_READ + _LEAVE_REQUESTOR + _REGISTRAR_SPECIFIC + _CL_CREDIT_POLICY_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + [
+        "REGISTRAR":            _PUBLIC_READ + _LEAVE_REQUESTOR + _REGISTRAR_SPECIFIC + _CL_CREDIT_POLICY_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN + [
             ("approval_request",           "approve",   "*"),
         ],
-        "DEPUTY_REGISTRAR":     _PUBLIC_READ + _LEAVE_REQUESTOR + _REGISTRAR_SPECIFIC + _CL_CREDIT_POLICY_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + [
+        "DEPUTY_REGISTRAR":     _PUBLIC_READ + _LEAVE_REQUESTOR + _REGISTRAR_SPECIFIC + _CL_CREDIT_POLICY_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN + [
             ("approval_request",           "approve",   "*"),
         ],
-        "REGISTRAR_OFFICE":     _PUBLIC_READ + _LEAVE_REQUESTOR + _REGISTRAR_SPECIFIC + _CL_CREDIT_POLICY_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN,
-        "DIRECTOR":             _PUBLIC_READ + _LEAVE_REQUESTOR + _DIRECTOR_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN,
-        "DEPUTY_DIRECTOR":      _PUBLIC_READ + _LEAVE_REQUESTOR + _DIRECTOR_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN,
-        "DIRECTOR_OFFICE":      _PUBLIC_READ + _LEAVE_REQUESTOR + _DIRECTOR_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN,
+        "REGISTRAR_OFFICE":     _PUBLIC_READ + _LEAVE_REQUESTOR + _REGISTRAR_SPECIFIC + _CL_CREDIT_POLICY_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN,
+        "DIRECTOR":             _PUBLIC_READ + _LEAVE_REQUESTOR + _DIRECTOR_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN,
+        "DEPUTY_DIRECTOR":      _PUBLIC_READ + _LEAVE_REQUESTOR + _DIRECTOR_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN,
+        "DIRECTOR_OFFICE":      _PUBLIC_READ + _LEAVE_REQUESTOR + _DIRECTOR_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN,
         "IQAC_COORDINATOR":     _PUBLIC_READ + _LEAVE_REQUESTOR + _IQAC_SPECIFIC,
         "DEAN":                 _PUBLIC_READ + _LEAVE_REQUESTOR + _DEAN_SPECIFIC + [
             ("approval_request",           "approve",   "*"),

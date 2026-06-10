@@ -592,6 +592,25 @@ def _apply_modal() -> rx.Component:
                     ),
                     rx.fragment(),
                 ),
+                # Post-facto badge (informational only — does not block submission)
+                rx.cond(
+                    LeavePageState.is_past_dated,
+                    rx.box(
+                        rx.text(
+                            "⚠ Post-facto application — this request covers past dates.",
+                            color="var(--color-warning, #b45309)",
+                            font_size="0.85rem",
+                            font_weight="500",
+                        ),
+                        background="rgba(245, 158, 11, 0.08)",
+                        border="1px solid rgba(245, 158, 11, 0.3)",
+                        border_radius="0.375rem",
+                        padding="0.5rem 0.75rem",
+                        margin_bottom="0.5rem",
+                        width="100%",
+                    ),
+                    rx.fragment(),
+                ),
                 # Actions
                 rx.hstack(
                     primary_btn(

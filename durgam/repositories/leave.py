@@ -327,6 +327,36 @@ class LeaveBalanceRepository:
         after_snap = audit_snapshot(balance)
         return balance, before_snap, after_snap
 
+    def reverse_cl_forfeiture_for_months(
+        self,
+        balance: LeaveBalance,
+        months: list[str],
+        actor_id: UUID,
+    ) -> list[tuple[dict, dict]]:
+        """Reverse CL forfeitures for each YYYY-MM in `months` that is in balance.forfeiture_applied_for.
+
+        For each matching month: decrement forfeited by 1.0, increment closing_balance by 1.0,
+        remove the month from forfeiture_applied_for. Skips months not in the list (idempotent).
+        Returns list of (before_snap, after_snap) tuples — one per reversal. Service writes audit rows.
+        """
+        results: list[tuple[dict, dict]] = []
+        for month in months:
+            if month not in balance.forfeiture_applied_for:
+                continue
+            before_snap = audit_snapshot(balance)
+            balance.forfeited -= 1.0
+            balance.closing_balance += 1.0
+            # Rebuild the list without the reversed month (JSONB column — must replace list)
+            balance.forfeiture_applied_for = [m for m in balance.forfeiture_applied_for if m != month]
+            balance.updated_at = datetime.now(UTC)
+            balance.updated_by = actor_id
+            self._session.add(balance)
+            self._session.flush()
+            self._session.refresh(balance)
+            after_snap = audit_snapshot(balance)
+            results.append((before_snap, after_snap))
+        return results
+
 
 class LeaveRepository:
     """AY-scoped leave requests with lock enforcement."""
@@ -392,6 +422,31 @@ class LeaveRepository:
         self._session.refresh(req)
         return req
 
+    def admin_search(
+        self,
+        username_filter: str | None = None,
+        leave_type_filter: str | None = None,
+        state_filter: str | None = None,
+        limit: int = 500,
+    ) -> list[tuple["LeaveRequest", "User"]]:
+        """Return (LeaveRequest, User) tuples with optional filters for admin list page."""
+        from durgam.models.identity import User as _User
+        stmt = (
+            select(LeaveRequest, _User)
+            .join(_User, LeaveRequest.requestor_user_id == _User.id)
+            .where(LeaveRequest.is_deleted == False)  # noqa: E712
+            .where(_User.is_deleted == False)  # noqa: E712
+            .order_by(LeaveRequest.created_at.desc())  # type: ignore[union-attr]
+            .limit(limit)
+        )
+        if username_filter:
+            stmt = stmt.where(_User.username.ilike(f"%{username_filter}%"))  # type: ignore[union-attr]
+        if leave_type_filter:
+            stmt = stmt.where(LeaveRequest.leave_type == leave_type_filter)
+        if state_filter:
+            stmt = stmt.where(LeaveRequest.state == state_filter)
+        return list(self._session.exec(stmt).all())
+
 
 class LateAttendanceMarkerRepository:
     """CRUD for LateAttendanceMarker (manual HR entry pre-M13 Attendance Module)."""
@@ -454,6 +509,22 @@ class LateAttendanceMarkerRepository:
                 )
             except (ValueError, AttributeError):
                 pass
+        return list(self._session.exec(stmt).all())
+
+    def get_late_markers_in_range(
+        self,
+        user_id: UUID,
+        start_date: date_type,
+        end_date: date_type,
+    ) -> list[LateAttendanceMarker]:
+        """Return markers for `user_id` with occurred_on in [start_date, end_date]."""
+        stmt = (
+            select(LateAttendanceMarker)
+            .where(LateAttendanceMarker.is_deleted == False)  # noqa: E712
+            .where(LateAttendanceMarker.employee_user_id == user_id)
+            .where(LateAttendanceMarker.occurred_on >= start_date)
+            .where(LateAttendanceMarker.occurred_on <= end_date)
+        )
         return list(self._session.exec(stmt).all())
 
 

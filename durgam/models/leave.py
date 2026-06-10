@@ -110,6 +110,9 @@ class LeaveRequest(TimestampedSoftDelete, table=True):
     overstay_flagged: bool = Field(default=False, nullable=False)
     # Set True by nightly check_overstay job; full EOL auto-creation deferred to M13
 
+    is_post_facto: bool = Field(default=False, nullable=False)
+    # True when starts_on < date at submission time (set once in LeaveRequestService.submit)
+
 
 class LateAttendanceMarker(TimestampedSoftDelete, table=True):
     """One row per late-attendance occurrence.

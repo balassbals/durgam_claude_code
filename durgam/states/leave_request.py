@@ -172,6 +172,17 @@ class LeavePageState(BaseState):
     def withdraw_reason_valid(self) -> bool:
         return len(self.withdraw_reason.strip()) >= 10
 
+    @rx.var
+    def is_past_dated(self) -> bool:
+        """True when starts_on form value represents a past date."""
+        import datetime as _dt
+        if not self.starts_on:
+            return False
+        try:
+            return _dt.date.fromisoformat(self.starts_on) < _dt.date.today()
+        except ValueError:
+            return False
+
     # ── Flash helpers ────────────────────────────────────────────────
 
     def dismiss_flash(self) -> None:
