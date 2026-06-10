@@ -66,3 +66,11 @@ register(NavEntry(
     permission_action="configure",
     permission_resource="leave_credit_policy",
 ))
+register(NavEntry(
+    label="Balance Import",
+    href="/admin/leave/balance-import",
+    icon="file-up",
+    group="Admin",
+    permission_action="write",
+    permission_resource="leave_balance_import",
+))
