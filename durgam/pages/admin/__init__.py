@@ -57,3 +57,12 @@ register(NavEntry(
     permission_action="write",
     permission_resource="late_attendance",
 ))
+# ── M8.1 nav entries ────────────────────────────────────────────────────────────
+register(NavEntry(
+    label="CL Credit Policy",
+    href="/admin/leave/credit-policy",
+    icon="calendar-plus",
+    group="Admin",
+    permission_action="configure",
+    permission_resource="leave_credit_policy",
+))

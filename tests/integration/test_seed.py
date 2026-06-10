@@ -26,8 +26,8 @@ class TestSeed:
         # Assert TOTAL row counts after seed (stable regardless of pre-existing data).
         # M8 Phase 4: 32 roles (30 prior + PROFESSOR, ASSOC_PROFESSOR).
         assert _count(db_session, Role) == 32, "Expected 32 seeded roles at M8 Phase 4"
-        # M8: 114 triples (101 prior + 13 new M8 leave/sanction/late-attendance triples).
-        assert _count(db_session, Permission) == 115, "Expected 115 seeded permission triples at M8 hotfix"
+        # M8.1: 117 triples (115 prior + 2 new: leave_credit_policy:read:* and leave_credit_policy:configure:*).
+        assert _count(db_session, Permission) == 117, "Expected 117 seeded permission triples at M8.1 Phase 2"
         assert _count(db_session, User) >= 25, "Expected at least 25 seeded users"
         assert _count(db_session, RolePermission) >= 100, "Expected at least 100 role→permission rows"
         ay = db_session.exec(select(AcademicYear).where(AcademicYear.code == "2025-26")).first()

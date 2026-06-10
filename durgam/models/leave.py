@@ -136,6 +136,50 @@ class LateAttendanceMarker(TimestampedSoftDelete, table=True):
     notes: str | None = Field(default=None, nullable=True)
 
 
+class LeaveCreditPolicy(TimestampedSoftDelete, table=True):
+    """Annual CL credit entitlement policy per leave type (TD-036, M8.1).
+
+    Seed-managed: one active row per leave_type (currently only "CL").
+    Editable via /admin/leave/credit-policy; cannot be created/deleted at runtime.
+    """
+
+    __tablename__ = "leave_credit_policies"
+    __table_args__ = (
+        sa.UniqueConstraint("leave_type", name="uq_leave_credit_policies_leave_type"),
+    )
+
+    leave_type: str = Field(max_length=8, nullable=False)
+    vacation_entitlement: float = Field(nullable=False)
+    non_vacation_entitlement: float = Field(nullable=False)
+    enabled: bool = Field(default=True, nullable=False)
+
+
+class LeaveCreditRun(TimestampedSoftDelete, table=True):
+    """Idempotency sidecar for credit_annual_cl (TD-036, M8.1).
+
+    One row per (user_id, leave_type, calendar_year) ensures the job is a
+    no-op if re-run for the same calendar year.
+    """
+
+    __tablename__ = "leave_credit_runs"
+    __table_args__ = (
+        sa.UniqueConstraint(
+            "user_id",
+            "leave_type",
+            "calendar_year",
+            name="uq_leave_credit_runs_user_type_year",
+        ),
+        sa.Index("ix_leave_credit_runs_user", "user_id"),
+    )
+
+    user_id: UUID = Field(foreign_key="users.id", nullable=False)
+    leave_type: str = Field(max_length=8, nullable=False)
+    calendar_year: int = Field(nullable=False)
+    credited_days: float = Field(nullable=False)
+    policy_id: UUID = Field(foreign_key="leave_credit_policies.id", nullable=False)
+    ran_at: datetime = Field(sa_type=_TIMESTAMPTZ, nullable=False)
+
+
 class LeaveSanctionAuthorityRule(TimestampedSoftDelete, table=True):
     """Encodes the sanctioning authority matrix (§11.10, §11.15).
 

@@ -270,3 +270,10 @@ app.add_page(admin_leave_sanction_matrix, route="/admin/config/leave-sanction-ma
              on_load=LeaveMatrixState.load_rules)
 app.add_page(admin_late_attendance, route="/admin/leave/late-attendance",
              on_load=LateAttendanceAdminState.load_markers)
+
+# ── M8.1 Admin pages ──────────────────────────────────────────────────────────
+from durgam.pages.admin.leave_credit_policy import admin_leave_credit_policy
+from durgam.states.leave_credit_policy import LeaveCreditPolicyState
+
+app.add_page(admin_leave_credit_policy, route="/admin/leave/credit-policy",
+             on_load=LeaveCreditPolicyState.load_policies)

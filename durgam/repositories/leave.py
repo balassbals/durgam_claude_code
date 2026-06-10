@@ -15,6 +15,8 @@ from durgam.models.config_anchors import AcademicYear
 from durgam.models.leave import (
     LateAttendanceMarker,
     LeaveBalance,
+    LeaveCreditPolicy,
+    LeaveCreditRun,
     LeaveSanctionAuthorityRule,
     LeaveRequest,
 )
@@ -291,3 +293,59 @@ class LateAttendanceMarkerRepository:
             except (ValueError, AttributeError):
                 pass
         return list(self._session.exec(stmt).all())
+
+
+class LeaveCreditPolicyRepository:
+    """CRUD for LeaveCreditPolicy (TD-036, M8.1)."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def get_for_leave_type(self, leave_type: str) -> LeaveCreditPolicy | None:
+        return self._session.exec(
+            select(LeaveCreditPolicy).where(
+                LeaveCreditPolicy.leave_type == leave_type,
+                LeaveCreditPolicy.is_deleted == False,  # noqa: E712
+            )
+        ).first()
+
+    def list_active(self) -> list[LeaveCreditPolicy]:
+        return list(
+            self._session.exec(
+                select(LeaveCreditPolicy).where(
+                    LeaveCreditPolicy.is_deleted == False  # noqa: E712
+                )
+            ).all()
+        )
+
+    def save(self, policy: LeaveCreditPolicy) -> LeaveCreditPolicy:
+        policy.updated_at = datetime.now(UTC)
+        self._session.add(policy)
+        self._session.flush()
+        self._session.refresh(policy)
+        return policy
+
+
+class LeaveCreditRunRepository:
+    """Idempotency sidecar for credit_annual_cl (TD-036, M8.1)."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def get(
+        self, user_id: UUID, leave_type: str, calendar_year: int
+    ) -> LeaveCreditRun | None:
+        return self._session.exec(
+            select(LeaveCreditRun).where(
+                LeaveCreditRun.user_id == user_id,
+                LeaveCreditRun.leave_type == leave_type,
+                LeaveCreditRun.calendar_year == calendar_year,
+                LeaveCreditRun.is_deleted == False,  # noqa: E712
+            )
+        ).first()
+
+    def create(self, run: LeaveCreditRun) -> LeaveCreditRun:
+        self._session.add(run)
+        self._session.flush()
+        self._session.refresh(run)
+        return run

@@ -22,6 +22,8 @@ from durgam.models.identity import Role, User, UserRole
 from durgam.models.leave import (
     LateAttendanceMarker,
     LeaveBalance,
+    LeaveCreditPolicy,
+    LeaveCreditRun,
     LeaveRequest,
 )
 from durgam.services.leave_rules import is_vacation_employee
@@ -644,3 +646,226 @@ def check_overstay(reference_date: date | None = None) -> dict:
         session.commit()
 
     return {"flagged": flagged, "errors": errors}
+
+
+# ── Job 6: credit_annual_cl ────────────────────────────────────────────────────
+
+
+def _round_half(value: float) -> float:
+    """Round to nearest 0.5 (e.g. 5.3 → 5.5; 5.2 → 5.0; 0.25 → 0.5).
+
+    Uses floor-based "round half up" to avoid Python's banker's rounding
+    (round(0.5) == 0 in Python 3 because 0 is even). With floor-based rounding,
+    x.25 always rounds up to x.5 rather than down to x.0.
+    """
+    import math
+    return math.floor(value * 2 + 0.5) / 2
+
+
+def _compute_cl_credit(
+    entitlement: float,
+    joined_year: int | None,
+    calendar_year: int,
+) -> float:
+    """Compute CL credit for one employee (DD-M8.1-P2-3).
+
+    Proration applies ONLY when joined_year == calendar_year.
+    Long-tenured employees (joined before calendar_year) always receive
+    the full entitlement.
+    """
+    if joined_year is None or joined_year != calendar_year:
+        return entitlement
+    # joined_year == calendar_year — prorate from join month to year-end
+    # We don't have the month here; callers pass the full join_date.
+    # This helper is for the no-join-date case; see caller for proration.
+    return entitlement
+
+
+def _compute_cl_credit_for_user(
+    entitlement: float,
+    joined_on: "date | None",
+    calendar_year: int,
+) -> float:
+    """Compute and round CL credit for a user given their join date."""
+    if joined_on is None:
+        # No join date → full entitlement + caller logs WARNING
+        return entitlement
+    if joined_on.year != calendar_year:
+        # Joined before or after this calendar year → full entitlement
+        return entitlement
+    # Joined during this calendar year → prorate
+    months_remaining = 12 - (joined_on.month - 1)
+    raw = entitlement * months_remaining / 12
+    return _round_half(raw)
+
+
+@app.task(name="durgam.tasks.leave_jobs.credit_annual_cl")
+def credit_annual_cl(reference_date: date | None = None) -> dict:
+    """Credit annual CL entitlement for all active employees (TD-036, M8.1).
+
+    Runs on Jan 1 at 03:00 UTC. reference_date enables deterministic tests.
+
+    Idempotency: leave_credit_runs unique on (user_id, leave_type, calendar_year).
+    Re-running for the same calendar_year is a no-op for users already processed.
+
+    Proration: applied only for users whose joined_on.year == calendar_year.
+    All other users receive the full entitlement.
+
+    AY guard: the active AY must not be locked; raises AcademicYearLockedError if so.
+    """
+    ref = reference_date or date.today()
+    calendar_year = ref.year
+
+    users_processed = 0
+    users_skipped_idempotent = 0
+    users_skipped_no_policy = 0
+    users_credited = 0
+    errors: list[dict] = []
+
+    with open_session() as session:
+        ay = _active_ay(session, ref)
+        if ay is None:
+            log.warning("credit_annual_cl_no_ay", ref=str(ref))
+            return {
+                "calendar_year": calendar_year,
+                "users_credited": 0,
+                "users_skipped_idempotent": 0,
+                "errors": [{"error": "No active AY found for ref date"}],
+            }
+        if ay.is_locked:
+            from durgam.services.org_exceptions import AcademicYearLockedError
+            raise AcademicYearLockedError()
+
+        policy = session.exec(
+            select(LeaveCreditPolicy).where(
+                LeaveCreditPolicy.leave_type == "CL",
+                LeaveCreditPolicy.is_deleted == False,  # noqa: E712
+            )
+        ).first()
+        if policy is None or not policy.enabled:
+            log.warning("credit_annual_cl_no_policy", calendar_year=calendar_year)
+            return {
+                "calendar_year": calendar_year,
+                "users_credited": 0,
+                "users_skipped_idempotent": 0,
+                "errors": [{"error": "CL credit policy not found or disabled"}],
+            }
+
+        active_users = session.exec(
+            select(User).where(
+                User.is_active == True,  # noqa: E712
+                User.is_deleted == False,  # noqa: E712
+            )
+        ).all()
+
+        from durgam.repositories.leave import LeaveBalanceRepository, LeaveCreditRunRepository
+        bal_repo = LeaveBalanceRepository(session)
+        run_repo = LeaveCreditRunRepository(session)
+
+        for user in active_users:
+            users_processed += 1
+            try:
+                # Idempotency check
+                existing_run = run_repo.get(user.id, "CL", calendar_year)
+                if existing_run is not None:
+                    users_skipped_idempotent += 1
+                    continue
+
+                if user.employee_type is None:
+                    users_skipped_no_policy += 1
+                    log.warning(
+                        "credit_annual_cl_no_employee_type",
+                        user_id=str(user.id),
+                        username=user.username,
+                    )
+                    continue
+
+                vacation = is_vacation_employee(user.employee_type)
+                entitlement = (
+                    policy.vacation_entitlement
+                    if vacation
+                    else policy.non_vacation_entitlement
+                )
+
+                if user.joined_on is None:
+                    log.warning(
+                        "credit_annual_cl_no_joined_on",
+                        user_id=str(user.id),
+                        username=user.username,
+                    )
+
+                credited_days = _compute_cl_credit_for_user(
+                    entitlement, user.joined_on, calendar_year
+                )
+
+                # Get or create CL balance for this AY
+                balance = bal_repo.get_or_create(
+                    user.id, "CL", ay.id, actor_id=user.id
+                )
+                before_snap = audit_snapshot(balance)
+
+                balance.credited += credited_days
+                balance.closing_balance = (
+                    balance.opening_balance
+                    + balance.credited
+                    - balance.availed
+                    - balance.forfeited
+                    - balance.encashed
+                )
+                balance.updated_at = datetime.now(UTC)
+                session.add(balance)
+                session.flush()
+                session.refresh(balance)
+
+                after_snap = audit_snapshot(balance)
+
+                # Record idempotency sidecar
+                run = LeaveCreditRun(
+                    user_id=user.id,
+                    leave_type="CL",
+                    calendar_year=calendar_year,
+                    credited_days=credited_days,
+                    policy_id=policy.id,
+                    ran_at=datetime.now(UTC),
+                )
+                run_repo.create(run)
+
+                write_audit_row(
+                    actor_user_id=None,
+                    actor_role_code=None,
+                    action="credit_annual_cl",
+                    resource="leave_balance",
+                    resource_id=str(balance.id),
+                    request_id=None,
+                    ip=None,
+                    user_agent=None,
+                    before=before_snap,
+                    after=after_snap,
+                    session=session,
+                )
+
+                users_credited += 1
+                log.info(
+                    "credit_annual_cl_credited",
+                    user_id=str(user.id),
+                    calendar_year=calendar_year,
+                    credited_days=credited_days,
+                )
+            except Exception as exc:
+                log.exception(
+                    "credit_annual_cl_error",
+                    user_id=str(user.id),
+                    exc=str(exc),
+                )
+                errors.append({"user_id": str(user.id), "error": str(exc)})
+
+        session.commit()
+
+    return {
+        "calendar_year": calendar_year,
+        "users_processed": users_processed,
+        "users_credited": users_credited,
+        "users_skipped_idempotent": users_skipped_idempotent,
+        "users_skipped_no_policy": users_skipped_no_policy,
+        "errors": errors,
+    }
