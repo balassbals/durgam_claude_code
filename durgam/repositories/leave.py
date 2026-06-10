@@ -21,7 +21,17 @@ from durgam.models.leave import (
     LeaveSanctionAuthorityRule,
     LeaveRequest,
 )
+from durgam.models.identity import User
 from durgam.services.org_exceptions import AcademicYearLockedError
+
+
+class LeaveBalanceValidationError(ValueError):
+    """Raised when an admin balance edit would produce invalid state."""
+
+
+_BALANCE_EDITABLE_FIELDS = frozenset(
+    {"opening_balance", "credited", "availed", "forfeited", "encashed"}
+)
 
 
 class LeaveSanctionRuleRepository:
@@ -246,6 +256,76 @@ class LeaveBalanceRepository:
         self._session.refresh(balance)
         after_snap = audit_snapshot(balance)
         return balance, {}, after_snap
+
+    def admin_search_balances(
+        self,
+        username_filter: str | None,
+        leave_type_filter: str | None,
+        ay_id_filter: UUID | None,
+    ) -> list[tuple[LeaveBalance, User, AcademicYear]]:
+        """Return balance rows joined with user and AY, applying optional filters.
+
+        Orders by username ASC, leave_type ASC. Limit 500.
+        """
+        stmt = (
+            select(LeaveBalance, User, AcademicYear)
+            .join(User, LeaveBalance.employee_user_id == User.id)  # type: ignore[arg-type]
+            .join(AcademicYear, LeaveBalance.academic_year_id == AcademicYear.id)  # type: ignore[arg-type]
+            .where(LeaveBalance.is_deleted == False)  # noqa: E712
+            .where(User.is_deleted == False)  # noqa: E712
+        )
+        if username_filter:
+            stmt = stmt.where(User.username.ilike(f"%{username_filter}%"))  # type: ignore[union-attr]
+        if leave_type_filter:
+            stmt = stmt.where(LeaveBalance.leave_type == leave_type_filter)
+        if ay_id_filter:
+            stmt = stmt.where(LeaveBalance.academic_year_id == ay_id_filter)
+        stmt = stmt.order_by(
+            User.username.asc(),  # type: ignore[union-attr]
+            LeaveBalance.leave_type.asc(),  # type: ignore[union-attr]
+        ).limit(500)
+        return list(self._session.exec(stmt).all())  # type: ignore[arg-type]
+
+    def admin_update_balance(
+        self,
+        balance_id: UUID,
+        fields: dict,
+        actor_id: UUID,
+    ) -> tuple[LeaveBalance, dict, dict]:
+        """Update editable balance columns and recompute closing_balance.
+
+        Allowed keys: opening_balance, credited, availed, forfeited, encashed.
+        Raises LeaveBalanceValidationError for forbidden fields or negative closing.
+        Raises AcademicYearLockedError if the balance's AY is locked.
+        Returns (balance, before_snap, after_snap). Caller writes the audit row.
+        """
+        balance = self._session.get(LeaveBalance, balance_id)
+        if balance is None:
+            raise ValueError(f"LeaveBalance {balance_id} not found")
+        self._check_ay_locked(balance.academic_year_id)
+        for key in fields:
+            if key not in _BALANCE_EDITABLE_FIELDS:
+                raise LeaveBalanceValidationError(f"Forbidden field: {key}")
+        before_snap = audit_snapshot(balance)
+        for key, value in fields.items():
+            setattr(balance, key, value)
+        closing = (
+            balance.opening_balance
+            + balance.credited
+            - balance.availed
+            - balance.forfeited
+            - balance.encashed
+        )
+        if closing < 0:
+            raise LeaveBalanceValidationError(f"Negative closing balance: {closing:.2f}")
+        balance.closing_balance = closing
+        balance.updated_at = datetime.now(UTC)
+        balance.updated_by = actor_id
+        self._session.add(balance)
+        self._session.flush()
+        self._session.refresh(balance)
+        after_snap = audit_snapshot(balance)
+        return balance, before_snap, after_snap
 
 
 class LeaveRepository:

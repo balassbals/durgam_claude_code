@@ -274,10 +274,14 @@ app.add_page(admin_late_attendance, route="/admin/leave/late-attendance",
 # ── M8.1 Admin pages ──────────────────────────────────────────────────────────
 from durgam.pages.admin.leave_credit_policy import admin_leave_credit_policy
 from durgam.pages.admin.leave_balance_import import admin_leave_balance_import
+from durgam.pages.admin.leave_balance_edit import admin_leave_balance_edit
 from durgam.states.leave_credit_policy import LeaveCreditPolicyState
 from durgam.states.leave_balance_import import LeaveBalanceImportState
+from durgam.states.leave_balance_admin import LeaveBalanceAdminState
 
 app.add_page(admin_leave_credit_policy, route="/admin/leave/credit-policy",
              on_load=LeaveCreditPolicyState.load_policies)
 app.add_page(admin_leave_balance_import, route="/admin/leave/balance-import",
              on_load=LeaveBalanceImportState.load)
+app.add_page(admin_leave_balance_edit, route="/admin/leave/balance-edit",
+             on_load=LeaveBalanceAdminState.load_admin_balances)

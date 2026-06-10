@@ -74,3 +74,11 @@ register(NavEntry(
     permission_action="write",
     permission_resource="leave_balance_import",
 ))
+register(NavEntry(
+    label="Balance Edit",
+    href="/admin/leave/balance-edit",
+    icon="edit",
+    group="Admin",
+    permission_action="write",
+    permission_resource="leave_balance_admin",
+))

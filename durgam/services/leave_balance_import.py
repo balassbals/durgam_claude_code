@@ -332,6 +332,41 @@ class LeaveBalanceImportService:
         self._session.commit()
         return balance, before_snap, after_snap
 
+    def admin_edit_balance(
+        self,
+        balance_id: UUID,
+        fields: dict,
+        actor_id: UUID,
+    ) -> "LeaveBalance":
+        """Update a single balance row from the admin edit UI.
+
+        Wraps the repo admin_update_balance call plus a write_audit_row inside
+        the service transaction. The caller must session.commit() after this returns.
+        Raises LeaveBalanceValidationError or AcademicYearLockedError on invalid input.
+        """
+        from durgam.repositories.leave import LeaveBalanceRepository
+
+        repo = LeaveBalanceRepository(self._session)
+        balance, before_snap, after_snap = repo.admin_update_balance(
+            balance_id=balance_id,
+            fields=fields,
+            actor_id=actor_id,
+        )
+        write_audit_row(
+            actor_user_id=actor_id,
+            actor_role_code=None,
+            action="admin_edit",
+            resource="leave_balance",
+            resource_id=str(balance.id),
+            request_id=None,
+            ip=None,
+            user_agent=None,
+            before=before_snap if before_snap else None,
+            after=after_snap,
+            session=self._session,
+        )
+        return balance
+
 
 # ── CSV parser (module-level, no DB dependency) ────────────────────────────────
 
