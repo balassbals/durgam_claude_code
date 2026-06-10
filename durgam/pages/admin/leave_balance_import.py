@@ -188,9 +188,6 @@ def _preview_area() -> rx.Component:
                     on_click=LeaveBalanceImportState.commit_import,
                     disabled=~LeaveBalanceImportState.commit_enabled,
                     opacity=rx.cond(LeaveBalanceImportState.commit_enabled, "1", "0.5"),
-                    cursor=rx.cond(
-                        LeaveBalanceImportState.commit_enabled, "pointer", "not-allowed"
-                    ),
                 ),
                 secondary_btn(
                     "Reset",
