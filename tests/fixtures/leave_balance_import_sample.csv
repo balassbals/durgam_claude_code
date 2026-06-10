@@ -1,0 +1,11 @@
+employee_username,leave_type,opening_balance,credited,availed,forfeited,encashed
+import_user_01,CL,0.0,10.0,3.0,0.0,0.0
+import_user_02,CL,0.0,12.0,4.0,0.0,0.0
+import_user_03,EL,5.0,15.0,6.0,0.0,0.0
+import_user_04,EL,5.0,15.0,6.0,0.0,0.0
+import_user_05,HPL,0.0,30.0,10.0,0.0,0.0
+import_user_06,SL,0.0,10.0,2.0,0.0,0.0
+import_user_07,CL,0.0,10.0,0.0,0.0,0.0
+import_user_08,EL,0.0,15.0,5.0,1.0,0.0
+nonexistent_import_xyz,CL,0.0,10.0,0.0,0.0,0.0
+import_user_08,HPL,-5.0,10.0,0.0,0.0,0.0

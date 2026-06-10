@@ -11,6 +11,7 @@ from uuid import UUID, uuid4
 
 from sqlmodel import Session, select
 
+from durgam.audit.snapshot import audit_snapshot
 from durgam.models.config_anchors import AcademicYear
 from durgam.models.leave import (
     LateAttendanceMarker,
@@ -164,6 +165,61 @@ class LeaveBalanceRepository:
         self._session.flush()
         self._session.refresh(balance)
         return balance
+
+    def upsert_balance_from_import(
+        self,
+        user_id: UUID,
+        leave_type: str,
+        ay_id: UUID,
+        fields: dict,
+        actor_id: UUID,
+    ) -> tuple[LeaveBalance, dict, dict]:
+        """Upsert a leave balance row from import data.
+
+        Returns (balance, before_snap, after_snap).
+        before_snap is {} for newly created rows (use as None in audit before param).
+        The service writes the audit row; this method only persists the balance.
+        """
+        now = datetime.now(UTC)
+        existing = self.get(user_id, leave_type, ay_id)
+
+        if existing is not None:
+            before_snap = audit_snapshot(existing)
+            existing.opening_balance = fields["opening_balance"]
+            existing.credited = fields["credited"]
+            existing.availed = fields["availed"]
+            existing.forfeited = fields["forfeited"]
+            existing.encashed = fields["encashed"]
+            existing.closing_balance = fields["closing_balance"]
+            existing.updated_at = now
+            existing.updated_by = actor_id
+            self._session.add(existing)
+            self._session.flush()
+            self._session.refresh(existing)
+            after_snap = audit_snapshot(existing)
+            return existing, before_snap, after_snap
+
+        balance = LeaveBalance(
+            id=uuid4(),
+            employee_user_id=user_id,
+            leave_type=leave_type,
+            academic_year_id=ay_id,
+            opening_balance=fields["opening_balance"],
+            credited=fields["credited"],
+            availed=fields["availed"],
+            forfeited=fields["forfeited"],
+            encashed=fields["encashed"],
+            closing_balance=fields["closing_balance"],
+            created_by=actor_id,
+            updated_by=actor_id,
+            created_at=now,
+            updated_at=now,
+        )
+        self._session.add(balance)
+        self._session.flush()
+        self._session.refresh(balance)
+        after_snap = audit_snapshot(balance)
+        return balance, {}, after_snap
 
 
 class LeaveRepository:
