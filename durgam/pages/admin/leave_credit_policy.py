@@ -151,33 +151,40 @@ def _policies_table() -> rx.Component:
 def admin_leave_credit_policy() -> rx.Component:
     return rx.cond(
         LeaveCreditPolicyState.admin_authorized,
-        nav_shell(
-            rx.vstack(
-                rx.heading(
-                    "CL Credit Policy",
-                    size="6",
-                    font_family="var(--font-sans)",
-                    font_weight="700",
-                    color="var(--color-primary)",
+        rx.vstack(
+            nav_shell(),
+            rx.box(
+                rx.vstack(
+                    rx.heading(
+                        "CL Credit Policy",
+                        size="6",
+                        font_family="var(--font-sans)",
+                        font_weight="700",
+                        color="var(--color-primary)",
+                    ),
+                    rx.text(
+                        "Configure annual CL entitlement credited by the credit_annual_cl task on Jan 1.",
+                        font_size="0.9rem",
+                        color="var(--color-muted)",
+                    ),
+                    _policies_table(),
+                    _edit_form(),
+                    config_toast(
+                        LeaveCreditPolicyState.flash,
+                        LeaveCreditPolicyState.flash_type,
+                        LeaveCreditPolicyState.dismiss_flash,
+                    ),
+                    gap="1.5rem",
+                    align="start",
+                    width="100%",
+                    max_width="900px",
                 ),
-                rx.text(
-                    "Configure annual CL entitlement credited by the credit_annual_cl task on Jan 1.",
-                    font_size="0.9rem",
-                    color="var(--color-muted)",
-                ),
-                _policies_table(),
-                _edit_form(),
-                config_toast(
-                    LeaveCreditPolicyState.flash,
-                    LeaveCreditPolicyState.flash_type,
-                    LeaveCreditPolicyState.dismiss_flash,
-                ),
-                gap="1.5rem",
-                align="start",
-                width="100%",
-                max_width="900px",
                 padding="2rem",
+                width="100%",
             ),
+            align="start",
+            width="100%",
+            min_height="100vh",
         ),
         rx.fragment(),
     )
