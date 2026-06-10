@@ -162,6 +162,12 @@ class LeaveBalanceAdminState(BaseState):
     async def apply_filters(self) -> None:
         await self.load_admin_balances()
 
+    async def clear_filters(self) -> None:
+        self.username_filter = ""
+        self.leave_type_filter = "all"
+        self.ay_id_filter = "all"
+        await self.load_admin_balances()
+
     # ── Edit modal lifecycle ─────────────────────────────────────────
 
     def open_edit_modal(

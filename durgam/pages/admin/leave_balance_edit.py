@@ -70,6 +70,11 @@ def _filter_bar() -> rx.Component:
             "Apply Filters",
             on_click=LeaveBalanceAdminState.apply_filters,
         ),
+        secondary_btn(
+            "Clear Filters",
+            on_click=LeaveBalanceAdminState.clear_filters,
+            type="button",
+        ),
         gap="0.75rem",
         align="center",
         flex_wrap="wrap",
@@ -86,33 +91,45 @@ def _results_table() -> rx.Component:
         rx.cond(
             LeaveBalanceAdminState.rows.length() > 0,  # type: ignore[attr-defined]
             rx.box(
-                rx.box(
-                    rx.table.root(
-                        rx.table.header(
-                            rx.table.row(
-                                rx.table.column_header_cell("Username", **_TH_STYLE, position="sticky", left="0", z_index="1", background_color="var(--color-card-bg, var(--color-background))"),
-                                rx.table.column_header_cell("Leave Type", **_TH_STYLE),
-                                rx.table.column_header_cell("AY", **_TH_STYLE),
-                                rx.table.column_header_cell("Opening", **_TH_STYLE),
-                                rx.table.column_header_cell("Credited", **_TH_STYLE),
-                                rx.table.column_header_cell("Availed", **_TH_STYLE),
-                                rx.table.column_header_cell("Forfeited", **_TH_STYLE),
-                                rx.table.column_header_cell("Encashed", **_TH_STYLE),
-                                rx.table.column_header_cell("Closing", **_TH_STYLE),
-                                rx.table.column_header_cell("", **_TH_STYLE),
+                rx.table.root(
+                    rx.table.header(
+                        rx.table.row(
+                            rx.table.column_header_cell(
+                                "Username",
+                                position="sticky",
+                                left="0",
+                                z_index="2",
+                                background_color="var(--color-card-bg, var(--color-background))",
+                                min_width="160px",
+                                padding="0.4rem 0.6rem",
+                                font_size="0.78rem",
+                                font_weight="600",
+                                color="var(--color-muted)",
+                                white_space="nowrap",
+                                border_bottom="1px solid var(--color-rule)",
                             ),
+                            rx.table.column_header_cell("Leave Type", **_TH_STYLE),
+                            rx.table.column_header_cell("AY", **_TH_STYLE),
+                            rx.table.column_header_cell("Opening", **_TH_STYLE),
+                            rx.table.column_header_cell("Credited", **_TH_STYLE),
+                            rx.table.column_header_cell("Availed", **_TH_STYLE),
+                            rx.table.column_header_cell("Forfeited", **_TH_STYLE),
+                            rx.table.column_header_cell("Encashed", **_TH_STYLE),
+                            rx.table.column_header_cell("Closing", **_TH_STYLE),
+                            rx.table.column_header_cell("", **_TH_STYLE),
                         ),
-                        rx.table.body(
-                            rx.foreach(LeaveBalanceAdminState.rows, _balance_row),
-                        ),
-                        width="100%",
                     ),
-                    overflow_x="auto",
-                    border="1px solid var(--color-rule)",
-                    border_radius="6px",
-                    background="white",
+                    rx.table.body(
+                        rx.foreach(LeaveBalanceAdminState.rows, _balance_row),
+                    ),
+                    style={"border_collapse": "separate", "border_spacing": "0"},
+                    width="100%",
                 ),
+                overflow_x="auto",
+                max_width="100%",
                 width="100%",
+                border="1px solid var(--color-rule)",
+                border_radius="6px",
             ),
             rx.text(
                 "No balance records match the current filters.",
@@ -133,6 +150,7 @@ def _balance_row(row: rx.Var) -> rx.Component:
             left="0",
             z_index="1",
             background_color="var(--color-card-bg, var(--color-background))",
+            min_width="160px",
         ),
         rx.table.cell(rx.text(row["leave_type"], font_size="0.82rem"), **_TD_STYLE),
         rx.table.cell(rx.text(row["ay_name"], font_size="0.82rem"), **_TD_STYLE),
