@@ -1,12 +1,8 @@
 """TD-037: integration tests for notification enqueueing in the approval engine.
 
-Commit 1 contains two tests:
-  - test_notifications_zero_before_fix  (diagnostic; MUST PASS pre-fix; deleted in commit 2)
-  - test_auto_approve_creates_requestor_notification  (reproducer; MUST FAIL pre-fix)
-
-Commit 2 adds:
-  - test_normal_approve_creates_notifications  (regression for the existing approve() path)
-  and deletes test_notifications_zero_before_fix.
+Two tests (post-fix):
+  - test_auto_approve_creates_requestor_notification  — reproducer; verifies the fix
+  - test_normal_approve_creates_notifications         — regression for existing approve() path
 
 All tests use db_session (clean DB, rollback per test). No seeded_session.
 Pattern matches test_leave_request_integration.py exactly.
@@ -85,43 +81,7 @@ def _notification_count(session) -> int:
 
 
 # ---------------------------------------------------------------------------
-# Diagnostic test (COMMIT 1 only — deleted in commit 2)
-# ---------------------------------------------------------------------------
-
-def test_notifications_zero_before_fix(db_session):
-    """DIAGNOSTIC (delete in commit 2): auto-approve path enqueues zero notifications.
-
-    This test MUST PASS before the fix — it proves TD-037 is real.
-    Root cause (H1): ApprovalRequestService.submit() auto-approve block calls
-    _run_post_approval() but never calls _enqueue_notifications(action='approve').
-    Pre-fix count is 0; post-fix count is ≥ 2 (in_app + email for requestor).
-    """
-    sole_role = _role(db_session, "SOLE")
-    requestor = _user(db_session)
-    _assign_role(db_session, requestor, sole_role)
-
-    process = _process(db_session)
-
-    svc = ApprovalRequestService(db_session)
-    svc.submit(
-        process_id=process.id,
-        requestor_user_id=requestor.id,
-        title="Auto-approve notification diagnostic",
-        resolved_channel=[{"role_code": sole_role.code, "recommend_only": False}],
-    )
-    db_session.flush()
-
-    count = _notification_count(db_session)
-    # Pre-fix: this assertion passes (count IS 0, proving the bug).
-    # Post-fix: this assertion fails (count is ≥ 2), which is why it is deleted.
-    assert count == 0, (
-        f"Diagnostic passed: zero notifications on auto-approve path (count={count}). "
-        "TD-037 bug confirmed. Delete this test in commit 2."
-    )
-
-
-# ---------------------------------------------------------------------------
-# Reproducer (survives into commit 2; asserts the fix is present)
+# Reproducer — verifies the TD-037 fix is present
 # ---------------------------------------------------------------------------
 
 def test_auto_approve_creates_requestor_notification(db_session):
@@ -173,3 +133,76 @@ def test_auto_approve_creates_requestor_notification(db_session):
         assert (n.payload_json or {}).get("action") == "approve", (
             f"Expected payload action='approve'; got {n.payload_json!r}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Regression — existing approve() path (line 255) still enqueues notifications
+# ---------------------------------------------------------------------------
+
+def test_normal_approve_creates_notifications(db_session):
+    """Regression: the existing approve() terminal-notification path is unaffected by the fix.
+
+    Setup: requestor does NOT hold the approver role → auto-approve does NOT fire →
+    submit() notifies the approver (action='submit') → approve() notifies the
+    requestor (action='approve'). Both calls must produce notification rows.
+    """
+    approver_role = _role(db_session, "APPROVER")
+    requestor_role = _role(db_session, "REQUESTOR")
+
+    requestor = _user(db_session)
+    approver = _user(db_session)
+    # requestor holds requestor_role only; approver holds approver_role.
+    _assign_role(db_session, requestor, requestor_role)
+    _assign_role(db_session, approver, approver_role)
+
+    process = _process(db_session)
+
+    svc = ApprovalRequestService(db_session)
+    request = svc.submit(
+        process_id=process.id,
+        requestor_user_id=requestor.id,
+        title="Normal approve notification regression",
+        resolved_channel=[{"role_code": approver_role.code, "recommend_only": False}],
+    )
+    db_session.flush()
+
+    # Must NOT have auto-approved — requestor does not hold the approver role.
+    assert request.state == "submitted", (
+        f"Expected state='submitted' (non-auto-approve); got '{request.state}'"
+    )
+
+    # submit() must have notified the approver (action='submit').
+    submit_count = _notification_count(db_session)
+    assert submit_count >= 2, (
+        f"Expected ≥ 2 submit notifications (in_app + email for approver); got {submit_count}."
+    )
+
+    # Now approve at stage 1 (terminal).
+    svc.approve(
+        request_id=request.id,
+        approver_user_id=approver.id,
+        comment="Looks good",
+    )
+    db_session.flush()
+
+    assert request.state == "approved"
+
+    # Total notifications: ≥ 4 (2 submit + 2 approve) — both calls worked.
+    total_count = _notification_count(db_session)
+    assert total_count >= 4, (
+        f"Expected ≥ 4 total notifications (submit + approve); got {total_count}."
+    )
+
+    # At least one notification must target the requestor with action='approve'.
+    approve_notifs = db_session.exec(
+        select(Notification).where(
+            Notification.recipient_user_id == requestor.id,
+            Notification.is_deleted == False,  # noqa: E712
+        )
+    ).all()
+    assert len(approve_notifs) >= 1, (
+        f"Expected ≥ 1 approve notification for requestor {requestor.id}; found 0."
+    )
+    assert all(
+        (n.payload_json or {}).get("action") == "approve" for n in approve_notifs
+    ), f"All requestor notifications must have action='approve'; got {[n.payload_json for n in approve_notifs]!r}"

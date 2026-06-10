@@ -108,6 +108,19 @@ class ApprovalRequestService:
             if request.current_stage > len(channel):
                 self._req_repo.update_state(request, "approved", decided_at=now)
                 self._run_post_approval(request, process, requestor_user_id)
+                # Notify requestor of auto-approval — mirrors the terminal notification
+                # in approve() at line 255. The non-auto-approve path is handled below.
+                requestor_user = self._session.get(User, requestor_user_id)
+                _auto_recipients = [requestor_user] if requestor_user else []
+                _auto_recipients.extend(self._get_cc_users(process))
+                self._enqueue_notifications(
+                    recipients=_auto_recipients,
+                    subject=f"Request approved: {request.title}",
+                    body=f"Your request '{request.title}' has been approved.",
+                    request=request,
+                    process=process,
+                    action="approve",
+                )
                 auto_approved = True
                 break
 
