@@ -60,13 +60,28 @@ def _edit_form() -> rx.Component:
                         gap="0.25rem", align="start", width="100%",
                     ),
                     rx.vstack(
-                        rx.text("Enabled", font_size="0.85rem", font_weight="500"),
-                        rx.checkbox(
-                            checked=LeaveCreditPolicyState.form_enabled,
-                            on_change=LeaveCreditPolicyState.set_form_enabled,
-                            name="form_enabled",
+                        rx.hstack(
+                            rx.checkbox(
+                                checked=LeaveCreditPolicyState.form_enabled,
+                                on_change=LeaveCreditPolicyState.set_form_enabled,
+                                name="form_enabled",
+                            ),
+                            rx.text(
+                                "Enable annual credit run for this leave type",
+                                font_size="0.9rem",
+                            ),
+                            align="center",
+                            gap="0.5rem",
                         ),
-                        gap="0.25rem", align="start", width="100%",
+                        rx.text(
+                            "When disabled, the annual credit job will skip this leave type.",
+                            font_size="0.75rem",
+                            color="var(--color-muted)",
+                        ),
+                        align="start",
+                        gap="0.25rem",
+                        margin_y="0.5rem",
+                        width="100%",
                     ),
                     rx.hstack(
                         primary_btn("Save", type="submit"),
@@ -106,6 +121,23 @@ def _policies_table() -> rx.Component:
         LeaveCreditPolicyState.loading,
         rx.center(rx.spinner(), padding="2rem"),
         rx.vstack(
+            # Column header row
+            rx.hstack(
+                rx.text("Leave Type", font_weight="600", font_size="0.8rem",
+                        color="var(--color-muted)", min_width="6rem"),
+                rx.text("Vacation Entitlement (days)", font_weight="600",
+                        font_size="0.8rem", color="var(--color-muted)", min_width="10rem"),
+                rx.text("Non-Vacation Entitlement (days)", font_weight="600",
+                        font_size="0.8rem", color="var(--color-muted)", min_width="12rem"),
+                rx.text("Enabled", font_weight="600", font_size="0.8rem",
+                        color="var(--color-muted)", min_width="5rem"),
+                rx.text("Actions", font_weight="600", font_size="0.8rem",
+                        color="var(--color-muted)"),
+                gap="1.5rem",
+                align="center",
+                padding="0.4rem 0.75rem",
+                width="100%",
+            ),
             rx.foreach(
                 LeaveCreditPolicyState.policies,
                 lambda item: rx.hstack(
@@ -163,9 +195,15 @@ def admin_leave_credit_policy() -> rx.Component:
                         color="var(--color-primary)",
                     ),
                     rx.text(
-                        "Configure annual CL entitlement credited by the credit_annual_cl task on Jan 1.",
+                        "Credit policies control how the annual Casual Leave (CL) credit job runs."
+                        " Each row defines the entitlement (in days) credited on January 1 each year"
+                        " for a given leave type. Vacation entitlement applies to faculty during"
+                        " vacation periods; non-vacation entitlement applies during regular working"
+                        " terms. Disabled policies are skipped by the credit run.",
                         font_size="0.9rem",
                         color="var(--color-muted)",
+                        margin_y="0.5rem",
+                        max_width="800px",
                     ),
                     _policies_table(),
                     _edit_form(),
