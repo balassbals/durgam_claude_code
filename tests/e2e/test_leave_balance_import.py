@@ -34,6 +34,7 @@ NOTE: These tests are WRITTEN but NOT RUN at Phase 4 gate.
 from __future__ import annotations
 
 import os
+import re
 import tempfile
 import uuid
 
@@ -51,10 +52,11 @@ _EPH_PASS = "Ephemeral_Dev1!XZ"
 _PAGE_ANCHOR = "Leave Balance Import"
 _PAGE_URL = f"{BASE_URL}/admin/leave/balance-import"
 
-# Target employees: seeded users whose leave_balance rows we create and clean up.
-# student_001 is not on the CLAUDE.md mutation-list for login restrictions;
-# creating leave_balance rows for them (different table) is permitted.
-_TARGET_EMP = "student_001"
+# Target employee: seeded faculty user whose leave_balance rows we create and clean up.
+# faculty_user holds the FACULTY role and appears in the per-employee dropdown.
+# student_001 was previously used but students are filtered out of the balance
+# per-employee dropdown (exclude_student path), so the [data-value] locator never resolved.
+_TARGET_EMP = "faculty_user"
 
 
 # ── DB helpers ────────────────────────────────────────────────────────────────
@@ -257,20 +259,23 @@ def test_per_employee_form_save(page: Page) -> None:
             page.get_by_role("heading", name="Set / Update Employee Balance")
         ).to_be_visible(timeout=10_000)
 
-        # Select employee from dropdown. The select trigger is visible inside the modal.
-        # Wait for the employee options to be populated (WebSocket round-trip from load).
-        employee_option = page.locator(
-            f"[data-value='{_TARGET_EMP}']"
-        )
-        expect(employee_option).to_be_attached(timeout=15_000)
+        # Select employee from dropdown. Radix Select renders items in a portal only
+        # after the trigger is clicked — open the trigger first, then wait for the option.
+        # Radix Select items render as [role='option'] divs, NOT as <option> elements and
+        # NOT with a data-value attribute visible to Playwright. Use get_by_role("option").
         page.locator("button[role='combobox']").first.click()
-        page.locator(f"[data-value='{_TARGET_EMP}']").first.click()
+        expect(page.get_by_role("option").first).to_be_attached(timeout=15_000)
+        # faculty_user display text is "faculty_user (<email>)" — match by leading username.
+        page.get_by_role("option", name=re.compile(f"^{_TARGET_EMP}")).first.click()
 
-        # Select leave type EL.
-        el_option = page.locator("[data-value='EL']")
-        expect(el_option).to_be_attached(timeout=10_000)
+        # Select leave type EL — the form has two rx.select.root elements (employee, leave
+        # type). After the employee option is clicked the portal unmounts and the first
+        # combobox reverts to the employee select. Click the SECOND combobox (nth(1)) for
+        # leave type. Use the full display label to avoid substring collisions with other
+        # leave-type options that contain "EL" as a fragment (e.g. "Special", "Leave").
         page.locator("button[role='combobox']").nth(1).click()
-        page.locator("[data-value='EL']").first.click()
+        expect(page.get_by_role("option").first).to_be_attached(timeout=10_000)
+        page.get_by_role("option", name="EL – Earned Leave", exact=True).click()
 
         # Fill numeric fields.
         page.get_by_placeholder("0.0").nth(1).fill("15.0")  # credited field

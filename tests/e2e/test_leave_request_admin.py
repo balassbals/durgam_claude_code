@@ -159,34 +159,42 @@ def test_apply_past_date_shows_postfacto_badge(page: Page) -> None:
         _login(page, username, password)
         page.wait_for_load_state("networkidle")
 
-        # Navigate to the My Leave page
-        page.goto(f"{BASE_URL}/leave/my-leave")
+        # Navigate to the My Leave page (route is /leave, not /leave/my-leave)
+        page.goto(f"{BASE_URL}/leave")
         page.wait_for_load_state("networkidle")
 
-        # Wait for page content to render (WebSocket guard)
+        # Wait for page content to render (WebSocket guard).
+        # Use the page heading only — .or_() causes strict-mode violation because
+        # "Apply for Leave" also matches the button label on the same page.
         expect(
-            page.get_by_role("heading", name="My Leave").or_(
-                page.get_by_text("Apply for Leave")
-            )
+            page.get_by_role("heading", name="My Leave")
         ).to_be_visible(timeout=15_000)
 
-        # Open the Apply Leave modal
-        apply_btn = page.get_by_role("button", name="Apply for Leave")
-        if not apply_btn.is_visible(timeout=5_000):
-            pytest.skip("Apply for Leave button not visible — user may lack leave entitlement.")
+        # Brief stabilisation pause: Reflex may send current_user_id and loading=False
+        # in the same state delta, so the heading and button are in the same React render.
+        # Without this, the button locator can be evaluated before the render settles.
+        page.wait_for_timeout(800)
+
+        # Open the Apply Leave modal. The button contains an icon SVG; use has_text filter
+        # rather than get_by_role accessible-name lookup to avoid SVG title interference.
+        # Use a longer timeout than the stabilisation pause to guarantee a clean assertion.
+        apply_btn = page.locator("button").filter(has_text="Apply for Leave")
+        expect(apply_btn).to_be_visible(timeout=10_000)
         apply_btn.click()
 
         # Wait for modal form to appear
         expect(page.get_by_text("Leave Type")).to_be_visible(timeout=10_000)
 
-        # Set starts_on to a past date
+        # Set starts_on to a past date.
+        # The Apply modal uses rx.input(type="date") — NO placeholder attribute.
+        # Select by input type, not by placeholder.
         past_date = (date.today() - timedelta(days=5)).isoformat()
-        starts_on_inputs = page.get_by_placeholder("YYYY-MM-DD").all()
-        if not starts_on_inputs:
+        date_inputs = page.locator("input[type='date']").all()
+        if not date_inputs:
             pytest.skip("No date input found in Apply modal; selector may need updating.")
 
-        starts_on_inputs[0].fill(past_date)
-        starts_on_inputs[0].press("Tab")
+        date_inputs[0].fill(past_date)
+        date_inputs[0].press("Tab")
 
         # Allow WebSocket round-trip for is_past_dated computed var
         page.wait_for_timeout(800)
