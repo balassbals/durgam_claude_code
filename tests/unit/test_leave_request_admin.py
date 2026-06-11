@@ -182,6 +182,37 @@ class TestAdminChangeStateForbidden:
             svc.admin_change_state(req.id, "cancelled", uuid4(), reason="")
 
 
+# ── Test: Bug B — approved→cancelled produces "cancelled", not "withdrawn" ───
+
+class TestAdminCancelApprovedProducesCancelled:
+
+    def test_admin_cancel_of_approved_leave_produces_state_cancelled_not_withdrawn(self) -> None:
+        """admin_change_state approved→cancelled must produce state='cancelled', not 'withdrawn'.
+
+        Bug B: withdraw() sets state='withdrawn'; the override block must relabel it to
+        'cancelled' and set cancellation_reason.
+        """
+        req = _mock_leave_req("approved")
+        # withdraw() returns a leave_req with state="withdrawn"
+        withdrawn_req = _mock_leave_req("withdrawn")
+        svc, leave_repo, _ = _svc(req, withdraw_returns=withdrawn_req)
+        leave_repo.get.return_value = req
+
+        with patch("durgam.services.leave_request.write_audit_row"):
+            result = svc.admin_change_state(
+                req.id, "cancelled", uuid4(), reason="emergency"
+            )
+
+        assert withdrawn_req.state == "cancelled", (
+            f"Expected state='cancelled' after admin cancel of approved leave; "
+            f"got '{withdrawn_req.state}'"
+        )
+        assert withdrawn_req.cancellation_reason == "emergency", (
+            f"Expected cancellation_reason='emergency'; got '{withdrawn_req.cancellation_reason}'"
+        )
+        leave_repo.save.assert_called()
+
+
 # ── Tests: _reverse_cl_forfeitures_for_postfacto ────────────────────────────
 
 class TestReverseForfeitures:

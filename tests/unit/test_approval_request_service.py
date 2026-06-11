@@ -561,7 +561,7 @@ class TestCancel:
         with pytest.raises(ApprovalRequestError, match="System Administrator"):
             svc.cancel(
                 request_id=uuid4(),
-                sys_admin_user_id=uuid4(),
+                actor_user_id=uuid4(),
                 comment="Duplicate request",
             )
 
@@ -604,7 +604,7 @@ class TestCancel:
 
         svc.cancel(
             request_id=request.id,
-            sys_admin_user_id=admin_id,
+            actor_user_id=admin_id,
             comment="Duplicate",
         )
 
@@ -614,7 +614,7 @@ class TestCancel:
 
         audit_kwargs = mock_audit.call_args.kwargs
         assert audit_kwargs["action"] == "cancel"
-        assert audit_kwargs["actor_role_code"] == "SYSTEM_ADMIN"
+        assert audit_kwargs["actor_role_code"] is None  # role not resolved at cancel() call site
         assert audit_kwargs["after"]["comment"] == "Duplicate"
 
     @patch("durgam.services.approval_request.write_audit_row")
@@ -650,7 +650,7 @@ class TestCancel:
         with pytest.raises(ApprovalRequestError, match="already approved"):
             svc.cancel(
                 request_id=request.id,
-                sys_admin_user_id=admin_id,
+                actor_user_id=admin_id,
                 comment="Test",
             )
 

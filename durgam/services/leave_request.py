@@ -468,7 +468,7 @@ class LeaveRequestService:
         before_snap = audit_snapshot(leave_req)
         self._approval_service.cancel(
             request_id=leave_req.approval_request_id,
-            sys_admin_user_id=actor_id,
+            actor_user_id=actor_id,
             comment=reason,
         )
         leave_req.cancellation_reason = reason
@@ -617,13 +617,30 @@ class LeaveRequestService:
         # approved → cancelled / approved → withdrawn: delegate to withdraw()
         # (handles balance reversal, notification fan-out, admin bypass check)
         if current_state == "approved":
-            return self.withdraw(leave_request_id, actor_user_id=actor_user_id, reason=reason)
+            leave_req = self.withdraw(leave_request_id, actor_user_id=actor_user_id, reason=reason)
+            if new_state == "cancelled":
+                # withdraw() produces state="withdrawn"; override to "cancelled" per admin intent
+                leave_req.state = "cancelled"
+                leave_req.cancellation_reason = reason
+                self._leave_repo.save(leave_req)
+                write_audit_row(
+                    actor_user_id=actor_user_id,
+                    actor_role_code=None,
+                    action="admin_cancel_after_withdraw",
+                    resource="leave_request",
+                    resource_id=str(leave_request_id),
+                    request_id=None, ip=None, user_agent=None,
+                    before={"state": "withdrawn"},
+                    after={"state": "cancelled", "reason": reason},
+                    session=self._session,
+                )
+            return leave_req
         # submitted/in_review → cancelled or rejected
         before_snap = audit_snapshot(leave_req)
         if new_state == "cancelled":
             self._approval_service.cancel(
                 request_id=leave_req.approval_request_id,
-                sys_admin_user_id=actor_user_id,
+                actor_user_id=actor_user_id,
                 comment=reason,
             )
             leave_req.cancellation_reason = reason
@@ -631,7 +648,7 @@ class LeaveRequestService:
             # rejected
             self._approval_service.cancel(
                 request_id=leave_req.approval_request_id,
-                sys_admin_user_id=actor_user_id,
+                actor_user_id=actor_user_id,
                 comment=reason,
             )
         leave_req.state = new_state

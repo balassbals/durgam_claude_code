@@ -738,6 +738,18 @@ Root cause confirmed: the auto-approve path in `ApprovalRequestService.submit()`
 
 ---
 
+### TD-042 — admin cancel of approved leave produces two audit rows
+
+**Location:** `durgam/services/leave_request.py` (`admin_change_state`); `durgam/services/approval_request.py` (`withdraw`).
+
+**What it is:** When `admin_change_state(approved → cancelled)` is called, it delegates to `withdraw()` (which writes a `"withdraw"` audit row and sets `state="withdrawn"`), then immediately overrides the state to `"cancelled"` and writes a second `"admin_cancel_after_withdraw"` audit row. The result is two audit rows for a single user-facing operation.
+
+**Why this is not a production blocker:** Both audit rows have accurate `before`/`after` snapshots. The forensic record is complete. The double-write is a cosmetic concern, not a correctness issue.
+
+**Trigger to re-open:** Audit UI feedback that two rows are confusing for a single admin action. Resolution: add a `final_state: str | None = None` parameter to `withdraw()`; when set, skip writing the "withdrawn" audit row and let the caller write a single composite row. Requires updating all `withdraw()` callers.
+
+---
+
 ## Resolved
 
 ### TD-002 — SAWarning: transaction already deassociated from connection (resolved in m0-cleanup)

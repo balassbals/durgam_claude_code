@@ -14,6 +14,7 @@ import structlog
 from sqlmodel import Session, select
 
 from durgam.audit.log import write_audit_row
+from durgam.auth.permissions import can
 from durgam.models.crosscutting import (
     ApprovalProcess,
     ApprovalRequest,
@@ -529,12 +530,15 @@ class ApprovalRequestService:
         self,
         *,
         request_id: UUID,
-        sys_admin_user_id: UUID,
+        actor_user_id: UUID,
         comment: str,
     ) -> ApprovalRequest:
-        if not self._is_system_admin(sys_admin_user_id):
+        if not (
+            self._is_system_admin(actor_user_id)
+            or can(actor_user_id, "write", "leave_request_admin", "*", None, self._session)
+        ):
             raise ApprovalRequestError(
-                "Only a System Administrator can cancel requests."
+                "Only a System Administrator or a Leave Request Admin can cancel requests."
             )
 
         request = self._req_repo.get_by_id(request_id)
@@ -558,7 +562,7 @@ class ApprovalRequestService:
                 subject=f"Request cancelled: {request.title}",
                 body=(
                     f"Your request '{request.title}' has been cancelled by "
-                    f"a System Administrator. Reason: {comment.strip()}"
+                    f"an administrator. Reason: {comment.strip()}"
                 ),
                 request=request,
                 process=process,
@@ -566,8 +570,8 @@ class ApprovalRequestService:
             )
 
         write_audit_row(
-            actor_user_id=sys_admin_user_id,
-            actor_role_code="SYSTEM_ADMIN",
+            actor_user_id=actor_user_id,
+            actor_role_code=None,
             action="cancel",
             resource="approval_request",
             resource_id=str(request.id),
@@ -586,7 +590,7 @@ class ApprovalRequestService:
         log.info(
             "approval_request_cancelled",
             request_id=str(request.id),
-            admin=str(sys_admin_user_id),
+            admin=str(actor_user_id),
         )
         return request
 
