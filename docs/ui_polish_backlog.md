@@ -148,3 +148,20 @@ The `_in_flight_row()` component (`durgam/pages/leave/my_leave.py`) uses a plain
 
 **Observed at M8 Phase 8.4 gate walkthrough.** Current state is functional; polish
 deferred to UI Polish milestone.
+
+---
+
+## M8.1 Leave Follow-ups — polish backlog
+
+### UI-POLISH-M8.1-01 — Sticky first column on /admin/leave/balance-edit
+
+Deferred from M8.1 Phase 7. Two attempts failed to lock the username column during horizontal scroll:
+
+- **Phase 7.1** (`8953fdd`): `position: sticky; left: 0` with `overflow_x="auto"` on the outer wrapper. The sticky behaviour did not activate — the column scrolled with the rest of the table.
+- **Phase 7.2** (`6be2ef5`): `border_collapse: separate; overflow_x: auto` on the `rx.table.root` wrapper. Same result — column was not pinned.
+
+Likely root cause: interaction between Radix UI `Table.Root` internals and a parent `overflow` ancestor that was not identified. The table uses Radix's scoped CSS which may reset stacking context in a way that prevents `position: sticky` from taking effect on `<th>` / `<td>` elements.
+
+**Impact:** Purely visual. The table is functional; users must scroll left to see the username after scrolling right. No data or action is blocked.
+
+**Proposed fix for UI Polish milestone:** Replace `rx.table` with a plain HTML table rendered via `rx.el.table` (non-Radix) for this specific page, where `position: sticky; left: 0; z-index: 1; background: var(--color-background)` on the first cell is reliable. Alternatively, use a CSS Grid layout for the table body rows so the first column can be independently overflow-hidden.

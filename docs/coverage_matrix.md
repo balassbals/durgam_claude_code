@@ -285,3 +285,22 @@ model exists and is verified by integration tests.
 | Admin manual edit of leave records | §11 | Future | Deferred — E-022 | Balance-edit page + retroactive entry; Director/Registrar tier; shares scope with E-016/E-017. |
 | Legacy balance import for live deployment | §11 | Future | Deferred — E-016 | Bulk-import flow for existing balances at go-live; requires E-022 admin UI. |
 | Notification dispatch for leave events | §11 | Future | TD-037 | Row enqueue appears to be a silent no-op for the leave subsystem (0 rows observed during full gate walkthrough); investigate before TD-032 dispatch worker lands. |
+
+---
+
+## M8.1 — Leave Module Follow-ups
+
+**Gate pending: 2026-06-11 (in progress).** See `docs/milestones/M8.1.md` for gate checklist.
+
+| Feature | Errata/TD | Target | Status | Notes |
+|---------|-----------|--------|--------|-------|
+| CL annual credit Celery task (`credit_annual_cl`) | TD-036 | M8.1 | Shipped at M8.1 | `LeaveCreditPolicy` model + `leave_credit_runs` sidecar + admin config page. Idempotent. Jan 1, 03:00 UTC. |
+| Notification enqueue on auto-approve path | TD-037 | M8.1 | Shipped at M8.1 | Root cause: `submit()` auto-approve branch missing `_enqueue_notifications` call. Fixed in `8b3f609`. |
+| Legacy balance import (`/admin/leave/balance-import`) | E-016 | M8.1 | Shipped at M8.1 | Two-stage CSV import + per-employee form. 7-column format. AY-locked guard. Audit per row. |
+| Withdraw approved leave with balance reversal | E-017 | M8.1 | Shipped at M8.1 | `withdraw()` extended for approved state. Unused-tail formula. HoD/AhoD/Director notifications. `withdrawal_reason` migration. |
+| LeaveBalance admin edit (`/admin/leave/balance-edit`) | E-022 | M8.1 | Shipped at M8.1 | Per-row edit. `closing_balance` auto-recomputed. Audit on every save. |
+| LeaveRequest admin edit (`/admin/leave/request-edit`) | E-022 | M8.1 | Shipped at M8.1 | Allowed state transitions per DD-M8.1-P8-5. Approved→cancelled/withdrawn delegates to `withdraw()`. Window-elapsed guard blocks transitions after `ends_on`. |
+| Post-facto leave application (`is_post_facto` flag) | E-022 | M8.1 | Shipped at M8.1 | Set at submit time if `starts_on < today`. Amber badge on Apply modal. CL forfeit reversal on approval. |
+| Withdrawal notification campus-dept scope | TD-038 | M10 | Deferred | Requires Faculty/Campus assignment model. |
+| Leave admin pages campus-scope enforcement | TD-039 | M10 | Deferred | DIRECTOR-tier scope filter blocked on M10 Faculty model. |
+| credit_annual_cl beat schedule DB-driven | TD-040 | Future | Deferred | Hardcoded Jan 1 is statutory; non-Jan-1 deferred. |

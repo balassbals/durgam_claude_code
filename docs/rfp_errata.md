@@ -605,6 +605,8 @@ import UIs.
 
 **Conceptual model confirmation** (for the implementer): the M8 `LeaveBalance` model already supports tenure-accumulating leaves correctly. Each row is `(employee, leave_type, academic_year_id)` scoped, and `opening_balance` is the carry-over from the prior AY's `closing_balance`. The credit job adds to `credited` over time; accumulation caps (300 EL / 180 HPL) are enforced in the credit job. The bootstrap is purely "populate opening_balance for the current active AY for each (employee, leave_type) pair to reflect each employee's historical accumulation."
 
+**Status: Resolved in M8.1 commits `0593475` (service + repo + CSV parser) + `8c7fb04` (admin UI) + `de8fa9f` (fixture-seed contract).**
+
 ---
 
 ## E-017 — Withdraw leave after approval
@@ -616,6 +618,8 @@ import UIs.
 **Gap in v3 RFP**: §11 specifies withdraw (cancel by requestor) only for pending/in-review leave requests. v1 implementation supports withdraw only in non-terminal states. Bala's institutional reality: an approved leave should also be withdrawable if circumstances change (employee decides to attend office despite approved leave). On withdraw-post-approval the requestor must provide a reason, the LeaveBalance.availed must be reverted (re-credit the days), and notifications must fan out to HoD/AHoD/Director.
 
 **Disposition**: A follow-up milestone will (a) extend LeaveRequestService.withdraw to accept a `reason` argument when current state is "approved", (b) re-credit the balance via the same path used for partial sanction reversal (decrement availed, increment closing_balance, audit row), (c) enqueue notifications to the requestor's HoD/AHoD (current campus) and campus Director. Depends on TD-032 resolution for actual delivery; until then notification rows accumulate.
+
+**Status: Resolved in M8.1 commits `07d6c77` (service + notifications + migration) + `bb5616d` + `d42ac92` + `baa8ffe` (UI + hotfixes).**
 
 ---
 
@@ -729,3 +733,5 @@ import UIs.
 **Cross-cutting**: depends on E-017 (withdraw post-approval — same balance reversal logic), E-016 (bootstrap balance import — overlapping admin scope), E-019 (campus-scoped routing — same scope-check machinery).
 
 **Trigger to re-open**: A follow-up milestone with bandwidth for two admin pages + one cross-cutting transition path. Likely M8.1 follow-up or M9 prep, jointly with E-016/E-017.
+
+**Status: Resolved in M8.1 commits `f931dd3` + `6be2ef5` (LeaveBalance admin) + `0324f72` + `f902edc` + `ff5372e` + `ca98505` (LeaveRequest admin + post-facto + CL forfeit reversal + hotfixes).**

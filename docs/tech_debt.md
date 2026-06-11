@@ -668,18 +668,6 @@ the direct and table-based pathways.
 
 ---
 
-### TD-036 — CL annual credit at AY start not implemented
-
-**Location**: `durgam/tasks/leave_jobs.py` (no job exists yet for CL annual credit); related: `durgam/repositories/leave.py` `LeaveBalanceRepository.get_or_create` (lazy-creates with all-zero fields).
-
-**What it is**: Per RFP §11.3 / PDF §XXVIII clause 14, every employee receives 10 (vacation/teaching) or 12 (non-vacation) days of CL at the start of each academic year (proportionate for partial year). Phase 6 shipped four periodic jobs but none of them credits CL at AY start; `LeaveBalance.get_or_create` creates rows with `closing_balance=0`. As a result, no employee can request CL via the UI until their balance is manually seeded.
-
-**Why this is gating real-world use**: A faculty user logs in, sees CL closing=0, submits a CL request, gets "Insufficient CL balance". The bootstrap admin page (E-016) will populate this for the go-live moment, but at each subsequent AY rollover the entitlement also needs to be re-credited automatically.
-
-**Trigger to re-open**: Either E-016 bootstrap admin page ships with a "credit annual CL entitlement" button, OR a new Celery beat job `credit_annual_cl` runs on the AY rollover date (which is itself tracked by the AY rollover lock Celery job).
-
----
-
 ### TD-034 — `db_session` fixture not isolated from `seeded_db_engine` in bare-pytest discovery
 
 **Location:** `tests/conftest.py` (`db_session` fixture + `seeded_db_engine` session-scoped fixture); affected tests: 8× `tests/unit/test_audit_label_resolver.py::Test*Resolver::test_label` (M6b); 2× `tests/unit/test_leave_sanction_rule.py::test_load_from_yaml_inserts_all_rules` + `::test_load_from_yaml_idempotent` (M8 Phase 4).
@@ -689,16 +677,6 @@ the direct and table-based pathways.
 **Why this is not a production issue:** The gate ritual in `docs/prompts/gate_verification.md` invokes `pytest tests/unit/ tests/integration/` (scoped), where all 10 affected tests pass. No production code path depends on the fixture's behaviour. The failures only manifest in bare `pytest` discovery, which is not part of any gate.
 
 **Trigger to re-open:** A milestone that needs to support bare `pytest` invocation in CI, OR a contributor running bare `pytest` locally is misled by the failures. Resolution: redesign `db_session` to use a savepoint-based truly clean DB (separate test DB per worker, or savepoint-and-truncate strategy), or rewrite the 10 affected tests to be insensitive to pre-existing seed data.
-
----
-
-### TD-037 — ~~Notification rows for leave events are not being enqueued~~ *(Resolved M8.1 Phase 1)*
-
-**Status: Resolved in commit 8b3f609 (M8.1 Phase 1).**
-
-Root cause confirmed: the auto-approve path in `ApprovalRequestService.submit()` (lines 108–112) called `_run_post_approval()` but never called `_enqueue_notifications(action="approve")` for the requestor. Fix: added `_enqueue_notifications` call inside the `if request.current_stage > len(channel):` block, mirroring the pattern at line 268 in `approve()`.
-
-**See also:** `tests/integration/test_leave_notifications.py` — `test_auto_approve_creates_requestor_notification` (reproducer, now passing).
 
 ---
 
@@ -738,6 +716,18 @@ Root cause confirmed: the auto-approve path in `ApprovalRequestService.submit()`
 
 ---
 
+### TD-041 — Admin state transitions: leave_request.state and approval_request.state diverge
+
+**Location:** `durgam/services/leave_request.py` (`admin_change_state`); `durgam/services/approval_request.py` (`cancel`).
+
+**What it is:** When `admin_change_state` moves a `submitted` or `in_review` leave to `"rejected"`, `leave_request.state` correctly becomes `"rejected"` — but the underlying `approval_request.state` is set to `"cancelled"` by `ApprovalRequestService.cancel()`. The two tables use different terminal-state vocabularies. A joined report filtering `approval_requests.state = 'rejected'` will find zero rows even though the leave was operationally rejected.
+
+**Why this is not a production blocker:** Functionally each table holds the correct surface state for its own purpose. The `/audit` log and `/admin/leave/request-edit` list both read from `leave_requests.state`, which is accurate. Only cross-table joined reports (e.g., compliance dashboards joining approval_requests and leave_requests) are affected, and no such report exists in v1.
+
+**Trigger to re-open:** A compliance report needs to filter `approval_requests` by leave-level rejection (e.g., "how many leave requests were rejected vs. cancelled by approval workflow?"). Resolution: introduce an explicit `"rejected"` terminal state in the `approval_request` schema, or add a `leave_request_id` FK on `approval_request` and filter via `leave_request.state` when joining.
+
+---
+
 ### TD-042 — admin cancel of approved leave produces two audit rows
 
 **Location:** `durgam/services/leave_request.py` (`admin_change_state`); `durgam/services/approval_request.py` (`withdraw`).
@@ -751,6 +741,18 @@ Root cause confirmed: the auto-approve path in `ApprovalRequestService.submit()`
 ---
 
 ## Resolved
+
+### TD-036 — CL annual credit at AY start not implemented (resolved in M8.1 Phase 2)
+
+**Status: Resolved in M8.1 Phase 2 commit `e1e65e5`.** `credit_annual_cl` Celery beat task ships with calendar-year scheduling (Jan 1, 03:00 UTC), proration for current-year joiners (full entitlement for prior-year joiners), idempotent `leave_credit_runs` sidecar table, and a `LeaveCreditPolicy` admin page at `/admin/leave/credit-policy`. See TD-040 for the remaining hardcoded-schedule follow-up.
+
+---
+
+### TD-037 — Notification rows for leave events not enqueued (resolved in M8.1 Phase 1)
+
+**Status: Resolved in M8.1 Phase 1 commits `e707e47` (diagnostic) + `8b3f609` (fix).** Root cause: `ApprovalRequestService.submit()` auto-approve path called `_run_post_approval()` but never called `_enqueue_notifications(action="approve")` for the requestor. Fix: added the call inside the `if request.current_stage > len(channel):` block, mirroring the pattern at line 268 in `approve()`. Reproducer: `tests/integration/test_leave_notifications.py::test_auto_approve_creates_requestor_notification`.
+
+---
 
 ### TD-002 — SAWarning: transaction already deassociated from connection (resolved in m0-cleanup)
 
