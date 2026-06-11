@@ -189,23 +189,16 @@ class LeaveRequestAdminState(BaseState):
                 LeaveSanctionRuleRepository,
                 LeaveRepository,
             )
-            from durgam.repositories.approval_process import ApprovalProcessRepository
-            from durgam.repositories.approval_request import ApprovalRequestRepository
             from durgam.services.approval_request import ApprovalRequestService
             from durgam.services.leave_request import LeaveRequestError, LeaveRequestService
 
             try:
-                approval_svc = ApprovalRequestService(
-                    session=session,
-                    repo=ApprovalRequestRepository(session),
-                    process_repo=ApprovalProcessRepository(session),
-                )
                 svc = LeaveRequestService(
                     session=session,
                     leave_repo=LeaveRepository(session),
                     balance_repo=LeaveBalanceRepository(session),
                     rule_repo=LeaveSanctionRuleRepository(session),
-                    approval_service=approval_svc,
+                    approval_service=ApprovalRequestService(session),
                 )
                 svc.admin_change_state(
                     leave_request_id=UUID(request_id),
