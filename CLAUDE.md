@@ -1430,6 +1430,147 @@ auto-setters throw runtime errors in this codebase. Caught and fixed in M7 for
 Carried forward from M6b (`value="all"`, not `value=""`). See M6b patterns section;
 not duplicated here.
 
+## Patterns established at M8.1
+
+### Radix Select portal rendering — Playwright E2E pattern
+
+`rx.select.root` renders its items in a browser portal only AFTER the trigger button
+is clicked. Items appear as `<div role="option">` elements — NOT as `<option>` elements
+and NOT with any `data-value` attribute visible to Playwright. Selectors like
+`[data-value='foo']` will never attach, even with a long timeout.
+
+**Correct pattern:**
+
+```python
+import re
+
+# 1. Click the trigger to open the portal
+page.locator("button[role='combobox']").first.click()
+# 2. Wait for ANY option to attach (portal has mounted)
+expect(page.get_by_role("option").first).to_be_attached(timeout=15_000)
+# 3. Click by accessible name — regex for prefix-match, exact=True for full label
+page.get_by_role("option", name=re.compile(r"^employee_username")).first.click()
+```
+
+When a page has multiple `rx.select.root` elements, the FIRST combobox button is
+`.first`. After that selection closes the portal, click the SECOND combobox using
+`.nth(1)` — NOT `.first` (which re-opens the first dropdown):
+
+```python
+page.locator("button[role='combobox']").nth(1).click()
+expect(page.get_by_role("option").first).to_be_attached(timeout=10_000)
+page.get_by_role("option", name="EL – Earned Leave", exact=True).click()
+```
+
+Use the full display label with `exact=True` when the short code (e.g. "EL") is a
+substring of other option labels. Partial matching causes strict-mode violations.
+
+Discovered at M8.1 Phase 9.1 when `[data-value='faculty_user']` never attached.
+
+### `rx.input(type="date")` has no placeholder
+
+`rx.input(type="date")` renders a native date picker. The `placeholder` prop has no
+effect — the input does not render a `placeholder` attribute. Playwright's
+`get_by_placeholder("YYYY-MM-DD")` returns zero elements.
+
+**Correct selector:**
+
+```python
+date_inputs = page.locator("input[type='date']").all()
+date_inputs[0].fill("2026-01-15")   # YYYY-MM-DD ISO format
+date_inputs[0].press("Tab")         # trigger on_change round-trip
+```
+
+Discovered at M8.1 Phase 9.1 when `test_apply_past_date_shows_postfacto_badge` SKIPPED
+because `get_by_placeholder("YYYY-MM-DD").all()` returned an empty list.
+
+### Reflex 0.9.x API drift patterns (M8.1 Phase 4)
+
+Three Reflex idioms that produce silent or runtime failures in Reflex 0.9.x:
+
+1. **`nav_shell()` takes no positional arguments.** `nav_shell(content)` is wrong; wrap
+   both `nav_shell()` and the content in the same `rx.vstack`.
+2. **`rx.select.root` uses `on_change`, NOT `on_value_change`.** `on_value_change` fires
+   on Radix-internal events and does not pass the selected value to the state handler.
+3. **`rx.input(type="hidden")` renders visibly** in Reflex 0.9.x. Carry hidden IDs via
+   explicit state vars (`self.editing_id`), not hidden form inputs.
+
+Rule: check the Reflex 0.9.x changelog before using any new prop. When a callback or
+hidden field "doesn't fire," check the prop name first.
+
+### WebSocket render settlement pause after heading becomes visible
+
+After a page heading becomes visible following a WebSocket state update, sibling
+elements rendered by the same state delta may not yet be registered as visible.
+Add a brief stabilization pause before asserting on those sibling elements:
+
+```python
+expect(page.get_by_role("heading", name="My Leave")).to_be_visible(timeout=15_000)
+page.wait_for_timeout(800)   # let React re-render settle
+apply_btn = page.locator("button").filter(has_text="Apply for Leave")
+expect(apply_btn).to_be_visible(timeout=10_000)
+```
+
+This is a one-time settlement pause after confirmed heading visibility — NOT a retry
+loop. Do not use this as a substitute for proper `to_be_attached` waits on
+async-loaded content. 800ms was verified sufficient in practice.
+
+### Seed-after-permission-change discipline
+
+After any commit that adds new `(resource, action, scope)` permission triples to
+`scripts/seed.py`, run `uv run python scripts/seed.py` against the dev DB BEFORE the
+manual walkthrough. Missing this step causes `PermissionDenied` for every user for the
+new resource, even when the code and seed content are syntactically correct.
+
+```
+uv run python scripts/seed.py   ← must run before next walkthrough step
+```
+
+Discovered at M8.1 Phase 8 when `leave_request_admin:write:*` was added in a commit
+but not re-seeded before walkthrough.
+
+### Inline-table column headers and checkbox labels
+
+Every `rx.foreach`-based data list that does NOT use `data_table()` from
+`durgam/pages/shared/data_table.py` must include:
+
+1. An explicit `rx.hstack` column header row above the `rx.foreach` loop, with the
+   same `min_width` / `gap` values as the data rows so columns align.
+2. Every checkbox input must have an inline `rx.text` label AND a one-line helper text
+   below it explaining what the checkbox controls.
+
+`data_table()` renders column headers automatically from `TableColumn.label`. For
+hand-rolled lists, add the header row explicitly:
+
+```python
+rx.hstack(
+    rx.text("Leave Type", font_weight="600", font_size="0.8rem",
+            color="var(--color-muted)", min_width="6rem"),
+    rx.text("Entitlement (days)", font_weight="600", font_size="0.8rem",
+            color="var(--color-muted)", min_width="10rem"),
+    gap="1.5rem", align="center", padding="0.4rem 0.75rem", width="100%",
+),
+```
+
+For checkboxes:
+
+```python
+rx.vstack(
+    rx.hstack(
+        rx.checkbox(checked=State.form_enabled, on_change=State.set_form_enabled),
+        rx.text("Enable annual credit run for this leave type", font_size="0.9rem"),
+        align="center", gap="0.5rem",
+    ),
+    rx.text(
+        "When disabled, the annual credit job will skip this leave type.",
+        font_size="0.75rem", color="var(--color-muted)",
+    ),
+    align="start", gap="0.25rem", margin_y="0.5rem", width="100%",
+),
+```
+
+Discovered at M8.1 Phase 9.2 on `/admin/leave/credit-policy`.
+
 ## Current milestone
 **M8.1 closed. Merged to main as c8962fd on 2026-06-11; tag: m8.1-close.**
 

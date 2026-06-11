@@ -290,7 +290,7 @@ model exists and is verified by integration tests.
 
 ## M8.1 — Leave Module Follow-ups
 
-**Gate pending: 2026-06-11 (in progress).** See `docs/milestones/M8.1.md` for gate checklist.
+**Gate passed: 2026-06-11. Merged to main as `c8962fd`; tag: `m8.1-close`.** See `docs/milestones/M8.1.md` for gate details.
 
 | Feature | Errata/TD | Target | Status | Notes |
 |---------|-----------|--------|--------|-------|
