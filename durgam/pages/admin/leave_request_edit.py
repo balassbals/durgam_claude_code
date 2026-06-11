@@ -173,6 +173,26 @@ def _edit_modal() -> rx.Component:
             align="center",
             margin_bottom="1rem",
         ),
+        rx.cond(
+            LeaveRequestAdminState.edit_window_elapsed
+            & (LeaveRequestAdminState.edit_current_state == "approved"),
+            rx.box(
+                rx.text(
+                    "This approved leave's period has ended. It can no longer be cancelled"
+                    " or withdrawn. Use the admin balance-edit page if a balance correction"
+                    " is needed.",
+                    font_size="0.82rem",
+                    color="var(--color-warning-text, #92400e)",
+                ),
+                background="var(--color-warning-bg, #fef3c7)",
+                border="1px solid var(--color-warning-border, #f59e0b)",
+                border_radius="6px",
+                padding="0.75rem",
+                width="100%",
+                margin_bottom="0.5rem",
+            ),
+            rx.fragment(),
+        ),
         rx.form(
             rx.vstack(
                 rx.vstack(
@@ -181,12 +201,13 @@ def _edit_modal() -> rx.Component:
                         rx.select.trigger(placeholder="Select new state"),
                         rx.select.content(
                             rx.foreach(
-                                LeaveRequestAdminState.allowed_new_states,
+                                LeaveRequestAdminState.allowed_new_states_filtered,
                                 lambda s: rx.select.item(s, value=s),
                             ),
                         ),
                         value=LeaveRequestAdminState.edit_new_state,
                         on_change=LeaveRequestAdminState.set_edit_new_state,
+                        disabled=LeaveRequestAdminState.allowed_new_states_filtered.length() == 0,  # type: ignore[attr-defined]
                         width="100%",
                     ),
                     align="start",

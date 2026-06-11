@@ -50,14 +50,29 @@ class LeaveRequestAdminState(BaseState):
     # ── Computed vars ────────────────────────────────────────────────
 
     @rx.var
+    def edit_window_elapsed(self) -> bool:
+        """True when edit_ends_on is before today (ISO string compare is safe for YYYY-MM-DD)."""
+        if not self.edit_ends_on:
+            return False
+        from datetime import date  # noqa: PLC0415
+        return self.edit_ends_on < str(date.today())
+
+    @rx.var
     def allowed_new_states(self) -> list[str]:
+        return _ALLOWED_TRANSITIONS.get(self.edit_current_state, [])
+
+    @rx.var
+    def allowed_new_states_filtered(self) -> list[str]:
+        """Allowed transitions with elapsed-window guard: approved→* blocked when ends_on < today."""
+        if self.edit_current_state == "approved" and self.edit_window_elapsed:
+            return []
         return _ALLOWED_TRANSITIONS.get(self.edit_current_state, [])
 
     @rx.var
     def is_save_valid(self) -> bool:
         return (
             self.edit_new_state != ""
-            and self.edit_new_state in _ALLOWED_TRANSITIONS.get(self.edit_current_state, [])
+            and self.edit_new_state in self.allowed_new_states_filtered
             and len(self.edit_reason.strip()) >= 1
         )
 
