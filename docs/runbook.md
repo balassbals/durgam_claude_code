@@ -166,3 +166,104 @@ The following tasks are registered in `durgam/tasks/leave_jobs.py` and scheduled
 ### vc_user (seeded demo user)
 
 The M8 seed adds `vc_user / ViceChancellor_Dev1!XZ` with the VC role. This user is the final-stage approver for SCL walkthroughs (FACULTY → DIRECTOR-recommend → VC-final channel). It is a read-only seeded fixture — do not use it in tests that mutate state.
+
+---
+
+## M8.1 — Leave Module Follow-ups
+
+### Annual CL credit job (`credit_annual_cl`)
+
+**Schedule:** `0 3 1 1 *` (Jan 1, 03:00 UTC). Registered in `durgam/tasks/celery_app.py` as `leave-credit-annual-cl`.
+
+**What it does:** For each active employee, looks up their `LeaveCreditPolicy` row for leave_type `"CL"`, computes entitlement (prorated for employees who joined in the current calendar year; full entitlement for all others), creates a `leave_credit_runs` row (idempotent — skips if row already exists for that user + year), and upserts `LeaveBalance.credited`.
+
+**Manual run:**
+```bash
+uv run celery -A durgam.tasks.celery_app call durgam.tasks.leave_jobs.credit_annual_cl
+```
+Or with a specific reference date (for testing):
+```bash
+uv run celery -A durgam.tasks.celery_app call durgam.tasks.leave_jobs.credit_annual_cl --args='["2026-01-01"]'
+```
+
+**Known gaps:** Schedule hardcoded in celery_app.py (→ TD-040). AY-locked employees raise `AcademicYearLockedError` — task logs and skips; does not abort the run.
+
+---
+
+### Balance import operations (`/admin/leave/balance-import`)
+
+**Purpose:** Bootstrap existing employees' accumulated balances at go-live (E-016).
+
+**Roles with access:** SYSTEM_ADMIN, REGISTRAR, DEPUTY_REGISTRAR, REGISTRAR_OFFICE, DIRECTOR, DEPUTY_DIRECTOR, DIRECTOR_OFFICE.
+
+**Two-stage flow:**
+1. Upload CSV → preview screen shows resolved AY name, valid rows, invalid rows (unknown username / negative balance / bad leave_type). Commit button disabled if any invalid rows.
+2. Commit → one `LeaveBalance` upsert per valid row (overwriting all 5 balance fields). One audit row per upserted row.
+
+**CSV format (7 columns):**
+```
+employee_username,leave_type,opening_balance,credited,availed,forfeited,encashed
+```
+`closing_balance` is recomputed server-side. Sample fixture: `tests/fixtures/leave_balance_import_sample.csv`.
+
+**Idempotency:** Re-importing the same CSV writes audit rows showing no diff (values unchanged). Re-importing with updated values overwrites and writes a diff audit row.
+
+**Per-employee form:** Below the CSV section; same upsert path; useful for individual corrections post-go-live.
+
+---
+
+### Balance edit operations (`/admin/leave/balance-edit`)
+
+**Purpose:** Correct individual balance rows after go-live (E-022).
+
+**Editable fields:** `opening_balance`, `credited`, `availed`, `forfeited`, `encashed`. `closing_balance` recomputed and displayed read-only.
+
+**Audit:** Every save writes an auditlog row with `before`/`after` diff.
+
+**Known gap:** Sticky first-column scroll not working (UI-POLISH-M8.1-01). Functional behaviour unaffected.
+
+---
+
+### Request edit operations (`/admin/leave/request-edit`)
+
+**Purpose:** Correct leave request states and related data (E-022).
+
+**Allowed transitions:**
+
+| Current state | Allowed new states |
+|---------------|--------------------|
+| `submitted`   | `cancelled`, `rejected` |
+| `in_review`   | `cancelled`, `rejected` |
+| `approved`    | `cancelled`, `withdrawn` (only if `today ≤ ends_on`) |
+
+`approved → cancelled` and `approved → withdrawn` both delegate to `LeaveRequestService.withdraw()` which triggers the E-017 balance reversal path.
+
+**Window-elapsed guard:** For approved leaves where `ends_on < today`, the New State dropdown is disabled and an amber informational banner explains the constraint. Use `/admin/leave/balance-edit` for balance corrections in this case.
+
+**Note on `approved → rejected`:** Explicitly forbidden (DD-M8.1-P8-5). If an approved leave needs to be undone, use `approved → cancelled`.
+
+---
+
+### Post-facto leave applications
+
+Faculty can apply with `starts_on` in the past. An amber "Post-facto application" badge appears on the Apply modal. `is_post_facto = True` is set at submit time and never changes.
+
+On approval, if `is_post_facto = True` and `leave_type == "CL"`, any CL forfeitures in months covered by the leave period are automatically reversed (one per month with a `LateAttendanceMarker`). This is idempotent.
+
+---
+
+### Withdraw approved leave
+
+Faculty can withdraw their own approved leave from `/leave` while `today ≤ ends_on`. A "Withdraw (post-approval)" action is shown on in-flight rows with `state == "approved"`.
+
+**Requirements:** Reason ≥ 10 characters required. Modal shows confirmation.
+
+**Balance:** `LeaveBalance.availed` decremented by unused tail (formula: `sanctioned_days × max(0, (ends_on − max(starts_on, today)).days + 1) / chargeable_days`). For CML: HPL re-credited at 2×. SCL/EOL/SL: no balance change.
+
+**Notifications:** Fan-out to HOD → AHOD fallback → DIRECTOR + DIRECTOR_OFFICE. Campus-dept scope deferred (TD-038).
+
+---
+
+### Known limitation — TD-034
+
+Full-suite `pytest` invocations (bare or `tests/unit/ tests/integration/`) produce 56 false failures in `tests/integration/test_m5b_purchase_rules.py` due to `seeded_session`/`db_session` fixture-pool interaction. This is pre-existing since M8. Gate ritual uses scoped invocations only. See `docs/prompts/gate_verification.md` → M8.1 lessons for the workaround.

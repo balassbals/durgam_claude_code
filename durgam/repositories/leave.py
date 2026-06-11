@@ -11,14 +11,27 @@ from uuid import UUID, uuid4
 
 from sqlmodel import Session, select
 
+from durgam.audit.snapshot import audit_snapshot
 from durgam.models.config_anchors import AcademicYear
 from durgam.models.leave import (
     LateAttendanceMarker,
     LeaveBalance,
+    LeaveCreditPolicy,
+    LeaveCreditRun,
     LeaveSanctionAuthorityRule,
     LeaveRequest,
 )
+from durgam.models.identity import User
 from durgam.services.org_exceptions import AcademicYearLockedError
+
+
+class LeaveBalanceValidationError(ValueError):
+    """Raised when an admin balance edit would produce invalid state."""
+
+
+_BALANCE_EDITABLE_FIELDS = frozenset(
+    {"opening_balance", "credited", "availed", "forfeited", "encashed"}
+)
 
 
 class LeaveSanctionRuleRepository:
@@ -163,6 +176,187 @@ class LeaveBalanceRepository:
         self._session.refresh(balance)
         return balance
 
+    def reverse_deduction(
+        self,
+        balance: LeaveBalance,
+        days: float,
+        actor_id: UUID,
+    ) -> tuple[LeaveBalance, dict, dict]:
+        """Reverse a deduction: decrement availed by days, increment closing_balance.
+
+        Returns (balance, before_snap, after_snap). Service writes the audit row.
+        Raises ValueError if days <= 0 or balance.availed < days (defensive guard).
+        """
+        if days <= 0 or balance.availed < days:
+            raise ValueError(
+                f"Cannot reverse {days} days against balance with {balance.availed:.2f} availed."
+            )
+        before_snap = audit_snapshot(balance)
+        balance.availed -= days
+        balance.closing_balance += days
+        balance.updated_at = datetime.now(UTC)
+        balance.updated_by = actor_id
+        self._session.add(balance)
+        self._session.flush()
+        self._session.refresh(balance)
+        after_snap = audit_snapshot(balance)
+        return balance, before_snap, after_snap
+
+    def upsert_balance_from_import(
+        self,
+        user_id: UUID,
+        leave_type: str,
+        ay_id: UUID,
+        fields: dict,
+        actor_id: UUID,
+    ) -> tuple[LeaveBalance, dict, dict]:
+        """Upsert a leave balance row from import data.
+
+        Returns (balance, before_snap, after_snap).
+        before_snap is {} for newly created rows (use as None in audit before param).
+        The service writes the audit row; this method only persists the balance.
+        """
+        now = datetime.now(UTC)
+        existing = self.get(user_id, leave_type, ay_id)
+
+        if existing is not None:
+            before_snap = audit_snapshot(existing)
+            existing.opening_balance = fields["opening_balance"]
+            existing.credited = fields["credited"]
+            existing.availed = fields["availed"]
+            existing.forfeited = fields["forfeited"]
+            existing.encashed = fields["encashed"]
+            existing.closing_balance = fields["closing_balance"]
+            existing.updated_at = now
+            existing.updated_by = actor_id
+            self._session.add(existing)
+            self._session.flush()
+            self._session.refresh(existing)
+            after_snap = audit_snapshot(existing)
+            return existing, before_snap, after_snap
+
+        balance = LeaveBalance(
+            id=uuid4(),
+            employee_user_id=user_id,
+            leave_type=leave_type,
+            academic_year_id=ay_id,
+            opening_balance=fields["opening_balance"],
+            credited=fields["credited"],
+            availed=fields["availed"],
+            forfeited=fields["forfeited"],
+            encashed=fields["encashed"],
+            closing_balance=fields["closing_balance"],
+            created_by=actor_id,
+            updated_by=actor_id,
+            created_at=now,
+            updated_at=now,
+        )
+        self._session.add(balance)
+        self._session.flush()
+        self._session.refresh(balance)
+        after_snap = audit_snapshot(balance)
+        return balance, {}, after_snap
+
+    def admin_search_balances(
+        self,
+        username_filter: str | None,
+        leave_type_filter: str | None,
+        ay_id_filter: UUID | None,
+    ) -> list[tuple[LeaveBalance, User, AcademicYear]]:
+        """Return balance rows joined with user and AY, applying optional filters.
+
+        Orders by username ASC, leave_type ASC. Limit 500.
+        """
+        stmt = (
+            select(LeaveBalance, User, AcademicYear)
+            .join(User, LeaveBalance.employee_user_id == User.id)  # type: ignore[arg-type]
+            .join(AcademicYear, LeaveBalance.academic_year_id == AcademicYear.id)  # type: ignore[arg-type]
+            .where(LeaveBalance.is_deleted == False)  # noqa: E712
+            .where(User.is_deleted == False)  # noqa: E712
+        )
+        if username_filter:
+            stmt = stmt.where(User.username.ilike(f"%{username_filter}%"))  # type: ignore[union-attr]
+        if leave_type_filter:
+            stmt = stmt.where(LeaveBalance.leave_type == leave_type_filter)
+        if ay_id_filter:
+            stmt = stmt.where(LeaveBalance.academic_year_id == ay_id_filter)
+        stmt = stmt.order_by(
+            User.username.asc(),  # type: ignore[union-attr]
+            LeaveBalance.leave_type.asc(),  # type: ignore[union-attr]
+        ).limit(500)
+        return list(self._session.exec(stmt).all())  # type: ignore[arg-type]
+
+    def admin_update_balance(
+        self,
+        balance_id: UUID,
+        fields: dict,
+        actor_id: UUID,
+    ) -> tuple[LeaveBalance, dict, dict]:
+        """Update editable balance columns and recompute closing_balance.
+
+        Allowed keys: opening_balance, credited, availed, forfeited, encashed.
+        Raises LeaveBalanceValidationError for forbidden fields or negative closing.
+        Raises AcademicYearLockedError if the balance's AY is locked.
+        Returns (balance, before_snap, after_snap). Caller writes the audit row.
+        """
+        balance = self._session.get(LeaveBalance, balance_id)
+        if balance is None:
+            raise ValueError(f"LeaveBalance {balance_id} not found")
+        self._check_ay_locked(balance.academic_year_id)
+        for key in fields:
+            if key not in _BALANCE_EDITABLE_FIELDS:
+                raise LeaveBalanceValidationError(f"Forbidden field: {key}")
+        before_snap = audit_snapshot(balance)
+        for key, value in fields.items():
+            setattr(balance, key, value)
+        closing = (
+            balance.opening_balance
+            + balance.credited
+            - balance.availed
+            - balance.forfeited
+            - balance.encashed
+        )
+        if closing < 0:
+            raise LeaveBalanceValidationError(f"Negative closing balance: {closing:.2f}")
+        balance.closing_balance = closing
+        balance.updated_at = datetime.now(UTC)
+        balance.updated_by = actor_id
+        self._session.add(balance)
+        self._session.flush()
+        self._session.refresh(balance)
+        after_snap = audit_snapshot(balance)
+        return balance, before_snap, after_snap
+
+    def reverse_cl_forfeiture_for_months(
+        self,
+        balance: LeaveBalance,
+        months: list[str],
+        actor_id: UUID,
+    ) -> list[tuple[dict, dict]]:
+        """Reverse CL forfeitures for each YYYY-MM in `months` that is in balance.forfeiture_applied_for.
+
+        For each matching month: decrement forfeited by 1.0, increment closing_balance by 1.0,
+        remove the month from forfeiture_applied_for. Skips months not in the list (idempotent).
+        Returns list of (before_snap, after_snap) tuples — one per reversal. Service writes audit rows.
+        """
+        results: list[tuple[dict, dict]] = []
+        for month in months:
+            if month not in balance.forfeiture_applied_for:
+                continue
+            before_snap = audit_snapshot(balance)
+            balance.forfeited -= 1.0
+            balance.closing_balance += 1.0
+            # Rebuild the list without the reversed month (JSONB column — must replace list)
+            balance.forfeiture_applied_for = [m for m in balance.forfeiture_applied_for if m != month]
+            balance.updated_at = datetime.now(UTC)
+            balance.updated_by = actor_id
+            self._session.add(balance)
+            self._session.flush()
+            self._session.refresh(balance)
+            after_snap = audit_snapshot(balance)
+            results.append((before_snap, after_snap))
+        return results
+
 
 class LeaveRepository:
     """AY-scoped leave requests with lock enforcement."""
@@ -228,6 +422,31 @@ class LeaveRepository:
         self._session.refresh(req)
         return req
 
+    def admin_search(
+        self,
+        username_filter: str | None = None,
+        leave_type_filter: str | None = None,
+        state_filter: str | None = None,
+        limit: int = 500,
+    ) -> list[tuple["LeaveRequest", "User"]]:
+        """Return (LeaveRequest, User) tuples with optional filters for admin list page."""
+        from durgam.models.identity import User as _User
+        stmt = (
+            select(LeaveRequest, _User)
+            .join(_User, LeaveRequest.requestor_user_id == _User.id)
+            .where(LeaveRequest.is_deleted == False)  # noqa: E712
+            .where(_User.is_deleted == False)  # noqa: E712
+            .order_by(LeaveRequest.created_at.desc())  # type: ignore[union-attr]
+            .limit(limit)
+        )
+        if username_filter:
+            stmt = stmt.where(_User.username.ilike(f"%{username_filter}%"))  # type: ignore[union-attr]
+        if leave_type_filter:
+            stmt = stmt.where(LeaveRequest.leave_type == leave_type_filter)
+        if state_filter:
+            stmt = stmt.where(LeaveRequest.state == state_filter)
+        return list(self._session.exec(stmt).all())
+
 
 class LateAttendanceMarkerRepository:
     """CRUD for LateAttendanceMarker (manual HR entry pre-M13 Attendance Module)."""
@@ -291,3 +510,75 @@ class LateAttendanceMarkerRepository:
             except (ValueError, AttributeError):
                 pass
         return list(self._session.exec(stmt).all())
+
+    def get_late_markers_in_range(
+        self,
+        user_id: UUID,
+        start_date: date_type,
+        end_date: date_type,
+    ) -> list[LateAttendanceMarker]:
+        """Return markers for `user_id` with occurred_on in [start_date, end_date]."""
+        stmt = (
+            select(LateAttendanceMarker)
+            .where(LateAttendanceMarker.is_deleted == False)  # noqa: E712
+            .where(LateAttendanceMarker.employee_user_id == user_id)
+            .where(LateAttendanceMarker.occurred_on >= start_date)
+            .where(LateAttendanceMarker.occurred_on <= end_date)
+        )
+        return list(self._session.exec(stmt).all())
+
+
+class LeaveCreditPolicyRepository:
+    """CRUD for LeaveCreditPolicy (TD-036, M8.1)."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def get_for_leave_type(self, leave_type: str) -> LeaveCreditPolicy | None:
+        return self._session.exec(
+            select(LeaveCreditPolicy).where(
+                LeaveCreditPolicy.leave_type == leave_type,
+                LeaveCreditPolicy.is_deleted == False,  # noqa: E712
+            )
+        ).first()
+
+    def list_active(self) -> list[LeaveCreditPolicy]:
+        return list(
+            self._session.exec(
+                select(LeaveCreditPolicy).where(
+                    LeaveCreditPolicy.is_deleted == False  # noqa: E712
+                )
+            ).all()
+        )
+
+    def save(self, policy: LeaveCreditPolicy) -> LeaveCreditPolicy:
+        policy.updated_at = datetime.now(UTC)
+        self._session.add(policy)
+        self._session.flush()
+        self._session.refresh(policy)
+        return policy
+
+
+class LeaveCreditRunRepository:
+    """Idempotency sidecar for credit_annual_cl (TD-036, M8.1)."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def get(
+        self, user_id: UUID, leave_type: str, calendar_year: int
+    ) -> LeaveCreditRun | None:
+        return self._session.exec(
+            select(LeaveCreditRun).where(
+                LeaveCreditRun.user_id == user_id,
+                LeaveCreditRun.leave_type == leave_type,
+                LeaveCreditRun.calendar_year == calendar_year,
+                LeaveCreditRun.is_deleted == False,  # noqa: E712
+            )
+        ).first()
+
+    def create(self, run: LeaveCreditRun) -> LeaveCreditRun:
+        self._session.add(run)
+        self._session.flush()
+        self._session.refresh(run)
+        return run

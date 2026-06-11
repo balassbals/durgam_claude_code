@@ -15,10 +15,12 @@ from sqlmodel import Session, select
 
 from durgam.audit.log import write_audit_row
 from durgam.audit.snapshot import audit_snapshot
+from durgam.auth.permissions import PermissionDenied, can
 from durgam.models.config_anchors import Holiday
 from durgam.models.identity import Role, User, UserRole
 from durgam.models.leave import LeaveBalance, LeaveRequest
 from durgam.repositories.approval_process import ApprovalProcessRepository
+from durgam.repositories.approval_request import ApprovalRequestRepository
 from durgam.repositories.leave import (
     LeaveBalanceRepository,
     LeaveSanctionRuleRepository,
@@ -204,6 +206,7 @@ class LeaveRequestService:
             created_at=now,
             updated_at=now,
         )
+        leave_req.is_post_facto = starts_on < date.today()
         self._leave_repo.add(leave_req)
 
         # 15. Post-add sync for the auto-approval (skip-self) case.
@@ -246,27 +249,42 @@ class LeaveRequestService:
     def withdraw(
         self,
         leave_request_id: UUID,
-        requestor_user_id: UUID,
+        actor_user_id: UUID,
+        reason: str = "",
     ) -> LeaveRequest:
         leave_req = self._leave_repo.get(leave_request_id)
         if leave_req is None:
             raise LeaveRequestError("Leave request not found.")
-        if leave_req.requestor_user_id != requestor_user_id:
-            raise LeaveRequestError("Only the requestor can withdraw their own leave request.")
+
+        # Actor authorization: requestor can always withdraw their own; others need admin perm.
+        if leave_req.requestor_user_id != actor_user_id:
+            if not can(actor_user_id, "write", "leave_request_admin", "*", None, self._session):
+                raise PermissionDenied(actor_user_id, "write", "leave_request_admin")
+
+        state = leave_req.state
+        if state not in {"submitted", "in_review", "approved"}:
+            raise LeaveRequestError(f"Cannot withdraw from state {state!r}.")
 
         before_snap = audit_snapshot(leave_req)
-        # Engine's _run_post_withdrawal callback mirrors state to leave_req via _update_leave_state.
+
+        if state == "approved":
+            return self._withdraw_approved(
+                leave_request_id, leave_req, actor_user_id, reason, before_snap
+            )
+
+        # ── M8-frozen pre-approval path (submitted | in_review) ──────────────
+        # Pass the actual requestor ID so the approval engine's internal ownership
+        # check passes (admin-initiated pre-approval withdrawals are routed here too).
         self._approval_service.withdraw(
             request_id=leave_req.approval_request_id,
-            requestor_user_id=requestor_user_id,
+            requestor_user_id=leave_req.requestor_user_id,
         )
-        # Re-fetch after callback has updated the state.
         refreshed = self._leave_repo.get(leave_request_id)
         if refreshed is None:
             raise LeaveRequestError("Leave request disappeared after withdrawal.")
 
         write_audit_row(
-            actor_user_id=requestor_user_id,
+            actor_user_id=actor_user_id,
             actor_role_code=None,
             action="withdraw",
             resource="leave_request",
@@ -279,6 +297,163 @@ class LeaveRequestService:
             session=self._session,
         )
         return refreshed
+
+    def _withdraw_approved(
+        self,
+        leave_request_id: UUID,
+        leave_req: LeaveRequest,
+        actor_user_id: UUID,
+        reason: str,
+        before_snap: dict,
+    ) -> LeaveRequest:
+        """Approved-state withdrawal: reverse unused balance, notify, audit."""
+        if not reason.strip():
+            raise ValueError(
+                "Withdrawal reason is required when withdrawing an approved leave."
+            )
+
+        today = date.today()
+        ends_on = leave_req.ends_on
+        starts_on = leave_req.starts_on
+
+        if today > ends_on:
+            raise LeaveRequestError("Cannot withdraw: leave period has ended.")
+
+        # Unused-tail formula (DD-M8.1-P5-1):
+        # unused_tail = sanctioned * max(0, (ends_on - max(starts_on, today)).days + 1) / chargeable
+        # Capped at sanctioned to prevent over-credit on single-day/half-day leaves.
+        sanctioned = leave_req.sanctioned_days if leave_req.sanctioned_days is not None else leave_req.chargeable_days
+        chargeable = leave_req.chargeable_days
+        calendar_remaining = max(0, (ends_on - max(starts_on, today)).days + 1)
+        unused_tail = min(sanctioned, sanctioned * calendar_remaining / chargeable)
+
+        requestor_id = leave_req.requestor_user_id
+        ay_id = leave_req.academic_year_id
+        leave_type = leave_req.leave_type
+
+        # Balance reversal by type
+        if leave_type in {"CL", "EL", "HPL", "ML"} and unused_tail > 0:
+            balance = self._balance_repo.get_or_create(
+                requestor_id, leave_type, ay_id, actor_id=actor_user_id
+            )
+            bal, before_bal, after_bal = self._balance_repo.reverse_deduction(
+                balance, unused_tail, actor_user_id
+            )
+            write_audit_row(
+                actor_user_id=actor_user_id, actor_role_code=None,
+                action="reverse_deduction", resource="leave_balance",
+                resource_id=str(bal.id), request_id=None, ip=None, user_agent=None,
+                before=before_bal, after=after_bal, session=self._session,
+            )
+
+        elif leave_type == "CML" and unused_tail > 0:
+            # Re-credit CML days and HPL at 2× (mirrors the debit in _finalize_leave_from_approval)
+            cml_bal = self._balance_repo.get_or_create(
+                requestor_id, "CML", ay_id, actor_id=actor_user_id
+            )
+            cml, before_cml, after_cml = self._balance_repo.reverse_deduction(
+                cml_bal, unused_tail, actor_user_id
+            )
+            write_audit_row(
+                actor_user_id=actor_user_id, actor_role_code=None,
+                action="reverse_deduction", resource="leave_balance",
+                resource_id=str(cml.id), request_id=None, ip=None, user_agent=None,
+                before=before_cml, after=after_cml, session=self._session,
+            )
+            hpl_bal = self._balance_repo.get_or_create(
+                requestor_id, "HPL", ay_id, actor_id=actor_user_id
+            )
+            hpl, before_hpl, after_hpl = self._balance_repo.reverse_deduction(
+                hpl_bal, unused_tail * 2.0, actor_user_id
+            )
+            write_audit_row(
+                actor_user_id=actor_user_id, actor_role_code=None,
+                action="reverse_deduction", resource="leave_balance",
+                resource_id=str(hpl.id), request_id=None, ip=None, user_agent=None,
+                before=before_hpl, after=after_hpl, session=self._session,
+            )
+        # SCL, EOL, SL: no balance change
+
+        # Update leave request
+        leave_req.withdrawal_reason = reason.strip()[:1000]
+        leave_req.state = "withdrawn"
+        self._leave_repo.save(leave_req)
+
+        # Transition the backing ApprovalRequest to "withdrawn" directly.
+        # ApprovalRequestService.withdraw() only handles "submitted" state; for post-approval
+        # withdrawal we bypass it and update the approval_request row directly.
+        approval_repo = ApprovalRequestRepository(self._session)
+        approval_req = approval_repo.get_by_id_any(leave_req.approval_request_id)
+        if approval_req is not None:
+            approval_repo.update_state(approval_req, "withdrawn", decided_at=datetime.now(UTC))
+
+        # Notification fan-out
+        from durgam.services.leave_notification import resolve_withdrawal_notification_recipients
+        from durgam.tasks.leave_jobs import _notify
+        requestor = self._session.get(User, requestor_id)
+        recipients = resolve_withdrawal_notification_recipients(requestor_id, self._session)
+        requestor_display = (requestor.full_name or requestor.username) if requestor else "Unknown"
+        subject = f"Leave withdrawn: {requestor_display} ({leave_type}, {starts_on}–{ends_on})"
+        body = (
+            f"Requestor: {requestor.username if requestor else 'unknown'}\n"
+            f"Leave type: {leave_type}\n"
+            f"Period: {starts_on} to {ends_on}\n"
+            f"Re-credited: {unused_tail:.2f} days\n"
+            f"Reason: {reason.strip()[:200]}"
+        )
+        for recipient in recipients:
+            _notify(
+                self._session,
+                recipient_user_id=recipient.id,
+                subject=subject,
+                body=body,
+                payload={"action": "leave_withdrawn", "leave_request_id": str(leave_request_id)},
+            )
+
+        actor_roles = self._get_actor_roles_json(actor_user_id)
+        write_audit_row(
+            actor_user_id=actor_user_id,
+            actor_role_code=None,
+            action="withdraw",
+            resource="leave_request",
+            resource_id=str(leave_request_id),
+            request_id=None,
+            ip=None,
+            user_agent=None,
+            before=before_snap,
+            after={"state": "withdrawn", "withdrawal_reason": reason.strip()[:1000]},
+            actor_roles_json=actor_roles,
+            session=self._session,
+        )
+
+        log.info(
+            "leave_request_withdrawn_post_approval",
+            leave_id=str(leave_request_id),
+            leave_type=leave_type,
+            actor=str(actor_user_id),
+            unused_tail=unused_tail,
+            recipients=len(recipients),
+        )
+
+        refreshed = self._leave_repo.get(leave_request_id)
+        if refreshed is None:
+            raise LeaveRequestError("Leave request disappeared after withdrawal.")
+        return refreshed
+
+    def _get_actor_roles_json(self, actor_user_id: UUID) -> list[dict]:
+        user_role_rows = self._session.exec(
+            select(UserRole).where(UserRole.user_id == actor_user_id)
+        ).all()
+        result = []
+        for ur in user_role_rows:
+            role = self._session.get(Role, ur.role_id)
+            if role and not role.is_deleted:
+                result.append({
+                    "role_code": role.code,
+                    "scope_type": ur.scope_type,
+                    "scope_id": str(ur.scope_id) if ur.scope_id else None,
+                })
+        return result
 
     def cancel(
         self,
@@ -293,7 +468,7 @@ class LeaveRequestService:
         before_snap = audit_snapshot(leave_req)
         self._approval_service.cancel(
             request_id=leave_req.approval_request_id,
-            sys_admin_user_id=actor_id,
+            actor_user_id=actor_id,
             comment=reason,
         )
         leave_req.cancellation_reason = reason
@@ -401,6 +576,184 @@ class LeaveRequestService:
 
         rules = self._rule_repo.list_active()
         return resolve_channel(user_roles, leave_type, rules)
+
+    # ── Admin state-change ───────────────────────────────────────────────
+
+    _ALLOWED_TRANSITIONS: dict[str, set[str]] = {
+        "submitted": {"cancelled", "rejected"},
+        "in_review":  {"cancelled", "rejected"},
+        "approved":   {"cancelled", "withdrawn"},
+    }
+
+    def admin_change_state(
+        self,
+        leave_request_id: UUID,
+        new_state: str,
+        actor_user_id: UUID,
+        reason: str = "",
+    ) -> LeaveRequest:
+        """Admin-initiated state transition for leave requests.
+
+        Allowed transitions (DD-M8.1-P8-5):
+          submitted → cancelled | rejected
+          in_review → cancelled | rejected
+          approved  → cancelled | withdrawn   (delegates to withdraw())
+
+        Reason is required for all six transitions.
+        Raises LeaveRequestError for forbidden transitions.
+        Raises ValueError for missing reason.
+        """
+        if not reason.strip():
+            raise ValueError("Reason is required.")
+        leave_req = self._leave_repo.get(leave_request_id)
+        if leave_req is None:
+            raise LeaveRequestError("Leave request not found.")
+        current_state = leave_req.state
+        allowed = self._ALLOWED_TRANSITIONS.get(current_state, set())
+        if new_state not in allowed:
+            raise LeaveRequestError(
+                f"Transition {current_state!r} → {new_state!r} is not allowed."
+            )
+        # approved → cancelled / approved → withdrawn: delegate to withdraw()
+        # (handles balance reversal, notification fan-out, admin bypass check)
+        if current_state == "approved":
+            leave_req = self.withdraw(leave_request_id, actor_user_id=actor_user_id, reason=reason)
+            if new_state == "cancelled":
+                # withdraw() produces state="withdrawn"; override to "cancelled" per admin intent
+                leave_req.state = "cancelled"
+                leave_req.cancellation_reason = reason
+                self._leave_repo.save(leave_req)
+                write_audit_row(
+                    actor_user_id=actor_user_id,
+                    actor_role_code=None,
+                    action="admin_cancel_after_withdraw",
+                    resource="leave_request",
+                    resource_id=str(leave_request_id),
+                    request_id=None, ip=None, user_agent=None,
+                    before={"state": "withdrawn"},
+                    after={"state": "cancelled", "reason": reason},
+                    session=self._session,
+                )
+            return leave_req
+        # submitted/in_review → cancelled or rejected
+        before_snap = audit_snapshot(leave_req)
+        if new_state == "cancelled":
+            self._approval_service.cancel(
+                request_id=leave_req.approval_request_id,
+                actor_user_id=actor_user_id,
+                comment=reason,
+            )
+            leave_req.cancellation_reason = reason
+        else:
+            # rejected
+            self._approval_service.cancel(
+                request_id=leave_req.approval_request_id,
+                actor_user_id=actor_user_id,
+                comment=reason,
+            )
+        leave_req.state = new_state
+        self._leave_repo.save(leave_req)
+
+        write_audit_row(
+            actor_user_id=actor_user_id,
+            actor_role_code=None,
+            action=f"admin_{new_state}",
+            resource="leave_request",
+            resource_id=str(leave_request_id),
+            request_id=None,
+            ip=None,
+            user_agent=None,
+            before=before_snap,
+            after={"state": new_state, "reason": reason.strip()},
+            session=self._session,
+        )
+
+        from durgam.tasks.leave_jobs import _notify
+        requestor = self._session.get(User, leave_req.requestor_user_id)
+        if requestor is not None:
+            subject = (
+                f"Leave {new_state}: "
+                f"{leave_req.leave_type} {leave_req.starts_on}–{leave_req.ends_on}"
+            )
+            body = (
+                f"Your leave request has been {new_state} by an administrator.\n"
+                f"Reason: {reason.strip()[:200]}"
+            )
+            _notify(
+                self._session,
+                recipient_user_id=requestor.id,
+                subject=subject,
+                body=body,
+                payload={"action": f"leave_{new_state}", "leave_request_id": str(leave_request_id)},
+            )
+
+        refreshed = self._leave_repo.get(leave_request_id)
+        if refreshed is None:
+            raise LeaveRequestError("Leave request disappeared after state change.")
+        return refreshed
+
+    # ── Post-facto forfeiture reversal ────────────────────────────────────
+
+    @staticmethod
+    def _reverse_cl_forfeitures_for_postfacto(
+        session: Session,
+        leave_req: "LeaveRequest",
+    ) -> None:
+        """Reverse CL forfeitures for months covered by a post-facto approved leave.
+
+        Staticmethod — called by ApprovalRequestService._finalize_leave_from_approval via
+        deferred import to avoid circular service initialization.
+        Only applies to CL leave type. For non-CL: no-op.
+        """
+        if leave_req.leave_type != "CL":
+            return
+        from durgam.repositories.leave import LateAttendanceMarkerRepository, LeaveBalanceRepository  # noqa: F401
+        # Collect YYYY-MM strings covered by the leave period
+        covered_months: list[str] = []
+        cur = date(leave_req.starts_on.year, leave_req.starts_on.month, 1)
+        end_month = date(leave_req.ends_on.year, leave_req.ends_on.month, 1)
+        while cur <= end_month:
+            covered_months.append(cur.strftime("%Y-%m"))
+            year, month = cur.year, cur.month
+            cur = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
+        if not covered_months:
+            return
+        marker_repo = LateAttendanceMarkerRepository(session)
+        markers = marker_repo.get_late_markers_in_range(
+            leave_req.requestor_user_id,
+            leave_req.starts_on,
+            leave_req.ends_on,
+        )
+        marker_months = {m.occurred_on.strftime("%Y-%m") for m in markers}
+        months_to_reverse = [m for m in covered_months if m in marker_months]
+        if not months_to_reverse:
+            return
+        bal_repo = LeaveBalanceRepository(session)
+        balance = bal_repo.get_or_create(
+            leave_req.requestor_user_id,
+            "CL",
+            leave_req.academic_year_id,
+            actor_id=leave_req.requestor_user_id,
+        )
+        results = bal_repo.reverse_cl_forfeiture_for_months(
+            balance,
+            months_to_reverse,
+            actor_id=leave_req.requestor_user_id,
+        )
+        for before_snap, after_snap in results:
+            write_audit_row(
+                actor_user_id=leave_req.requestor_user_id,
+                actor_role_code=None,
+                action="postfacto_forfeit_reversal",
+                resource="leave_balance",
+                resource_id=str(balance.id),
+                request_id=None,
+                ip=None,
+                user_agent=None,
+                before=before_snap,
+                after=after_snap,
+                session=session,
+            )
 
     # ── Private helpers ─────────────────────────────────────────────────
 

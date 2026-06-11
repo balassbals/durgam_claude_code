@@ -13,6 +13,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
+from durgam.auth.permissions import PermissionDenied
 from durgam.services.leave_request import LeaveRequestError, LeaveRequestService
 from durgam.services.leave_rules import LeaveRuleError
 
@@ -280,20 +281,21 @@ def test_withdraw_owner_succeeds(mock_deps, requestor_id, req_id):
          patch("durgam.services.leave_request.write_audit_row"):
         result = _svc(mock_deps).withdraw(
             leave_request_id=req_id,
-            requestor_user_id=requestor_id,
+            actor_user_id=requestor_id,
         )
     mock_deps["approval_service"].withdraw.assert_called_once()
     assert result is not None
 
 
 def test_withdraw_non_owner_raises(mock_deps, requestor_id, req_id):
-    """Non-owner cannot withdraw another user's leave request."""
+    """Non-owner without leave_request_admin permission → PermissionDenied."""
     other_user_id = uuid4()
-    with pytest.raises(LeaveRequestError, match="Only the requestor"):
-        _svc(mock_deps).withdraw(
-            leave_request_id=req_id,
-            requestor_user_id=other_user_id,
-        )
+    with patch("durgam.services.leave_request.can", return_value=False):
+        with pytest.raises(PermissionDenied):
+            _svc(mock_deps).withdraw(
+                leave_request_id=req_id,
+                actor_user_id=other_user_id,
+            )
     mock_deps["approval_service"].withdraw.assert_not_called()
 
 

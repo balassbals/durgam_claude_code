@@ -75,6 +75,9 @@ addopts = "--cov=durgam --cov-report=term-missing"
 filterwarnings = [
     "ignore:.*utcnow.*:DeprecationWarning:sqlmodel.*",
 ]
+markers = [
+    "e2e: end-to-end browser tests via Playwright",
+]
 
 [tool.coverage.run]
 source = ["durgam"]

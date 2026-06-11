@@ -158,6 +158,18 @@ def _in_flight_row(row: rx.Var) -> rx.Component:
                 ),
                 rx.fragment(),
             ),
+            rx.cond(
+                row["within_withdraw_window"],
+                rx.button(
+                    "Withdraw (post-approval)",
+                    on_click=LeavePageState.open_withdraw_modal(row["id"]),
+                    variant="ghost",
+                    size="1",
+                    color="var(--color-destructive)",
+                    cursor="pointer",
+                ),
+                rx.fragment(),
+            ),
             wrap="wrap",
             gap="0.5rem",
             align="center",
@@ -267,6 +279,80 @@ def _history_section() -> rx.Component:
                 font_size="0.875rem",
             ),
         ),
+    )
+
+
+# ── Withdraw-approved modal ──────────────────────────────────────────
+
+def _withdraw_approved_modal() -> rx.Component:
+    from durgam.pages.components import form_modal
+
+    form_body = rx.vstack(
+        rx.heading(
+            "Withdraw Approved Leave",
+            size="4",
+            font_family="var(--font-sans)",
+            margin_bottom="0.5rem",
+        ),
+        rx.text(
+            "This will withdraw your approved leave request. Your balance will be "
+            "adjusted for any unused days. This action cannot be undone.",
+            font_size="0.875rem",
+            color="var(--color-muted)",
+            margin_bottom="1rem",
+        ),
+        rx.form(
+            rx.vstack(
+                rx.text(
+                    "Reason for withdrawal",
+                    font_size="0.875rem",
+                    font_weight="500",
+                ),
+                rx.text_area(
+                    name="withdraw_reason",
+                    on_change=LeavePageState.set_withdraw_reason,
+                    placeholder="Provide a reason (minimum 10 characters)...",
+                    rows="4",
+                    width="100%",
+                ),
+                rx.cond(
+                    ~LeavePageState.withdraw_reason_valid,
+                    rx.text(
+                        "Reason must be at least 10 characters.",
+                        font_size="0.75rem",
+                        color="var(--color-destructive)",
+                    ),
+                    rx.fragment(),
+                ),
+                align="start",
+                width="100%",
+                gap="0.35rem",
+                margin_bottom="1rem",
+            ),
+            rx.hstack(
+                secondary_btn("Cancel", on_click=LeavePageState.close_withdraw_modal, type="button"),
+                primary_btn(
+                    "Confirm Withdrawal",
+                    type="submit",
+                    disabled=~LeavePageState.withdraw_reason_valid,
+                    opacity=rx.cond(LeavePageState.withdraw_reason_valid, "1", "0.5"),
+                ),
+                gap="0.75rem",
+                justify="end",
+                width="100%",
+            ),
+            on_submit=LeavePageState.submit_withdrawal,
+            reset_on_submit=False,
+        ),
+        align="start",
+        width="100%",
+        gap="0",
+    )
+
+    return form_modal(
+        content=form_body,
+        is_open=LeavePageState.show_withdraw_modal,
+        max_width="480px",
     )
 
 
@@ -506,6 +592,25 @@ def _apply_modal() -> rx.Component:
                     ),
                     rx.fragment(),
                 ),
+                # Post-facto badge (informational only — does not block submission)
+                rx.cond(
+                    LeavePageState.is_past_dated,
+                    rx.box(
+                        rx.text(
+                            "⚠ Post-facto application — this request covers past dates.",
+                            color="var(--color-warning, #b45309)",
+                            font_size="0.85rem",
+                            font_weight="500",
+                        ),
+                        background="rgba(245, 158, 11, 0.08)",
+                        border="1px solid rgba(245, 158, 11, 0.3)",
+                        border_radius="0.375rem",
+                        padding="0.5rem 0.75rem",
+                        margin_bottom="0.5rem",
+                        width="100%",
+                    ),
+                    rx.fragment(),
+                ),
                 # Actions
                 rx.hstack(
                     primary_btn(
@@ -593,6 +698,7 @@ def my_leave_page() -> rx.Component:
         ),
         page_footer(),
         _apply_modal(),
+        _withdraw_approved_modal(),
         align="start",
         width="100%",
         min_height="100vh",

@@ -43,5 +43,11 @@ app.conf.update(
             "task": "durgam.tasks.leave_jobs.check_overstay",
             "schedule": crontab(hour=1, minute=0),
         },
+        # M8.1 TD-036: credit annual CL entitlement on Jan 1 at 03:00 UTC.
+        # Beat schedule is hardcoded here; see TD-040 for DB-driven scheduling.
+        "leave-credit-annual-cl": {
+            "task": "durgam.tasks.leave_jobs.credit_annual_cl",
+            "schedule": crontab(hour=3, minute=0, day_of_month=1, month_of_year=1),
+        },
     },
 )

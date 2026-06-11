@@ -668,18 +668,6 @@ the direct and table-based pathways.
 
 ---
 
-### TD-036 — CL annual credit at AY start not implemented
-
-**Location**: `durgam/tasks/leave_jobs.py` (no job exists yet for CL annual credit); related: `durgam/repositories/leave.py` `LeaveBalanceRepository.get_or_create` (lazy-creates with all-zero fields).
-
-**What it is**: Per RFP §11.3 / PDF §XXVIII clause 14, every employee receives 10 (vacation/teaching) or 12 (non-vacation) days of CL at the start of each academic year (proportionate for partial year). Phase 6 shipped four periodic jobs but none of them credits CL at AY start; `LeaveBalance.get_or_create` creates rows with `closing_balance=0`. As a result, no employee can request CL via the UI until their balance is manually seeded.
-
-**Why this is gating real-world use**: A faculty user logs in, sees CL closing=0, submits a CL request, gets "Insufficient CL balance". The bootstrap admin page (E-016) will populate this for the go-live moment, but at each subsequent AY rollover the entitlement also needs to be re-credited automatically.
-
-**Trigger to re-open**: Either E-016 bootstrap admin page ships with a "credit annual CL entitlement" button, OR a new Celery beat job `credit_annual_cl` runs on the AY rollover date (which is itself tracked by the AY rollover lock Celery job).
-
----
-
 ### TD-034 — `db_session` fixture not isolated from `seeded_db_engine` in bare-pytest discovery
 
 **Location:** `tests/conftest.py` (`db_session` fixture + `seeded_db_engine` session-scoped fixture); affected tests: 8× `tests/unit/test_audit_label_resolver.py::Test*Resolver::test_label` (M6b); 2× `tests/unit/test_leave_sanction_rule.py::test_load_from_yaml_inserts_all_rules` + `::test_load_from_yaml_idempotent` (M8 Phase 4).
@@ -692,23 +680,79 @@ the direct and table-based pathways.
 
 ---
 
-### TD-037 — Notification rows for leave events are not being enqueued
+### TD-038 — Withdrawal notification recipient resolution is university-wide (no campus-dept scope)
 
-**Location:** `durgam/services/approval_request.py` → `_enqueue_notifications()` (called from `submit`, `advance`, and `terminate` paths); `durgam/models/crosscutting.py` → `Notification` model.
+**Location:** `durgam/services/leave_notification.py` (M8.1 Phase 5, not yet created); planned scope: `resolve_withdrawal_notification_recipients()`.
 
-**What it is:** During the M8 gate walkthrough (full submit → recommend → approve cycle on SCL and CL walkthroughs), zero rows were found in the `notifications` table after all approval steps completed, despite `_enqueue_notifications()` being called on every state transition. The leave-rules notification calls (`LEAVE_SUBMITTED`, `LEAVE_APPROVED`, `LEAVE_REJECTED`, `LEAVE_CANCELLED`) are silently no-ops. The notification rows are constructed but never reach the DB.
+**What it is:** E-017 withdrawal notifications will notify HOD/AHOD/DIRECTOR roles using `UserRole.scope_type` and `scope_id` matching. The resolution function walks the role list but has no access to the employee-to-campus mapping (which belongs to the M10 Faculty model). In M8.1 the function returns all role-holders at any scope; it cannot filter by the employee's campus or department. Recipients from unrelated campuses or departments will receive notifications they don't need.
 
-**Suspected root cause:** `_enqueue_notifications()` is called from within the service's own `session` context. If `session.add(notification_row)` is being called but an exception is swallowed (empty `except` block or an implicit rollback), the add is lost without error. The M8 service (`approval_request.py`) is frozen (Phase 5); the investigation was deferred rather than risk destabilizing M8.
+**Why this is not an M8.1 blocker:** Withdrawal notifications are informational. An excess recipient is annoying but not harmful; a missed recipient would be worse. Conservative over-notification is acceptable until the Faculty/Campus assignment model exists.
 
-**Impact:** No notifications dispatched for leave events. The notification dispatch worker (TD-032, M14 scope) has no rows to process. Zero user-visible impact today because the dispatch worker does not yet exist, but every milestone that adds notification-consuming features will find an empty table.
+**Trigger to re-open:** M10 Faculty module ships the employee-to-campus/department linkage table. Resolution: pass the employee's campus UUID into `resolve_withdrawal_notification_recipients` and add a `.where(scope_id == campus_id)` filter to the HOD/AHOD lookup.
 
-**Trigger to re-open:** Before implementing the notification dispatch worker (TD-032 — M14). Resolve TD-037 first so there is something to dispatch. Also re-open if a milestone gate walkthrough uses a `SELECT COUNT(*) FROM notifications` smoke check.
+---
 
-**See also:** `docs/runbook.md` → "M8 Leave Rules — operations" → "Known gaps at M8 close — TD-037."
+### TD-039 — Leave balance and request admin pages lack campus-scope enforcement
+
+**Location:** `durgam/pages/admin/leave_balance_admin.py` and `durgam/pages/admin/leave_request_admin.py` (M8.1 Phases 7–8, not yet created); planned permission: `leave_balance_admin:write:*` and `leave_request_admin:write:*`.
+
+**What it is:** DIRECTOR/DEPUTY_DIRECTOR/DIRECTOR_OFFICE roles are campus-scoped, but the M8.1 admin pages for leave balance editing and leave request editing will use `any_scope=True` guards (no fine-grained campus filter). A DIRECTOR for campus PSN can see and edit balances/requests belonging to employees at campus BRN.
+
+**Why this is not an M8.1 blocker:** Employee-to-campus assignment requires the M10 Faculty model. The pages are used by Registrar-family roles in v1; DIRECTOR-tier usage deferred.
+
+**Trigger to re-open:** M10 Faculty module ships employee-to-campus linkage. Resolution: add a `campus_filter` query argument to `admin_search_balances` and `admin_list_requests` based on the actor's `scope_id`.
+
+---
+
+### TD-040 — credit_annual_cl beat schedule is hardcoded in celery_app.py
+
+**Location:** `durgam/tasks/celery_app.py` (`beat_schedule["leave-credit-annual-cl"]`); `durgam/models/leave.py` (`LeaveCreditPolicy` model, which currently has no `cron_expression` field).
+
+**What it is:** The `credit_annual_cl` task fires on Jan 1 at 03:00 UTC, hardcoded in `celery_app.py`. Institutions that want a different CL credit date (e.g. the AY start date, which varies by campus) cannot configure it without a code change. `LeaveCreditPolicy` was designed for per-type entitlement values only; the schedule is not DB-driven.
+
+**Why this is not a production blocker:** Jan 1 is the statutory CL credit date per §XXVIII clause 14. No institution has requested a different date.
+
+**Trigger to re-open:** Any institution requests a non-Jan-1 CL credit date. Resolution: add a `cron_expression: str` field to `LeaveCreditPolicy`; read it in `celery_app.py` to build a dynamic beat schedule. Or use Celery beat's `DatabaseScheduler` with `django-celery-beat` equivalent.
+
+---
+
+### TD-041 — Admin state transitions: leave_request.state and approval_request.state diverge
+
+**Location:** `durgam/services/leave_request.py` (`admin_change_state`); `durgam/services/approval_request.py` (`cancel`).
+
+**What it is:** When `admin_change_state` moves a `submitted` or `in_review` leave to `"rejected"`, `leave_request.state` correctly becomes `"rejected"` — but the underlying `approval_request.state` is set to `"cancelled"` by `ApprovalRequestService.cancel()`. The two tables use different terminal-state vocabularies. A joined report filtering `approval_requests.state = 'rejected'` will find zero rows even though the leave was operationally rejected.
+
+**Why this is not a production blocker:** Functionally each table holds the correct surface state for its own purpose. The `/audit` log and `/admin/leave/request-edit` list both read from `leave_requests.state`, which is accurate. Only cross-table joined reports (e.g., compliance dashboards joining approval_requests and leave_requests) are affected, and no such report exists in v1.
+
+**Trigger to re-open:** A compliance report needs to filter `approval_requests` by leave-level rejection (e.g., "how many leave requests were rejected vs. cancelled by approval workflow?"). Resolution: introduce an explicit `"rejected"` terminal state in the `approval_request` schema, or add a `leave_request_id` FK on `approval_request` and filter via `leave_request.state` when joining.
+
+---
+
+### TD-042 — admin cancel of approved leave produces two audit rows
+
+**Location:** `durgam/services/leave_request.py` (`admin_change_state`); `durgam/services/approval_request.py` (`withdraw`).
+
+**What it is:** When `admin_change_state(approved → cancelled)` is called, it delegates to `withdraw()` (which writes a `"withdraw"` audit row and sets `state="withdrawn"`), then immediately overrides the state to `"cancelled"` and writes a second `"admin_cancel_after_withdraw"` audit row. The result is two audit rows for a single user-facing operation.
+
+**Why this is not a production blocker:** Both audit rows have accurate `before`/`after` snapshots. The forensic record is complete. The double-write is a cosmetic concern, not a correctness issue.
+
+**Trigger to re-open:** Audit UI feedback that two rows are confusing for a single admin action. Resolution: add a `final_state: str | None = None` parameter to `withdraw()`; when set, skip writing the "withdrawn" audit row and let the caller write a single composite row. Requires updating all `withdraw()` callers.
 
 ---
 
 ## Resolved
+
+### TD-036 — CL annual credit at AY start not implemented (resolved in M8.1 Phase 2)
+
+**Status: Resolved in M8.1 Phase 2 commit `e1e65e5`.** `credit_annual_cl` Celery beat task ships with calendar-year scheduling (Jan 1, 03:00 UTC), proration for current-year joiners (full entitlement for prior-year joiners), idempotent `leave_credit_runs` sidecar table, and a `LeaveCreditPolicy` admin page at `/admin/leave/credit-policy`. See TD-040 for the remaining hardcoded-schedule follow-up.
+
+---
+
+### TD-037 — Notification rows for leave events not enqueued (resolved in M8.1 Phase 1)
+
+**Status: Resolved in M8.1 Phase 1 commits `e707e47` (diagnostic) + `8b3f609` (fix).** Root cause: `ApprovalRequestService.submit()` auto-approve path called `_run_post_approval()` but never called `_enqueue_notifications(action="approve")` for the requestor. Fix: added the call inside the `if request.current_stage > len(channel):` block, mirroring the pattern at line 268 in `approve()`. Reproducer: `tests/integration/test_leave_notifications.py::test_auto_approve_creates_requestor_notification`.
+
+---
 
 ### TD-002 — SAWarning: transaction already deassociated from connection (resolved in m0-cleanup)
 

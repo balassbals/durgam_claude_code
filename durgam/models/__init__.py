@@ -46,8 +46,10 @@ from .program import (
 )
 from .school import School
 from .leave import (
-    LeaveBalance,
     LateAttendanceMarker,
+    LeaveBalance,
+    LeaveCreditPolicy,
+    LeaveCreditRun,
     LeaveRequest,
     LeaveSanctionAuthorityRule,
 )
@@ -126,4 +128,7 @@ __all__ = [
     "LeaveRequest",
     "LateAttendanceMarker",
     "LeaveSanctionAuthorityRule",
+    # M8.1 Leave credit
+    "LeaveCreditPolicy",
+    "LeaveCreditRun",
 ]

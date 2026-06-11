@@ -38,6 +38,7 @@ from durgam.models.config_anchors import (
     WorkingDaysConfig,
 )
 from durgam.models.crosscutting import ApprovalProcess, FileAsset
+from durgam.models.leave import LeaveCreditPolicy
 from durgam.models.course import Course
 from durgam.models.department import (
     Department,
@@ -243,6 +244,17 @@ def seed(session: Session) -> dict[str, int]:
         {"resource": "late_attendance",  "action": "write",     "scope": "*"},
         {"resource": "late_attendance",  "action": "read",      "scope": "*"},
         {"resource": "late_attendance",  "action": "read",      "scope": "department"},
+        # CL credit policy (M8.1 TD-036)
+        {"resource": "leave_credit_policy", "action": "read",      "scope": "*"},
+        {"resource": "leave_credit_policy", "action": "configure", "scope": "*"},
+        # Leave balance import (M8.1 E-016)
+        {"resource": "leave_balance_import", "action": "write",     "scope": "*"},
+        # Leave balance admin (M8.1 E-022)
+        {"resource": "leave_balance_admin",  "action": "read",      "scope": "*"},
+        {"resource": "leave_balance_admin",  "action": "write",     "scope": "*"},
+        # Leave request admin (M8.1 E-022 Phase 8)
+        {"resource": "leave_request_admin",  "action": "read",      "scope": "*"},
+        {"resource": "leave_request_admin",  "action": "write",     "scope": "*"},
         # Audit log (M2 placeholder)
         {"resource": "audit_log",        "action": "read",      "scope": "*"},
         # ── M3 new triples ────────────────────────────────────────────────────
@@ -595,17 +607,40 @@ def seed(session: Session) -> dict[str, int]:
         ("late_attendance",            "read",      "department"),
     ]
 
+    # M8.1 TD-036 — CL credit policy admin (read + configure)
+    _CL_CREDIT_POLICY_SPECIFIC = [
+        ("leave_credit_policy",        "read",      "*"),
+        ("leave_credit_policy",        "configure", "*"),
+    ]
+
+    # M8.1 E-016 — leave balance import (REGISTRAR family + DIRECTOR family)
+    _LEAVE_BALANCE_IMPORT = [
+        ("leave_balance_import",       "write",     "*"),
+    ]
+
+    # M8.1 E-022 — leave balance admin edit
+    _LEAVE_BALANCE_ADMIN = [
+        ("leave_balance_admin",        "read",      "*"),
+        ("leave_balance_admin",        "write",     "*"),
+    ]
+
+    # M8.1 E-022 Phase 8 — leave request admin edit
+    _LEAVE_REQUEST_ADMIN = [
+        ("leave_request_admin",        "read",      "*"),
+        ("leave_request_admin",        "write",     "*"),
+    ]
+
     role_perm_map: dict[str, list[tuple[str, str, str]]] = {
-        "REGISTRAR":            _PUBLIC_READ + _LEAVE_REQUESTOR + _REGISTRAR_SPECIFIC + [
+        "REGISTRAR":            _PUBLIC_READ + _LEAVE_REQUESTOR + _REGISTRAR_SPECIFIC + _CL_CREDIT_POLICY_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN + [
             ("approval_request",           "approve",   "*"),
         ],
-        "DEPUTY_REGISTRAR":     _PUBLIC_READ + _LEAVE_REQUESTOR + _REGISTRAR_SPECIFIC + [
+        "DEPUTY_REGISTRAR":     _PUBLIC_READ + _LEAVE_REQUESTOR + _REGISTRAR_SPECIFIC + _CL_CREDIT_POLICY_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN + [
             ("approval_request",           "approve",   "*"),
         ],
-        "REGISTRAR_OFFICE":     _PUBLIC_READ + _LEAVE_REQUESTOR + _REGISTRAR_SPECIFIC,
-        "DIRECTOR":             _PUBLIC_READ + _LEAVE_REQUESTOR + _DIRECTOR_SPECIFIC,
-        "DEPUTY_DIRECTOR":      _PUBLIC_READ + _LEAVE_REQUESTOR + _DIRECTOR_SPECIFIC,
-        "DIRECTOR_OFFICE":      _PUBLIC_READ + _LEAVE_REQUESTOR + _DIRECTOR_SPECIFIC,
+        "REGISTRAR_OFFICE":     _PUBLIC_READ + _LEAVE_REQUESTOR + _REGISTRAR_SPECIFIC + _CL_CREDIT_POLICY_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN,
+        "DIRECTOR":             _PUBLIC_READ + _LEAVE_REQUESTOR + _DIRECTOR_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN,
+        "DEPUTY_DIRECTOR":      _PUBLIC_READ + _LEAVE_REQUESTOR + _DIRECTOR_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN,
+        "DIRECTOR_OFFICE":      _PUBLIC_READ + _LEAVE_REQUESTOR + _DIRECTOR_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN,
         "IQAC_COORDINATOR":     _PUBLIC_READ + _LEAVE_REQUESTOR + _IQAC_SPECIFIC,
         "DEAN":                 _PUBLIC_READ + _LEAVE_REQUESTOR + _DEAN_SPECIFIC + [
             ("approval_request",           "approve",   "*"),
@@ -2339,6 +2374,22 @@ def seed(session: Session) -> dict[str, int]:
         updated=_matrix_counts["updated"],
         orphaned=_matrix_counts["orphaned_soft_deleted"],
     )
+
+    # ── LeaveCreditPolicy — CL row (M8.1 TD-036) ─────────────────────────────
+    # Bootstrap placeholder — real entitlement values managed via admin UI.
+    # vacation_entitlement=10 (teaching) / non_vacation_entitlement=12 (non-teaching)
+    # per §XXVIII clause 14.
+    cl_policy_stmt = (
+        pg_insert(LeaveCreditPolicy)
+        .values(
+            leave_type="CL",
+            vacation_entitlement=10.0,
+            non_vacation_entitlement=12.0,
+            enabled=True,
+        )
+        .on_conflict_do_nothing(constraint="uq_leave_credit_policies_leave_type")
+    )
+    counts["leave_credit_policies"] = _exec_insert(session, cl_policy_stmt)
 
     session.commit()
     return counts

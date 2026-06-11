@@ -237,3 +237,50 @@ introduces; trust that later milestones handle what is theirs.
 3. **History terminal state as a single summary sentence.** Terminal leave requests (approved, rejected, cancelled, withdrawn) show a one-sentence outcome in the history list: who decided, when, any comment (truncated at 60 chars), and the stage of the total. Avoids full approval timeline in the list; the detail page holds the full record. Pattern: `_build_leave_history_summary()` in `durgam/states/leave_request.py`.
 
 4. **Approval detail page: balance card visible for requestor's leave type only.** On the approval detail page (`/approvals/request/[id]`), do not show a balance card for the CURRENT USER's balance. Show only the requestor's balance (or suppress for non-balance types). Showing the approver's own balance is misleading and was confirmed a UX defect in gate walkthrough (E-022). Pattern reference: `_load_leave_detail` in `durgam/states/approval_requests.py`.
+
+## §15 M8.1 — Leave Module Follow-ups UX Principles
+
+### 1. Post-facto application badge
+
+When a leave request's `starts_on` is before today, an amber informational badge is rendered inside the Apply modal above the submit button:
+
+> "Post-facto application — this request covers past dates."
+
+The badge uses amber styling (`color_scheme="amber"` / `flash_warning()` token). It is **informational only** — it does not block submission. The admin and approver see a "Post-facto" badge on the in-flight row and in the approval detail panel.
+
+Pattern reference: `durgam/pages/leave/my_leave.py` `_apply_modal()` and `durgam/pages/admin/leave_request_edit.py`.
+
+### 2. Withdraw-reason modal (post-approval withdrawal)
+
+The "Withdraw (post-approval)" action on in-flight approved-leave rows opens a modal requiring a reason of at least 10 characters. The Confirm button is disabled (opacity 0.5, `disabled=True`) while `len(withdraw_reason.strip()) < 10`. This is enforced via a computed var (`is_withdraw_valid`), NOT a service-layer length check — the service check is defense-in-depth, not the primary UX gate.
+
+The action is labeled **"Withdraw (post-approval)"** to distinguish it from the pre-approval "Withdraw" action that cancels an in-flight request. Both actions can coexist on the same row if the leave is in `"in_review"` (pre-approval only) or `"approved"` (post-approval only).
+
+### 3. Two-stage CSV import preview
+
+Import flows with a potentially destructive overwrite (balance import) use a mandatory two-stage preview:
+
+1. **Stage 1 — Preview:** Upload CSV → server resolves AY, validates rows, returns preview with:
+   - Resolved AY name displayed prominently at the top (e.g. "Importing into AY: 2025-26").
+   - Valid rows table: shows what will be upserted.
+   - Invalid rows table (if any): shows row number + reason.
+   - Commit button **disabled** while any invalid rows are present OR no unlocked AY exists.
+2. **Stage 2 — Commit:** Admin explicitly clicks Commit → all valid rows upserted, audit trail written, success flash with row count.
+
+Commit button must never be enabled on a preview with errors. AY resolution failure must surface a clear "No active AY found — configure or unlock an AY before importing" message.
+
+### 4. Admin state transitions — dropdown defense in depth
+
+The leave request admin edit modal's "New State" dropdown lists only valid transitions for the current state (computed var `allowed_new_states_filtered`). The Save button is disabled when the selection is empty or invalid (computed var `is_save_valid`). The service layer enforces the same rules independently. Neither layer alone is sufficient — both are required.
+
+### 5. Window-elapsed gate on approved-leave admin transitions
+
+When an admin opens the edit modal for an approved leave whose `ends_on < today`:
+
+- The "New State" dropdown is **disabled** with no options.
+- An amber informational banner explains the constraint and redirects to `/admin/leave/balance-edit`.
+- The Save button remains disabled.
+
+This prevents a confusing UX where the admin selects a transition, submits, and receives a service-layer error with no visible feedback. The UI communicates the constraint before any server round-trip.
+
+Pattern reference: `durgam/states/leave_request_admin.py` `edit_window_elapsed` and `allowed_new_states_filtered`; `durgam/pages/admin/leave_request_edit.py` `_edit_modal()`.

@@ -519,3 +519,58 @@ After completing the submit → approve cycle in a walkthrough, run
 `SELECT COUNT(*) FROM notifications;` in psql. At M8 close this returns 0 due to TD-037.
 Before TD-032 (notification dispatch worker) lands, add this check to gate verification
 so the defect is caught immediately if it regresses to producing rows or advances.
+
+---
+
+## M8.1 Gate Lessons
+
+### TD-034 full-suite false failures
+
+Full-suite `pytest` invocations produce 56 consistent false failures in `tests/integration/test_m5b_purchase_rules.py` due to `seeded_session`/`db_session` fixture-pool interaction. The failures are pre-existing (filed at M8) and unrelated to M8.1 changes.
+
+**Workaround for M8.1 gate:** Use scoped invocations only:
+```bash
+uv run pytest tests/unit/ -q --no-cov
+uv run pytest tests/integration/test_leave_credit_policy.py \
+    tests/integration/test_leave_balance_import_integration.py \
+    tests/integration/test_leave_balance_import_fixture.py \
+    tests/integration/test_leave_withdrawal_integration.py \
+    tests/integration/test_leave_notifications.py \
+    tests/integration/test_leave_balance_admin_integration.py \
+    tests/integration/test_leave_request_admin_integration.py -q --no-cov
+```
+
+Never count or compare a bare full-suite run for M8.1 gate evidence. The 56 false failures inflate the failure count and can mask real regressions.
+
+### Seed-after-permission-change
+
+Every milestone that adds new permission triples to `scripts/seed.py` must run `uv run python scripts/seed.py` against the dev DB **before the manual walkthrough**. Missing this step produces `PermissionDenied` for every user for the new resource even when the code is correct. Surfaced at M8.1 Phase 8 when `leave_request_admin:write:*` was seeded in the commit but not re-applied to the running dev DB.
+
+**Checklist addition from M8.1:** After any commit that touches `scripts/seed.py`, run `uv run python scripts/seed.py` before the next walkthrough step.
+
+### Reflex API hotfix patterns (M8.1 Phase 4)
+
+Three Reflex 0.9.x idioms that produced failures invisible to pytest:
+
+1. `nav_shell()` takes **no positional arguments**. Wrong: `nav_shell(content)`. Correct: `rx.vstack(nav_shell(), content, ...)`.
+2. `rx.select.root` uses **`on_change`**, not `on_value_change`. `on_value_change` fires on internal Radix events and does not pass the selected value to the handler.
+3. **`rx.input(type="hidden")` renders visibly** in Reflex 0.9.x. Carry IDs in explicit state vars, not hidden form inputs.
+
+When a Reflex callback "doesn't fire" or a form field "sends the wrong value," check the prop name against the Reflex 0.9.x changelog before investigating the state/service layer.
+
+### CC reporting reliability
+
+Treat CC's test suite totals as approximate claims, not facts. Across M8.1 Phases 4.1–8, CC delivered under-spec reports (missing verbatim outputs). In Phase 8 CC reported "1223 passed" when the actual count was approximately 1167 passed + 56 failed (TD-034 contamination). Bala runs the scoped invocations above himself for ground truth at gate time.
+
+### Manual walkthrough is THE primary quality gate
+
+Across M8.1, the manual walkthrough caught real defects that green test suites did not:
+
+- Phase 4 Reflex API bugs (three hotfixes — `1a6c00f`, `625f584`, `6589fce`)
+- Phase 4.1 fixture defect (`leave_balance_import_sample.csv` referenced a seeded username not present in test DB)
+- Phase 7 sticky-column non-functionality (two failed implementation approaches)
+- Phase 8 Bug A: `cancel()` guard too narrow — `PermissionDenied` for leave_request_admin role
+- Phase 8 Bug B: `approved → cancelled` produced `state = "withdrawn"` instead of `"cancelled"`
+- Phase 8.3: UI permitted impossible state transitions for elapsed-window approved leaves
+
+The pattern from M5b/M6a/M7/M8/M8.1 is consistent: green pytest is necessary but not sufficient. The walkthrough is the ground-truth quality gate for integrated behavior.

@@ -57,3 +57,36 @@ register(NavEntry(
     permission_action="write",
     permission_resource="late_attendance",
 ))
+# ── M8.1 nav entries ────────────────────────────────────────────────────────────
+register(NavEntry(
+    label="CL Credit Policy",
+    href="/admin/leave/credit-policy",
+    icon="calendar-plus",
+    group="Admin",
+    permission_action="configure",
+    permission_resource="leave_credit_policy",
+))
+register(NavEntry(
+    label="Balance Import",
+    href="/admin/leave/balance-import",
+    icon="file-up",
+    group="Admin",
+    permission_action="write",
+    permission_resource="leave_balance_import",
+))
+register(NavEntry(
+    label="Balance Edit",
+    href="/admin/leave/balance-edit",
+    icon="edit",
+    group="Admin",
+    permission_action="write",
+    permission_resource="leave_balance_admin",
+))
+register(NavEntry(
+    label="Request Edit",
+    href="/admin/leave/request-edit",
+    icon="edit-3",
+    group="Admin",
+    permission_action="write",
+    permission_resource="leave_request_admin",
+))
