@@ -185,3 +185,119 @@ def test_count_working_days_holiday_skipped():
     end = _count_working_days(start, holiday_set, 2)
     # Tue skipped (holiday), Wed (day 1), Thu (day 2)
     assert end == date(2026, 1, 8)
+
+
+# ---------------------------------------------------------------------------
+# compute_important_until — edge cases (Phase 3)
+# ---------------------------------------------------------------------------
+
+def test_compute_important_until_multiple_holidays_extend_window():
+    """Three consecutive holidays (Tue/Wed/Thu) push the 2-day window to Sat."""
+    # Mon 2026-01-05 09:00 IST
+    scheduled = datetime(2026, 1, 5, 3, 30, 0, tzinfo=UTC)
+    holidays = frozenset({date(2026, 1, 6), date(2026, 1, 7), date(2026, 1, 8)})
+    result = compute_important_until(scheduled, holidays)
+
+    # Fri Jan 9 (day 1), Sat Jan 10 (day 2)
+    expected_ist = datetime(2026, 1, 10, 23, 59, 59, 999_999, tzinfo=_IST)
+    expected_utc = expected_ist.astimezone(UTC)
+    assert abs((result - expected_utc).total_seconds()) < 1
+
+
+def test_compute_important_until_holiday_on_sunday_no_double_skip():
+    """A holiday on Sunday has no effect — Sunday is already excluded."""
+    # Sat 2026-01-10 09:00 IST
+    scheduled = datetime(2026, 1, 10, 3, 30, 0, tzinfo=UTC)
+    # Sunday Jan 11 is a declared holiday — but it is already skipped as Sunday
+    holidays_with_sunday = frozenset({date(2026, 1, 11)})
+    holidays_empty = frozenset()
+
+    result_with = compute_important_until(scheduled, holidays_with_sunday)
+    result_without = compute_important_until(scheduled, holidays_empty)
+
+    # Both should give end of Tue Jan 13: Sat→Mon(day1)→Tue(day2)
+    expected_ist = datetime(2026, 1, 13, 23, 59, 59, 999_999, tzinfo=_IST)
+    expected_utc = expected_ist.astimezone(UTC)
+    assert abs((result_with - expected_utc).total_seconds()) < 1
+    assert abs((result_without - expected_utc).total_seconds()) < 1
+
+
+def test_compute_important_until_ist_midnight_boundary():
+    """UTC 2026-01-04T18:30 is IST midnight Jan 5 — start_date must be Jan 5, not Jan 4."""
+    # Exactly midnight IST on Monday 2026-01-05
+    scheduled = datetime(2026, 1, 4, 18, 30, 0, tzinfo=UTC)
+    result = compute_important_until(scheduled, frozenset())
+
+    # Same start_date as a 09:00 IST Jan 5 announcement → end of Wed Jan 7
+    expected_ist = datetime(2026, 1, 7, 23, 59, 59, 999_999, tzinfo=_IST)
+    expected_utc = expected_ist.astimezone(UTC)
+    assert abs((result - expected_utc).total_seconds()) < 1
+
+
+def test_compute_important_until_window_crosses_month_boundary():
+    """2-day window crossing Jan→Feb (or month end) is computed correctly."""
+    # Wed 2026-01-28 09:00 IST
+    scheduled = datetime(2026, 1, 28, 3, 30, 0, tzinfo=UTC)
+    result = compute_important_until(scheduled, frozenset())
+
+    # Thu Jan 29 (day 1), Fri Jan 30 (day 2)
+    expected_ist = datetime(2026, 1, 30, 23, 59, 59, 999_999, tzinfo=_IST)
+    expected_utc = expected_ist.astimezone(UTC)
+    assert abs((result - expected_utc).total_seconds()) < 1
+
+
+def test_compute_important_until_window_crosses_year_boundary():
+    """2-day window spanning Dec 31 → Jan 1 is computed correctly."""
+    # Wed 2026-12-30 09:00 IST
+    scheduled = datetime(2026, 12, 30, 3, 30, 0, tzinfo=UTC)
+    result = compute_important_until(scheduled, frozenset())
+
+    # Thu Dec 31 (day 1), Fri 2027-01-01 (day 2)
+    expected_ist = datetime(2027, 1, 1, 23, 59, 59, 999_999, tzinfo=_IST)
+    expected_utc = expected_ist.astimezone(UTC)
+    assert abs((result - expected_utc).total_seconds()) < 1
+
+
+def test_compute_important_until_returns_utc_aware_datetime():
+    """Result must be UTC-aware (tzinfo not None and utcoffset == 0)."""
+    scheduled = datetime(2026, 1, 5, 3, 30, 0, tzinfo=UTC)
+    result = compute_important_until(scheduled, frozenset())
+
+    assert result.tzinfo is not None
+    assert result.utcoffset() == timedelta(0)
+
+
+def test_compute_important_until_custom_window_days():
+    """window_days=5 from Mon Jan 5 lands on Sat Jan 10."""
+    # Mon 2026-01-05 09:00 IST
+    scheduled = datetime(2026, 1, 5, 3, 30, 0, tzinfo=UTC)
+    result = compute_important_until(scheduled, frozenset(), window_days=5)
+
+    # Tue(1) Wed(2) Thu(3) Fri(4) Sat(5) → end of Sat Jan 10
+    expected_ist = datetime(2026, 1, 10, 23, 59, 59, 999_999, tzinfo=_IST)
+    expected_utc = expected_ist.astimezone(UTC)
+    assert abs((result - expected_utc).total_seconds()) < 1
+
+
+def test_compute_important_until_holidays_outside_window_ignored():
+    """Holidays beyond the expected window end do not affect the result."""
+    # Mon 2026-01-05 — default window_days=2 → end of Wed Jan 7 without holidays
+    scheduled = datetime(2026, 1, 5, 3, 30, 0, tzinfo=UTC)
+    # Holidays on Thu Jan 8 and Fri Jan 9 — past the already-established window
+    holidays = frozenset({date(2026, 1, 8), date(2026, 1, 9)})
+    result = compute_important_until(scheduled, holidays)
+
+    # Should still be end of Wed Jan 7
+    expected_ist = datetime(2026, 1, 7, 23, 59, 59, 999_999, tzinfo=_IST)
+    expected_utc = expected_ist.astimezone(UTC)
+    assert abs((result - expected_utc).total_seconds()) < 1
+
+
+def test_count_working_days_all_holidays_extends_indefinitely():
+    """10 consecutive holidays (Jan 6–15) push the 2-day window to Sat Jan 17."""
+    start = date(2026, 1, 5)  # Monday
+    holiday_set = frozenset(date(2026, 1, d) for d in range(6, 16))  # Jan 6–15
+    end = _count_working_days(start, holiday_set, 2)
+    # Jan 6–10 holiday (Tue–Sat), Jan 11 skipped (Sun),
+    # Jan 12–15 holiday (Mon–Thu), Jan 16 (Fri) day 1, Jan 17 (Sat) day 2
+    assert end == date(2026, 1, 17)
