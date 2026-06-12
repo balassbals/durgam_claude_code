@@ -4,7 +4,7 @@
 **Spec**: `docs/durgam_rfp_v3.pdf` — all section references (§8, §12, etc.) point to this file.
 **Python**: 3.13 (pinned via `.python-version`).
 **Theme**: Puttaparthi Saffron–Indigo–Ivory (§15.1). Single committed theme; no alternatives in v3.
-**Current milestone**: M9 in progress (branch: m9-announcements). Scope: Announcement Module per RFP §9.6 + §10.1 with corrections for CoE-side role codes and sys_admin-configurable composer roster/priority. Design decisions queued in docs/milestones/M9.md; Phase 1 will not begin until decisions are frozen.
+**Current milestone**: M9 in progress (branch: m9-announcements). Scope: Announcement Module per RFP §9.3 + §9.6 + §10.1, with composer roster, categories, and audience groups via three-tier governance (SYS_ADMIN / REGISTRAR-tier). All 18 design decisions frozen (2026-06-12) in docs/milestones/M9.md. Phase 1 ready to begin.
 **Previous milestone**: M8.1 closed 2026-06-11, merged as c8962fd, tag m8.1-close.
 
 ## Authority files (binding, in priority order)
@@ -1573,7 +1573,7 @@ rx.vstack(
 Discovered at M8.1 Phase 9.2 on `/admin/leave/credit-policy`.
 
 ## Current milestone
-**M9 in progress (branch: m9-announcements). Scope: Announcement Module per RFP §9.6 + §10.1 with corrections for CoE-side role codes and sys_admin-configurable composer roster/priority. Design decisions queued in docs/milestones/M9.md; Phase 1 will not begin until decisions are frozen.**
+**M9 in progress (branch: m9-announcements). Scope: Announcement Module per RFP §9.3 + §9.6 + §10.1, with composer roster, categories, and audience groups via three-tier governance (SYS_ADMIN / REGISTRAR-tier). All 18 design decisions frozen (2026-06-12) in docs/milestones/M9.md. Phase 1 ready to begin.**
 
 **Previous milestone:** M8.1 closed 2026-06-11, merged as c8962fd, tag m8.1-close.
 
