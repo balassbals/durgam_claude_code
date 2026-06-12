@@ -10,7 +10,6 @@ from durgam.pages.components import (
     page_footer,
     primary_btn,
     secondary_btn,
-    destructive_btn,
 )
 from durgam.pages.shared.confirmation_dialog import confirmation_dialog
 from durgam.pages.shared.data_table import TableColumn, data_table
