@@ -55,6 +55,7 @@ register(NavEntry(
         ("configure", "leave_sanction_rule",             None),
         ("configure", "announcement_composer_config",     None),
         ("configure", "announcement_category",            None),
+        ("configure", "audience_group",                   None),
     ),
 ))
 register(NavEntry(
@@ -307,4 +308,12 @@ register(NavEntry(
     group="Config",
     permission_action="configure",
     permission_resource="announcement_category",
+))
+register(NavEntry(
+    label="Audience Groups",
+    href="/admin/config/audience-groups",
+    icon="users",
+    group="Config",
+    permission_action="configure",
+    permission_resource="audience_group",
 ))

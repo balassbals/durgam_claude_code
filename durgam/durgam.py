@@ -300,3 +300,9 @@ app.add_page(admin_config_announcement_composer, route="/admin/config/announceme
              on_load=AnnouncementComposerConfigState.load_composer_configs)
 app.add_page(admin_config_announcement_categories, route="/admin/config/announcement-categories",
              on_load=AnnouncementCategoryConfigState.load_categories)
+
+from durgam.pages.admin.config.audience_groups import admin_config_audience_groups
+from durgam.states.config_audience_group import AudienceGroupConfigState
+
+app.add_page(admin_config_audience_groups, route="/admin/config/audience-groups",
+             on_load=AudienceGroupConfigState.load_audience_groups)
