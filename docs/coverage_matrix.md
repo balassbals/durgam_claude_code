@@ -144,7 +144,7 @@ E-004 (RoleEmail) bind to this split.
 | Counsellor roster letterhead overlay polish | M5b | M14 docgen | Auto-fill campus/director/designation |
 | Faculty mentor roster letterhead overlay polish | M5b | M14 docgen | Auto-fill campus/director/designation |
 | Calendar entry conflict detection | M5b | M6 | |
-| Calendar email per-user notification preferences | M5b | M9 | |
+| Calendar email per-user notification preferences | M5b | Future M-Notifications (per M9 Q15 freeze) | |
 | Visiting/non-regular faculty contract term tracking | E-003 | M10 | |
 | Role-based dashboard widgets | §9.3 | M15 | |
 | Bulk assignment import (class teachers, coordinators) | §9.3 | M14 | |
@@ -212,8 +212,7 @@ deferred scope.
 2. **Rank-preference, availability/fatigue check, justification field** — M7
    runtime purchase committee constraints that depend on M10 Faculty. → M7/M10.
 3. **Calendar email recipients: individual notification preferences** — currently
-   all users with the target role receive the email; per-user opt-out is a M9
-   concern. → M9.
+   all users with the target role receive the email; per-user opt-out deferred to future M-Notifications milestone (per M9 Q15 freeze). → Future M-Notifications.
 4. **Counsellor document generation with letterhead overlay** — the roster
    export uses the Director letterhead as a DOCX template; generating formal
    appointment letters with letterhead merge is M14 scope. → M14.
@@ -240,7 +239,7 @@ deferred scope.
 14. **Counsellor roster letterhead-overlay rendering** — Jinja2 placeholders in
     letterhead template for counsellor roster export. → M14.
 15. **Faculty mentor confirmation notification emails** — email notifications
-    when Director confirms a campus mentor roster. → M9.
+    when Director confirms a campus mentor roster. → Future M-Notifications (per M9 Q15 freeze).
 16. **Faculty mentor roster letterhead overlay** — basic DOCX-on-letterhead
     (render_docx_template with Director letterhead) works at M5b. Rich auto-fill
     polish (campus/director-name/designation from login scope) remains. → M14.
