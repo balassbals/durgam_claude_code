@@ -4,7 +4,8 @@
 **Spec**: `docs/durgam_rfp_v3.pdf` — all section references (§8, §12, etc.) point to this file.
 **Python**: 3.13 (pinned via `.python-version`).
 **Theme**: Puttaparthi Saffron–Indigo–Ivory (§15.1). Single committed theme; no alternatives in v3.
-**Current milestone**: M8.1 closed. Merged to main as c8962fd on 2026-06-11; tag: m8.1-close. M8.1 covered E-016 (legacy balance import), E-017 (withdraw approved leave), E-022 (admin balance/request edit), TD-036 (CL annual credit), TD-037 (notification enqueue silent no-op). The next milestone has not been selected yet; candidates listed in docs/milestones/.
+**Current milestone**: M9 in progress (branch: m9-announcements). Scope: Announcement Module per RFP §9.6 + §10.1 with corrections for CoE-side role codes and sys_admin-configurable composer roster/priority. Design decisions queued in docs/milestones/M9.md; Phase 1 will not begin until decisions are frozen.
+**Previous milestone**: M8.1 closed 2026-06-11, merged as c8962fd, tag m8.1-close.
 
 ## Authority files (binding, in priority order)
 
@@ -1572,9 +1573,9 @@ rx.vstack(
 Discovered at M8.1 Phase 9.2 on `/admin/leave/credit-policy`.
 
 ## Current milestone
-**M8.1 closed. Merged to main as c8962fd on 2026-06-11; tag: m8.1-close.**
+**M9 in progress (branch: m9-announcements). Scope: Announcement Module per RFP §9.6 + §10.1 with corrections for CoE-side role codes and sys_admin-configurable composer roster/priority. Design decisions queued in docs/milestones/M9.md; Phase 1 will not begin until decisions are frozen.**
 
-M8.1 closed. Merged to main as c8962fd on 2026-06-11; tag: m8.1-close. M8.1 covered E-016 (legacy balance import), E-017 (withdraw approved leave), E-022 (admin balance/request edit), TD-036 (CL annual credit), TD-037 (notification enqueue silent no-op). The next milestone has not been selected yet; candidates listed in docs/milestones/.
+**Previous milestone:** M8.1 closed 2026-06-11, merged as c8962fd, tag m8.1-close.
 
 This line is the source of truth for "where are we." Before opening a milestone-completing PR, Claude Code MUST:
 1. Grep this file for "Current milestone" and update both occurrences (the top status line and this section).
