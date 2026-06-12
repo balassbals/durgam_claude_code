@@ -289,3 +289,14 @@ app.add_page(admin_leave_balance_edit, route="/admin/leave/balance-edit",
              on_load=LeaveBalanceAdminState.load_admin_balances)
 app.add_page(admin_leave_request_edit, route="/admin/leave/request-edit",
              on_load=LeaveRequestAdminState.load_admin_requests)
+
+# ── M9 Announcement config pages ──────────────────────────────────────────────
+from durgam.pages.admin.config.announcement_composer import admin_config_announcement_composer
+from durgam.pages.admin.config.announcement_categories import admin_config_announcement_categories
+from durgam.states.config_announcement_composer import AnnouncementComposerConfigState
+from durgam.states.config_announcement_category import AnnouncementCategoryConfigState
+
+app.add_page(admin_config_announcement_composer, route="/admin/config/announcement-composer",
+             on_load=AnnouncementComposerConfigState.load_composer_configs)
+app.add_page(admin_config_announcement_categories, route="/admin/config/announcement-categories",
+             on_load=AnnouncementCategoryConfigState.load_categories)
