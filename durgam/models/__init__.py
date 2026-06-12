@@ -1,3 +1,9 @@
+from .announcement import (
+    Announcement,
+    AnnouncementCategory,
+    AnnouncementComposerConfig,
+    AudienceGroup,
+)
 from .auth import PasswordResetToken, UserSession
 from .base import TimestampedSoftDelete
 from .campus import Campus
@@ -123,6 +129,11 @@ __all__ = [
     "UniversityMission",
     "DepartmentVisionMission",
     "DepartmentMission",
+    # M9 Announcements
+    "Announcement",
+    "AnnouncementCategory",
+    "AnnouncementComposerConfig",
+    "AudienceGroup",
     # M8 Leave
     "LeaveBalance",
     "LeaveRequest",
