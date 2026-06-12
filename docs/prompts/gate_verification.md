@@ -484,11 +484,13 @@ Running bare `pytest` (no path argument) triggers alphabetical discovery:
 `e2e/ → integration/ → property/ → unit/`. The `seeded_db_engine` session fixture
 is initialized when integration tests run, populating `durgam_test` with seed data.
 Unit tests that run after (e.g., `test_leave_sanction_rule.py`) assert a clean DB and
-fail on the pre-existing seed rows. Running `pytest tests/unit/ tests/integration/`
+fail on the pre-existing seed rows. Running `pytest tests/ --ignore=tests/e2e/`
 avoids the cross-contamination. See TD-034.
 
-**Lesson**: always invoke as `uv run pytest tests/unit/ tests/integration/ -q --no-cov`
+**Lesson**: always invoke as `uv run pytest tests/ --ignore=tests/e2e/ -q --no-cov`
 for the gate-passing run. Never rely on bare `pytest` output as gate evidence.
+
+**Coverage**: this command runs unit, property, and integration tests. As of M9 Phase 2.1, 22 pre-existing unit test failures are documented in TD-044 (see `docs/tech_debt.md`). They are known and tracked — they do not block the gate, but the failure count must not increase. Compare each run's failure list against TD-044's enumeration; any new failure is a regression.
 
 ### 2. Detached-HEAD risk on fresh-clone gate ritual
 
