@@ -740,6 +740,40 @@ the direct and table-based pathways.
 
 ---
 
+### TD-043 — AudienceGroup program_degree_types filter is a non-functional stub
+
+**Surfaced**: M9 Phase 2 (resolver implementation).
+**Severity**: Medium — three frozen audience groups (STUDENT_UG, STUDENT_PG, STUDENT_PHD per M9 Q18) will not resolve to any users on launch.
+
+**Root cause**: `AudienceResolver._evaluate_filter` in `durgam/services/audience_resolver.py` reads the `program_degree_types` key from `filter_json` but cannot execute it because STUDENT users in `scripts/seed.py` (and in the production data model) are not linked to a `Program` via `UserRole.scope_type='program'`. The link does not exist anywhere in the schema today.
+
+**Test** capturing the stub: `tests/integration/test_audience_resolver.py::test_program_degree_types_returns_false_forward_concern`.
+
+**Fix paths** (pick one in a future milestone):
+(a) Extend STUDENT user seed + admission flows to populate `UserRole(role_id=<STUDENT>, scope_type='program', scope_id=<program_id>)` and update `_evaluate_filter` to query by it.
+(b) Introduce a dedicated `StudentEnrollment(user_id, program_id, batch_year, ...)` table and route `program_degree_types` through it. This also unlocks classwise/batchwise targeting (M13 forward concern in M9 out-of-scope).
+
+**Recommendation**: bundle with M13 (Student records) which has the same data-model dependency.
+
+---
+
+### TD-044 — 22 latent unit test failures in tests/unit/ pre-dating M9
+
+**Surfaced**: M9 Phase 2 (first time `pytest tests/` was run during M9 — prior gate rituals scoped to `tests/integration/` only).
+**Severity**: Medium — non-functional code paths, but masks any new unit-level regressions in those areas.
+
+**Failing tests** (verified to also fail at Phase 1 SHA e20ccc1, so pre-existing):
+- `tests/unit/test_audit_label_resolver.py` — 8 tests (TestAcademicYearResolver, TestCampusResolver, TestCentreResolver, TestCourseResolver, TestDepartmentResolver, TestLetterheadAssetResolver, TestRoleEmailResolver, TestSchoolResolver, each ::test_label)
+- `tests/unit/test_credit_annual_cl.py` — 6 tests
+- `tests/unit/test_leave_balance_import.py::test_resolve_active_ay_scenarios` — 1 test
+- `tests/unit/test_leave_jobs.py::TestCreditPeriodicElHpl` — 3 tests
+- `tests/unit/test_leave_notification_resolution.py::TestResolutionChain` — 2 tests
+- `tests/unit/test_leave_sanction_rule.py` — 2 tests
+
+**Action**: Open as separate triage at next milestone close. Each cluster likely has a different root cause. The gate-ritual definition should be updated to include `pytest tests/` (broad) in addition to `pytest tests/integration/` so future drift is caught at the milestone where it occurs, not later.
+
+---
+
 ## Resolved
 
 ### TD-036 — CL annual credit at AY start not implemented (resolved in M8.1 Phase 2)
