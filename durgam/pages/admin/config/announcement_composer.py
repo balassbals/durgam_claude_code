@@ -126,9 +126,7 @@ def _inline_form() -> rx.Component:
                                 "none",
                                 AnnouncementComposerConfigState.form_scope_restriction,
                             ),
-                            on_change=lambda v: AnnouncementComposerConfigState.set_form_scope_restriction(
-                                "" if v == "none" else v
-                            ),
+                            on_change=AnnouncementComposerConfigState.set_form_scope_restriction,
                             width="100%",
                         ),
                         rx.text(

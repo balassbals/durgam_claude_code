@@ -75,7 +75,7 @@ class AnnouncementComposerConfigState(BaseState):
             self.form_priority_rank = 1
 
     def set_form_scope_restriction(self, v: str) -> None:
-        self.form_scope_restriction = v
+        self.form_scope_restriction = "" if v == "none" else v
 
     def set_form_enabled(self, v: bool) -> None:
         self.form_enabled = v
