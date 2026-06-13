@@ -486,3 +486,31 @@ class TestAnnouncementListForBrowse:
         ann_ids = {str(r.id) for r in rows}
         assert str(ann_live.id) in ann_ids, "Live announcement must be in received feed"
         assert str(ann_withdrawn.id) not in ann_ids, "Withdrawn must be excluded from received feed"
+
+
+# ---------------------------------------------------------------------------
+# Tests 13–14: list_composer_eligible_roles (Phase 6b addition)
+# ---------------------------------------------------------------------------
+
+class TestListComposerEligibleRoles:
+    def test_returns_eligible_role_codes_for_user(self, db_session) -> None:
+        """User with a role in an enabled composer config gets that role code back."""
+        role = _role(db_session, "TST_ELIGIBLE")
+        _composer_config(db_session, "TST_ELIGIBLE", priority_rank=10)
+        user = _user(db_session)
+        _assign_role(db_session, user.id, role.id)
+
+        svc = _svc(db_session)
+        codes = svc.list_composer_eligible_roles(user.id)
+        assert "TST_ELIGIBLE" in codes
+
+    def test_returns_empty_list_for_user_with_no_eligible_role(self, db_session) -> None:
+        """User whose roles are NOT in composer config gets an empty list."""
+        role = _role(db_session, "TST_NONCMPOSER")
+        user = _user(db_session)
+        _assign_role(db_session, user.id, role.id)
+        # No composer config row for TST_NONCMPOSER
+
+        svc = _svc(db_session)
+        codes = svc.list_composer_eligible_roles(user.id)
+        assert codes == []

@@ -306,3 +306,22 @@ from durgam.states.config_audience_group import AudienceGroupConfigState
 
 app.add_page(admin_config_audience_groups, route="/admin/config/audience-groups",
              on_load=AudienceGroupConfigState.load_audience_groups)
+
+# ── M9 Announcements user-facing page ─────────────────────────────────────────
+from durgam.pages.announcements import __init__ as _announcements_nav_register  # noqa: F401
+from durgam.pages.announcements.index import announcements_page
+from durgam.states.announcements import (
+    AnnouncementBrowseState,
+    AnnouncementComposerState,
+    AnnouncementDetailState,
+)
+
+app.add_page(
+    announcements_page,
+    route="/announcements",
+    on_load=[
+        AnnouncementBrowseState.load_announcements,
+        AnnouncementComposerState.clear_form,
+        AnnouncementDetailState.close_detail,
+    ],
+)

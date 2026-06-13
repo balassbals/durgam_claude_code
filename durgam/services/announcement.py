@@ -355,6 +355,32 @@ class AnnouncementService:
 
         return row
 
+    def list_composer_eligible_roles(self, user_id: UUID) -> list[str]:
+        """Return role codes the user can act as when composing announcements.
+
+        Returns role codes that:
+        - The user holds via UserRole rows (UserRole has no soft-delete)
+        - Appear in AnnouncementComposerConfig with enabled=True and is_deleted=False
+        Result is ordered by AnnouncementComposerConfig.priority_rank ASC, so the
+        highest-priority role appears first (sensible default selection in UI).
+        """
+        enabled_configs = self._config_repo.list_enabled_ordered()
+        if not enabled_configs:
+            return []
+        eligible_role_codes = [c.role_code for c in enabled_configs]
+
+        stmt = (
+            select(Role.code)
+            .join(UserRole, UserRole.role_id == Role.id)  # type: ignore[arg-type]
+            .where(
+                UserRole.user_id == user_id,
+                Role.code.in_(eligible_role_codes),  # type: ignore[arg-type]
+                Role.is_deleted == False,  # noqa: E712
+            )
+        )
+        held_codes = set(self._session.exec(stmt).all())
+        return [c.role_code for c in enabled_configs if c.role_code in held_codes]
+
     # ── Private helpers ───────────────────────────────────────────────────────
 
     def _check_composer_eligible(self, user_id: UUID) -> None:
