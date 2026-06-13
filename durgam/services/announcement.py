@@ -126,18 +126,7 @@ class AnnouncementService:
                 f"importance must be one of: {', '.join(sorted(_VALID_IMPORTANCE))}."
             )
 
-        # Category must exist and be active
-        category = self._category_repo.get_by_code(category_code)
-        if category is None or not category.is_active:
-            raise AnnouncementError(f"Unknown category: '{category_code}'.")
-
-        # All audience_group_codes must exist and be active
-        for ag_code in audience_group_codes:
-            ag = self._audience_repo.get_by_code(ag_code)
-            if ag is None or not ag.is_active:
-                raise AnnouncementError(
-                    f"Unknown or inactive audience group: '{ag_code}'."
-                )
+        self._validate_category_and_audience(category_code, audience_group_codes)
 
         # Composer eligibility: user must have ≥1 active UserRole whose
         # Role.code appears in announcement_composer_configs with enabled=True.
@@ -381,7 +370,95 @@ class AnnouncementService:
         held_codes = set(self._session.exec(stmt).all())
         return [c.role_code for c in enabled_configs if c.role_code in held_codes]
 
+    def create_auto_announcement(
+        self,
+        *,
+        composer_user_id: UUID,
+        composer_role_code: str,
+        category_code: str,
+        audience_group_codes: list[str],
+        title: str,
+        message_text: str,
+        source_approval_request_id: UUID,
+        actor_id: UUID,
+    ) -> Announcement:
+        """Create an auto-generated announcement from an approval workflow.
+
+        Differs from create_announcement:
+        - SKIPS composer-eligibility check (the approver may not be a composer-roster role)
+        - Sets source_type="auto" + source_ref_id=source_approval_request_id
+        - Hardcodes importance="normal" per Q6 freeze
+        - scheduled_at = utcnow() (immediate)
+
+        Validation still applied: title/message non-empty, category_code +
+        audience_group_codes exist in their respective tables.
+        """
+        title = title.strip()
+        message_text = message_text.strip()
+        if not title:
+            raise AnnouncementError("Title is required.")
+        if len(title) > 255:
+            raise AnnouncementError("Title must be 255 characters or fewer.")
+        if not message_text:
+            raise AnnouncementError("Body text is required.")
+
+        self._validate_category_and_audience(category_code, audience_group_codes)
+
+        now = datetime.now(UTC)
+        announcement = Announcement(
+            title=title,
+            message_text=message_text,
+            scheduled_at=now,
+            importance="normal",
+            category_code=category_code,
+            audience_group_codes=audience_group_codes,
+            composer_user_id=composer_user_id,
+            composer_role_code=composer_role_code,
+            source_type="auto",
+            source_ref_id=source_approval_request_id,
+            important_until=None,
+            created_by=actor_id,
+            updated_by=actor_id,
+            created_at=now,
+            updated_at=now,
+        )
+        announcement = self._repo.create(announcement)
+
+        write_audit_row(
+            actor_user_id=actor_id,
+            actor_role_code=composer_role_code,
+            action="create",
+            resource="announcement",
+            resource_id=str(announcement.id),
+            request_id=None,
+            ip=None,
+            user_agent=None,
+            before=None,
+            after=audit_snapshot(announcement),
+            session=self._session,
+        )
+        log.info(
+            "auto_announcement_created",
+            announcement_id=str(announcement.id),
+            source_ref_id=str(source_approval_request_id),
+        )
+        return announcement
+
     # ── Private helpers ───────────────────────────────────────────────────────
+
+    def _validate_category_and_audience(
+        self, category_code: str, audience_group_codes: list[str]
+    ) -> None:
+        """Raise AnnouncementError if category or any audience group is unknown/inactive."""
+        category = self._category_repo.get_by_code(category_code)
+        if category is None or not category.is_active:
+            raise AnnouncementError(f"Unknown category: '{category_code}'.")
+        for ag_code in audience_group_codes:
+            ag = self._audience_repo.get_by_code(ag_code)
+            if ag is None or not ag.is_active:
+                raise AnnouncementError(
+                    f"Unknown or inactive audience group: '{ag_code}'."
+                )
 
     def _check_composer_eligible(self, user_id: UUID) -> None:
         """Raise AnnouncementComposerNotEligibleError if the user holds no

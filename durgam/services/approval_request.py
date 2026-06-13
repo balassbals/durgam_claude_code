@@ -868,6 +868,78 @@ class ApprovalRequestService:
         elif process.code == "LEAVE_APPROVAL":  # E9
             self._finalize_leave_from_approval(request, approver_user_id)
 
+        # ── Auto-announcement hook (M9 Phase 8a) ──
+        if process.auto_announce_on_approve:
+            try:
+                from durgam.services.announcement import AnnouncementService  # deferred — avoids circular init
+                from durgam.repositories.announcement import (
+                    AnnouncementCategoryRepository,
+                    AnnouncementComposerConfigRepository,
+                    AnnouncementRepository,
+                    AudienceGroupRepository,
+                )
+
+                target = process.auto_announce_target_json or {}
+                category_code = target.get("category_code", "NOTIFICATION")
+                audience_group_codes = target.get("audience_group_codes", ["ALL"])
+                title_template = target.get(
+                    "title_template", "Approved: {process_title}"
+                )
+                message_template = target.get(
+                    "message_template",
+                    "Request {request_id} ({process_title}) has been approved.",
+                )
+
+                approver = self._session.get(User, approver_user_id)
+                approver_username = approver.username if approver else str(approver_user_id)
+
+                ctx = {
+                    "process_code": process.code,
+                    "process_title": process.title,
+                    "request_id": str(request.id),
+                    "approver_username": approver_username,
+                }
+
+                try:
+                    title = title_template.format(**ctx)
+                except (KeyError, IndexError):
+                    title = title_template
+                try:
+                    message_text = message_template.format(**ctx)
+                except (KeyError, IndexError):
+                    message_text = message_template
+
+                ann_svc = AnnouncementService(
+                    repo=AnnouncementRepository(self._session),
+                    config_repo=AnnouncementComposerConfigRepository(self._session),
+                    category_repo=AnnouncementCategoryRepository(self._session),
+                    audience_repo=AudienceGroupRepository(self._session),
+                    session=self._session,
+                )
+                ann_svc.create_auto_announcement(
+                    composer_user_id=approver_user_id,
+                    composer_role_code="SYSTEM",
+                    category_code=category_code,
+                    audience_group_codes=audience_group_codes,
+                    title=title,
+                    message_text=message_text,
+                    source_approval_request_id=request.id,
+                    actor_id=approver_user_id,
+                )
+                log.info(
+                    "approval_request.auto_announce.created",
+                    request_id=str(request.id),
+                    process_code=process.code,
+                )
+            except Exception as e:
+                # Auto-announcement must NEVER fail the approval. Log and continue.
+                log.warning(
+                    "approval_request.auto_announce.failed",
+                    request_id=str(request.id),
+                    process_code=process.code,
+                    error=str(e),
+                )
+
     def _run_post_rejection(
         self,
         request: ApprovalRequest,

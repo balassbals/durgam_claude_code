@@ -514,3 +514,63 @@ class TestListComposerEligibleRoles:
         svc = _svc(db_session)
         codes = svc.list_composer_eligible_roles(user.id)
         assert codes == []
+
+
+# ---------------------------------------------------------------------------
+# Tests 15–16: create_auto_announcement (Phase 8a addition)
+# ---------------------------------------------------------------------------
+
+class TestCreateAutoAnnouncement:
+    def test_create_auto_announcement_succeeds_without_composer_eligibility(
+        self, db_session
+    ) -> None:
+        """create_auto_announcement skips composer-eligibility check.
+
+        A user with no entry in announcement_composer_configs can still trigger
+        an auto-announcement (e.g., an approver who isn't a configured composer).
+        """
+        _category(db_session, "NOTIFICATION")
+        _audience_group(db_session, "AU_ALL", filter_json={})
+
+        non_composer_user = _user(db_session)  # no composer config row for their role
+        source_ref = uuid4()
+
+        svc = _svc(db_session)
+        ann = svc.create_auto_announcement(
+            composer_user_id=non_composer_user.id,
+            composer_role_code="SYSTEM",
+            category_code="NOTIFICATION",
+            audience_group_codes=["AU_ALL"],
+            title="Auto Announcement Test",
+            message_text="This was auto-created by approval.",
+            source_approval_request_id=source_ref,
+            actor_id=non_composer_user.id,
+        )
+        assert ann.id is not None
+        assert ann.source_type == "auto"
+        assert ann.importance == "normal"
+
+    def test_create_auto_announcement_sets_source_ref_id(self, db_session) -> None:
+        """source_ref_id on the created Announcement equals the provided UUID.
+
+        Note: the model field is source_ref_id; the service parameter is
+        source_approval_request_id (Phase 8a deviation — declared in report).
+        """
+        _category(db_session, "NOTIFICATION")
+        _audience_group(db_session, "AU_ALL_B", filter_json={})
+
+        user = _user(db_session)
+        source_ref = uuid4()
+
+        svc = _svc(db_session)
+        ann = svc.create_auto_announcement(
+            composer_user_id=user.id,
+            composer_role_code="SYSTEM",
+            category_code="NOTIFICATION",
+            audience_group_codes=["AU_ALL_B"],
+            title="Source Ref Test",
+            message_text="Testing source_ref_id is stored on the model.",
+            source_approval_request_id=source_ref,
+            actor_id=user.id,
+        )
+        assert ann.source_ref_id == source_ref

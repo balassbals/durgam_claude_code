@@ -849,3 +849,25 @@ role's own `scope_type` is not used to filter it out.
 **Regression test:** `tests/integration/test_auth.py::TestCan::test_can_scope_wildcard_request_accepts_scoped_user_role`
 
 **Resolved:** commit on m9-announcements, Phase 7.1.
+
+---
+
+### TD-054 — Auto-announcement `composer_role_code = "SYSTEM"` literal
+
+**Phase:** M9 Phase 8a
+
+**Symptom:** Auto-announcements created via `_run_post_approval` use the literal
+string `"SYSTEM"` as `composer_role_code` because the approver's actual composer-
+eligible role is not readily determined from the approval context.
+
+**Root cause:** `ApprovalRequestService._run_post_approval` receives `approver_user_id`
+but does not look up which (if any) of that user's roles is in `announcement_composer_configs`.
+The `Announcement` model requires `composer_role_code` to be non-null.
+
+**Impact:** Auto-announcements display "SYSTEM" as their composer role in the browse
+list / detail panel. This is a minor cosmetic issue — the `source_type="auto"` field
+already distinguishes these from manual announcements.
+
+**Resolution path:** In a future milestone, query `AnnouncementComposerConfigRepository`
+for the approver's highest-priority enabled role at post-approval time, or extend the
+model with a nullable `composer_role_code` for `source_type="auto"` rows.
