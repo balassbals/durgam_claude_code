@@ -1,6 +1,7 @@
 import reflex as rx
 
 from durgam.pages.components import nav_shell, typed_flash
+from durgam.pages.shared.recent_announcements_widget import recent_announcements_widget
 from durgam.states.auth import AuthState
 from durgam.states.base import BaseState
 from durgam.theme import TOKENS
@@ -77,6 +78,7 @@ def index() -> rx.Component:
                     font_family="var(--font-sans)",
                 ),
                 rx.divider(border_color="var(--color-rule)", margin_y="1rem"),
+                recent_announcements_widget(),
                 rx.heading(
                     "M0 — Foundations · Theme Preview",
                     size="4",
