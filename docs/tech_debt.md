@@ -822,3 +822,30 @@ removal targeted for 3.14), OR a SQLModel release introduces an internal `utcnow
 as a no-op safety net. It is currently inert against SQLModel 0.0.38.
 
 
+
+
+### TD-052 (RESOLVED in M9 Phase 7.1)
+
+**Bug:** `can()` filtered out scoped `UserRole` rows even when the request passed
+`scope_type='*'` (meaning "accept a grant for any scope"). The outer condition:
+
+```python
+if user_role.scope_type is not None and scope_type is not None:
+    if user_role.scope_type != scope_type:
+        continue
+```
+
+evaluated `"*" != scope_type` as `True` for any scoped role (e.g. campus-scoped
+`DIRECTOR`), skipping the role before its permissions were examined.
+
+**Impact:** Every user holding a scoped composer role (DIRECTOR, HOD, DEAN,
+CENTRE_COORDINATOR) was denied `announcement:create:*` even though the permission
+grant's scope is `"*"` (wildcard). Scoped composers could not post announcements.
+
+**Fix:** Added `and scope_type != "*"` to the outer condition in
+`durgam/auth/permissions.py`. When the caller passes `scope_type='*'`, the user
+role's own `scope_type` is not used to filter it out.
+
+**Regression test:** `tests/integration/test_auth.py::TestCan::test_can_scope_wildcard_request_accepts_scoped_user_role`
+
+**Resolved:** commit on m9-announcements, Phase 7.1.

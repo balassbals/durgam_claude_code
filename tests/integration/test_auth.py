@@ -1,6 +1,6 @@
 """Integration tests for can() and write_audit_row() against real PostgreSQL."""
 
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlmodel import Session
 
@@ -29,6 +29,31 @@ def _grant(session: Session, user: User, action: str, resource: str, scope: str)
     session.flush()
     session.add(RolePermission(role_id=role.id, permission_id=perm.id))
     session.add(UserRole(user_id=user.id, role_id=role.id))
+    session.flush()
+
+
+def _grant_scoped(
+    session: Session,
+    user: User,
+    action: str,
+    resource: str,
+    perm_scope: str,
+    *,
+    role_scope_type: str,
+    role_scope_id: UUID | None = None,
+) -> None:
+    """Like _grant but binds the UserRole to a specific scope_type/scope_id."""
+    role = Role(code=f"R_{uuid4().hex[:8]}", name="R", level=1)
+    perm = Permission(resource=resource, action=action, scope=perm_scope)
+    session.add_all([role, perm])
+    session.flush()
+    session.add(RolePermission(role_id=role.id, permission_id=perm.id))
+    session.add(UserRole(
+        user_id=user.id,
+        role_id=role.id,
+        scope_type=role_scope_type,
+        scope_id=role_scope_id,
+    ))
     session.flush()
 
 
@@ -61,6 +86,32 @@ class TestCan:
         user = _make_user(db_session)
         _grant(db_session, user, "approve", "leave_request", "department")
         assert can(user.id, "approve", "leave_request", "campus", None, db_session) is False
+
+    def test_can_scope_wildcard_request_accepts_scoped_user_role(self, db_session) -> None:
+        """Regression: a campus-scoped UserRole with announcement:create:* grant
+        must satisfy a scope_type='*' request. Pre-fix, scoped roles were
+        filtered out before their permissions were examined.
+        """
+        campus_id = uuid4()  # no FK enforcement on UserRole.scope_id
+        user = _make_user(db_session)
+        _grant_scoped(
+            db_session, user, "create", "announcement", "*",
+            role_scope_type="campus",
+            role_scope_id=campus_id,
+        )
+
+        result = can(
+            user_id=user.id,
+            action="create",
+            resource="announcement",
+            scope_type="*",
+            scope_id=None,
+            session=db_session,
+        )
+        assert result is True, (
+            "Scoped UserRole must satisfy scope_type='*' request when the "
+            "permission's scope is '*' — pre-fix this returned False."
+        )
 
 
 class TestWriteAuditRow:
