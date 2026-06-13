@@ -871,3 +871,50 @@ already distinguishes these from manual announcements.
 **Resolution path:** In a future milestone, query `AnnouncementComposerConfigRepository`
 for the approver's highest-priority enabled role at post-approval time, or extend the
 model with a nullable `composer_role_code` for `source_type="auto"` rows.
+
+---
+
+### TD-056 — Announcement attachments: no download-permission restriction
+
+**Phase:** M9 Phase 8b
+
+**Symptom:** Files uploaded with `purpose="announcement_attachment"` are downloadable
+by any authenticated user with `file_asset:read` permission (the permissive default
+of `_PURPOSE_PERMISSION_MAP` in `durgam/api/download.py`). There is no audience-based
+gate — a user not in the announcement's target audience groups can still download the
+attachment if they know the `file_id`.
+
+**Root cause:** Adding `"announcement_attachment"` to `_PURPOSE_PERMISSION_MAP` would
+require the download endpoint to know the announcement's audience groups, which means
+a DB join at download time. The endpoint currently has no context about which
+announcement the file belongs to.
+
+**Impact:** Low for M9 launch since announcement content itself is not access-restricted
+(the browse list shows all visible announcements). If future milestones add confidential
+announcements with restricted audience, this gap must be addressed.
+
+**Resolution path:** Add an announcement-aware download guard: look up
+`FileAsset.metadata_json["announcement_id"]`, resolve the announcement's audience
+groups, and gate on the requesting user's identity. Alternatively, use signed time-limited
+URLs (MinIO presigned URLs) for attachments with a short TTL.
+
+---
+
+### TD-057 — Announcement attachments: single-file limit enforced only by UI
+
+**Phase:** M9 Phase 8b
+
+**Symptom:** The spec allows one attachment per announcement (M9 design decision).
+This limit is enforced only at the UI layer (one file upload zone, no multi-select).
+The service method `attach_file_to_announcement` has no guard against calling it
+multiple times on the same announcement.
+
+**Root cause:** Adding the count check in the service layer was deferred to keep
+Phase 8b focused. The UI currently presents only one upload slot.
+
+**Impact:** Low for M9 — the UI prevents accidental multi-attach. A direct API call
+or a future UI change could bypass the limit without the service guard.
+
+**Resolution path:** Add a `list_attachments(announcement_id)` count check in
+`attach_file_to_announcement`: if `len(existing) >= 1`, raise `AnnouncementError`.
+When the spec is relaxed to N attachments, replace `1` with the configured limit.

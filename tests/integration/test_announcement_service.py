@@ -1,9 +1,11 @@
-"""Integration tests for AnnouncementService (M9 Phase 6a).
+"""Integration tests for AnnouncementService (M9 Phase 6a / 8b).
 
-12 tests covering: create (eligible composer, non-composer rejection, unknown
+18 tests covering: create (eligible composer, non-composer rejection, unknown
 category, unknown audience group, normal importance, very_important importance),
 withdraw (by composer, by non-composer, already-withdrawn, auto-source),
-list_for_browse sent tab, list_for_browse received-excludes-withdrawn.
+list_for_browse sent tab, list_for_browse received-excludes-withdrawn,
+create_auto_announcement (no eligibility check, source_ref_id stored),
+attach_file (purpose + metadata correct), list_attachments (non-deleted only).
 
 All tests use db_session (empty DB with schema) — no seed data assumed.
 """
@@ -21,7 +23,7 @@ from durgam.models.announcement import (
     AnnouncementComposerConfig,
     AudienceGroup,
 )
-from durgam.models.crosscutting import AuditLog
+from durgam.models.crosscutting import AuditLog, FileAsset
 from durgam.models.identity import Role, User, UserRole
 from durgam.repositories.announcement import (
     AnnouncementCategoryRepository,
@@ -29,6 +31,7 @@ from durgam.repositories.announcement import (
     AnnouncementRepository,
     AudienceGroupRepository,
 )
+from durgam.repositories.file_asset import FileAssetRepository
 from durgam.services.announcement import (
     AnnouncementComposerNotEligibleError,
     AnnouncementError,
@@ -37,6 +40,8 @@ from durgam.services.announcement import (
     AnnouncementWithdrawalNotAllowedError,
 )
 from durgam.services.password import hash_password
+from durgam.services.upload import UploadService
+from durgam.storage.local import LocalFilesystemBackend
 
 
 # ---------------------------------------------------------------------------
@@ -574,3 +579,109 @@ class TestCreateAutoAnnouncement:
             actor_id=user.id,
         )
         assert ann.source_ref_id == source_ref
+
+
+# ---------------------------------------------------------------------------
+# Phase 8b: attach_file_to_announcement + list_attachments
+# ---------------------------------------------------------------------------
+
+def _upload_svc(session, tmp_path) -> UploadService:
+    return UploadService(
+        file_repo=FileAssetRepository(session),
+        backend=LocalFilesystemBackend(str(tmp_path)),
+        allowed_mimes=frozenset({"application/pdf", "image/png", "image/jpeg"}),
+        max_size_mb=2,
+    )
+
+
+def _svc_with_upload(session, tmp_path) -> AnnouncementService:
+    file_asset_repo = FileAssetRepository(session)
+    return AnnouncementService(
+        repo=AnnouncementRepository(session),
+        config_repo=AnnouncementComposerConfigRepository(session),
+        category_repo=AnnouncementCategoryRepository(session),
+        audience_repo=AudienceGroupRepository(session),
+        session=session,
+        upload_svc=_upload_svc(session, tmp_path),
+        file_asset_repo=file_asset_repo,
+    )
+
+
+def _make_announcement(session, composer_user_id) -> Announcement:
+    """Create a minimal announcement for use in attachment tests."""
+    _category(session, "NOTICE_ATT")
+    _audience_group(session, "AU_ATT", filter_json={})
+    svc = _svc(session)
+    ann = svc.create_auto_announcement(
+        composer_user_id=composer_user_id,
+        composer_role_code="SYSTEM",
+        category_code="NOTICE_ATT",
+        audience_group_codes=["AU_ATT"],
+        title="Attachment Test Announcement",
+        message_text="Body for attachment test.",
+        source_approval_request_id=None,
+        actor_id=composer_user_id,
+    )
+    return ann
+
+
+class TestAttachFileToAnnouncement:
+    def test_attach_file_creates_file_asset_with_correct_purpose_and_metadata(
+        self, db_session, tmp_path
+    ) -> None:
+        """attach_file_to_announcement creates a FileAsset with purpose='announcement_attachment'
+        and metadata_json containing the announcement_id."""
+        user = _user(db_session)
+        ann = _make_announcement(db_session, user.id)
+
+        svc = _svc_with_upload(db_session, tmp_path)
+        asset = svc.attach_file_to_announcement(
+            announcement_id=ann.id,
+            file_bytes=b"%PDF-1.4 fake content",
+            original_name="report.pdf",
+            mime_type="application/pdf",
+            actor_id=user.id,
+        )
+
+        assert asset.id is not None
+        assert asset.purpose == "announcement_attachment"
+        assert asset.metadata_json is not None
+        assert asset.metadata_json["announcement_id"] == str(ann.id)
+        assert asset.original_name == "report.pdf"
+
+    def test_list_attachments_returns_only_non_deleted(
+        self, db_session, tmp_path
+    ) -> None:
+        """list_attachments returns only non-deleted FileAssets linked to the announcement."""
+        user = _user(db_session)
+        ann = _make_announcement(db_session, user.id)
+
+        svc = _svc_with_upload(db_session, tmp_path)
+
+        # Attach two files
+        a1 = svc.attach_file_to_announcement(
+            announcement_id=ann.id,
+            file_bytes=b"file one content",
+            original_name="one.pdf",
+            mime_type="application/pdf",
+            actor_id=user.id,
+        )
+        a2 = svc.attach_file_to_announcement(
+            announcement_id=ann.id,
+            file_bytes=b"file two content",
+            original_name="two.pdf",
+            mime_type="application/pdf",
+            actor_id=user.id,
+        )
+
+        # Soft-delete the second asset directly
+        a2.is_deleted = True
+        db_session.add(a2)
+        db_session.flush()
+
+        attachments = svc.list_attachments(ann.id)
+        ids = [a.id for a in attachments]
+
+        assert a1.id in ids
+        assert a2.id not in ids
+        assert len(attachments) == 1

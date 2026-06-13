@@ -1,7 +1,8 @@
-"""Announcements page — browse, compose, and detail (M9 Phase 6b)."""
+"""Announcements page — browse, compose, and detail (M9 Phase 6b/8b)."""
 
 import reflex as rx
 
+from durgam.api import DOWNLOAD_PREFIX
 from durgam.pages.components import (
     config_toast,
     destructive_btn,
@@ -11,6 +12,7 @@ from durgam.pages.components import (
     primary_btn,
     secondary_btn,
 )
+from durgam.pages.shared.file_upload import file_upload_zone
 from durgam.states.announcements import (
     AnnouncementBrowseState,
     AnnouncementComposerState,
@@ -320,6 +322,32 @@ def _composer_modal() -> rx.Component:
                         width="100%",
                         gap="0.25rem",
                     ),
+                    # Attachment (optional)
+                    rx.vstack(
+                        rx.text("Attachment (optional)", font_size="0.85rem", font_weight="600"),
+                        file_upload_zone(
+                            on_drop=AnnouncementComposerState.stage_attachment_file,
+                            accept={
+                                "application/pdf": [".pdf"],
+                                "image/png": [".png"],
+                                "image/jpeg": [".jpg", ".jpeg"],
+                            },
+                            label="Drop a PDF or image, or click to browse (max 2 MB)",
+                        ),
+                        rx.cond(
+                            AnnouncementComposerState.staged_attachment_name != "",
+                            rx.text(
+                                "Selected: ",
+                                AnnouncementComposerState.staged_attachment_name,
+                                color="var(--color-accent)",
+                                font_size="0.875rem",
+                            ),
+                            rx.fragment(),
+                        ),
+                        align="start",
+                        width="100%",
+                        gap="0.25rem",
+                    ),
                     # Buttons
                     rx.hstack(
                         primary_btn("Post Announcement", type="submit"),
@@ -403,6 +431,38 @@ def _detail_panel() -> rx.Component:
                 AnnouncementDetailState.detail["message_text"],
                 font_size="0.95rem",
                 white_space="pre-wrap",
+            ),
+            # Attachments
+            rx.cond(
+                AnnouncementDetailState.attachments.length() > 0,  # type: ignore[attr-defined]
+                rx.vstack(
+                    rx.text(
+                        "Attachments",
+                        font_size="0.85rem",
+                        font_weight="600",
+                        color="var(--color-muted)",
+                    ),
+                    rx.foreach(
+                        AnnouncementDetailState.attachments,
+                        lambda att: rx.link(
+                            rx.hstack(
+                                rx.icon("paperclip", size=13),
+                                rx.text(att["original_name"], font_size="0.875rem"),
+                                gap="0.35rem",
+                                align="center",
+                            ),
+                            href=DOWNLOAD_PREFIX + att["file_id"],
+                            target="_blank",
+                            color="var(--color-primary)",
+                            text_decoration="none",
+                            _hover={"text_decoration": "underline"},
+                        ),
+                    ),
+                    align="start",
+                    gap="0.4rem",
+                    width="100%",
+                ),
+                rx.fragment(),
             ),
             # Withdraw button — only own, non-withdrawn announcements
             rx.cond(

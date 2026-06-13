@@ -30,6 +30,7 @@ from durgam.models.announcement import (
     AnnouncementComposerConfig,
     AudienceGroup,
 )
+from durgam.models.crosscutting import FileAsset
 from durgam.models.identity import Role, UserRole
 from durgam.repositories.announcement import (
     AnnouncementCategoryRepository,
@@ -37,6 +38,7 @@ from durgam.repositories.announcement import (
     AnnouncementRepository,
     AudienceGroupRepository,
 )
+from durgam.repositories.file_asset import FileAssetRepository
 from durgam.services.audience_resolver import AudienceResolver
 from durgam.services.announcement_priority import (
     compute_important_until,
@@ -81,6 +83,9 @@ class AnnouncementService:
         category_repo: AnnouncementCategoryRepository,
         audience_repo: AudienceGroupRepository,
         session: Session,
+        *,
+        upload_svc: Any | None = None,
+        file_asset_repo: FileAssetRepository | None = None,
     ) -> None:
         self._repo = repo
         self._config_repo = config_repo
@@ -88,6 +93,8 @@ class AnnouncementService:
         self._audience_repo = audience_repo
         self._session = session
         self._resolver = AudienceResolver()
+        self._upload_svc = upload_svc
+        self._file_asset_repo = file_asset_repo
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -369,6 +376,81 @@ class AnnouncementService:
         )
         held_codes = set(self._session.exec(stmt).all())
         return [c.role_code for c in enabled_configs if c.role_code in held_codes]
+
+    def attach_file_to_announcement(
+        self,
+        *,
+        announcement_id: UUID,
+        file_bytes: bytes,
+        original_name: str,
+        mime_type: str,
+        actor_id: UUID,
+    ) -> FileAsset:
+        """Persist an uploaded file as a FileAsset linked to the given announcement.
+
+        - Verifies announcement exists and is not withdrawn
+        - Verifies actor_id == composer_user_id (only composer can attach)
+        - Calls UploadService.upload() with purpose="announcement_attachment"
+        - Sets metadata_json={"announcement_id": str(announcement_id)}
+        - Emits audit row
+
+        Deviation: upload_svc and file_asset_repo must be provided at construction
+        time; raises AnnouncementError if either is missing.
+        """
+        if self._upload_svc is None:
+            raise AnnouncementError(
+                "AnnouncementService not configured with UploadService."
+            )
+        if self._file_asset_repo is None:
+            raise AnnouncementError(
+                "AnnouncementService not configured with FileAssetRepository."
+            )
+
+        ann = self._repo.get(announcement_id)
+        if ann is None:
+            raise AnnouncementNotFoundError(
+                f"Announcement {announcement_id} not found."
+            )
+        if ann.composer_user_id != actor_id:
+            raise AnnouncementError(
+                "Only the composer can attach files to their own announcement."
+            )
+
+        asset = self._upload_svc.upload(
+            file_bytes,
+            original_name,
+            mime_type,
+            actor_id,
+            purpose="announcement_attachment",
+        )
+        asset.metadata_json = {"announcement_id": str(announcement_id)}
+        asset = self._file_asset_repo.save(asset)
+
+        write_audit_row(
+            actor_user_id=actor_id,
+            actor_role_code=None,
+            action="attach",
+            resource="announcement",
+            resource_id=str(announcement_id),
+            request_id=None,
+            ip=None,
+            user_agent=None,
+            before=None,
+            after={"file_id": str(asset.id), "original_name": original_name},
+            session=self._session,
+        )
+        log.info(
+            "announcement_attachment_created",
+            announcement_id=str(announcement_id),
+            file_id=str(asset.id),
+        )
+        return asset
+
+    def list_attachments(self, announcement_id: UUID) -> list[FileAsset]:
+        """Return all non-deleted FileAssets linked to this announcement."""
+        if self._file_asset_repo is None:
+            return []
+        return self._file_asset_repo.list_by_announcement_id(announcement_id)
 
     def create_auto_announcement(
         self,

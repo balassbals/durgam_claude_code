@@ -172,6 +172,11 @@ class AnnouncementComposerState(BaseState):
     available_categories: list[dict[str, str]] = []
     available_audience_groups: list[dict[str, str]] = []
 
+    # Staged attachment (Phase 8b — counsellor pattern: bytes held in state, uploaded on save)
+    staged_attachment_bytes: bytes = b""
+    staged_attachment_name: str = ""
+    staged_attachment_mime: str = ""
+
     # ── Setters ─────────────────────────────────────────────────────────────
 
     def set_form_role_code(self, value: str) -> None:
@@ -220,6 +225,23 @@ class AnnouncementComposerState(BaseState):
         self.available_role_codes = []
         self.available_categories = []
         self.available_audience_groups = []
+        self.staged_attachment_bytes = b""
+        self.staged_attachment_name = ""
+        self.staged_attachment_mime = ""
+
+    async def stage_attachment_file(self, files: list[rx.UploadFile]) -> None:
+        """Stage uploaded file bytes in state for later upload on form save.
+
+        Uses the M5a counsellor pattern: on_drop stores bytes in backend state;
+        save() uploads them within the same transaction as announcement creation.
+        No upload_id staged mode used — on_drop is immediate.
+        """
+        if not files:
+            return
+        f = files[0]
+        self.staged_attachment_bytes = await f.read()
+        self.staged_attachment_name = f.filename or "attachment"
+        self.staged_attachment_mime = f.content_type or "application/octet-stream"
 
     async def open_composer(self) -> None:
         redirect = _resolve_or_redirect(self)
@@ -322,13 +344,30 @@ class AnnouncementComposerState(BaseState):
 
         user_id = UUID(self.current_user_id)
         try:
+            from durgam.repositories.file_asset import FileAssetRepository
+            from durgam.services.upload import UploadService
+            from durgam.storage import get_storage_backend
+
             with open_session() as session:
+                file_asset_repo = FileAssetRepository(session)
+                upload_svc = UploadService(
+                    file_repo=file_asset_repo,
+                    backend=get_storage_backend(),
+                    allowed_mimes=frozenset({
+                        "application/pdf",
+                        "image/png",
+                        "image/jpeg",
+                    }),
+                    max_size_mb=2,
+                )
                 svc = AnnouncementService(
                     repo=AnnouncementRepository(session),
                     config_repo=AnnouncementComposerConfigRepository(session),
                     category_repo=AnnouncementCategoryRepository(session),
                     audience_repo=AudienceGroupRepository(session),
                     session=session,
+                    upload_svc=upload_svc,
+                    file_asset_repo=file_asset_repo,
                 )
                 announcement = svc.create_announcement(
                     composer_user_id=user_id,
@@ -341,6 +380,14 @@ class AnnouncementComposerState(BaseState):
                     scheduled_at=scheduled_at,
                     actor_id=user_id,
                 )
+                if self.staged_attachment_bytes:
+                    svc.attach_file_to_announcement(
+                        announcement_id=announcement.id,
+                        file_bytes=self.staged_attachment_bytes,
+                        original_name=self.staged_attachment_name,
+                        mime_type=self.staged_attachment_mime,
+                        actor_id=user_id,
+                    )
                 ann_id = str(announcement.id)
                 session.commit()
             self._set_audit(resource_id=ann_id, after={"title": title, "category_code": category_code})
@@ -350,6 +397,9 @@ class AnnouncementComposerState(BaseState):
             return
 
         self.show_composer = False
+        self.staged_attachment_bytes = b""
+        self.staged_attachment_name = ""
+        self.staged_attachment_mime = ""
         return rx.redirect("/announcements")
 
 
@@ -359,6 +409,7 @@ class AnnouncementComposerState(BaseState):
 class AnnouncementDetailState(BaseState):
     show_detail: bool = False
     detail: dict[str, Any] = {}
+    attachments: list[dict[str, str]] = []
     flash: str = ""
     flash_type: str = "info"
 
@@ -369,6 +420,7 @@ class AnnouncementDetailState(BaseState):
     def close_detail(self) -> None:
         self.show_detail = False
         self.detail = {}
+        self.attachments = []
         self.flash = ""
         self.flash_type = "info"
 
@@ -390,13 +442,17 @@ class AnnouncementDetailState(BaseState):
 
         user_id = UUID(self.current_user_id)
         try:
+            from durgam.repositories.file_asset import FileAssetRepository
+
             with open_session() as session:
+                file_asset_repo = FileAssetRepository(session)
                 svc = AnnouncementService(
                     repo=AnnouncementRepository(session),
                     config_repo=AnnouncementComposerConfigRepository(session),
                     category_repo=AnnouncementCategoryRepository(session),
                     audience_repo=AudienceGroupRepository(session),
                     session=session,
+                    file_asset_repo=file_asset_repo,
                 )
                 ann = svc.get_by_id(
                     announcement_id=UUID(announcement_id),
@@ -415,12 +471,23 @@ class AnnouncementDetailState(BaseState):
                     "audience_group_codes": ann.audience_group_codes,
                     "is_own": str(ann.composer_user_id) == self.current_user_id,
                 }
+                attachment_rows = svc.list_attachments(ann.id)
+                attachments = [
+                    {
+                        "file_id": str(a.id),
+                        "original_name": a.original_name or "Attachment",
+                        "mime_type": a.mime_type or "",
+                        "size_bytes": str(a.size_bytes or 0),
+                    }
+                    for a in attachment_rows
+                ]
         except AnnouncementNotFoundError:
             self.flash = "Announcement not found or not visible to you."
             self.flash_type = "error"
             return
 
         self.detail = detail
+        self.attachments = attachments
         self.flash = ""
         self.flash_type = "info"
         self.show_detail = True
