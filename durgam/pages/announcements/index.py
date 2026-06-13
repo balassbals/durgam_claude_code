@@ -79,7 +79,7 @@ def _row_card(row: rx.Var) -> rx.Component:
             ),
             rx.hstack(
                 rx.text(
-                    rx.icon("user-circle", size=13),
+                    rx.icon("user", size=13),
                     " ",
                     row["composer_role_code"],
                     font_size="0.78rem",
