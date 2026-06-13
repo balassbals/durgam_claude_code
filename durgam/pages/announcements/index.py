@@ -452,7 +452,6 @@ def _detail_panel() -> rx.Component:
                                 align="center",
                             ),
                             href=DOWNLOAD_PREFIX + att["file_id"],
-                            target="_blank",
                             color="var(--color-primary)",
                             text_decoration="none",
                             _hover={"text_decoration": "underline"},

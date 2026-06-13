@@ -492,7 +492,7 @@ class AnnouncementDetailState(BaseState):
         self.flash_type = "info"
         self.show_detail = True
 
-    @require_role(action="write", resource="announcement", scope="*")
+    @require_role(action="soft_delete", resource="announcement", scope="own")
     @audit_action(action="withdraw", resource="announcement")
     async def withdraw(self, announcement_id: str) -> None:
         from durgam.repositories.announcement import (
