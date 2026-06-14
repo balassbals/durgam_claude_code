@@ -824,7 +824,7 @@ as a no-op safety net. It is currently inert against SQLModel 0.0.38.
 
 
 
-### TD-052 (RESOLVED in M9 Phase 7.1)
+### TD-052 (EXTENDED in M9 Phase 8b.2 — originally RESOLVED in Phase 7.1)
 
 **Bug:** `can()` filtered out scoped `UserRole` rows even when the request passed
 `scope_type='*'` (meaning "accept a grant for any scope"). The outer condition:
@@ -838,17 +838,36 @@ if user_role.scope_type is not None and scope_type is not None:
 evaluated `"*" != scope_type` as `True` for any scoped role (e.g. campus-scoped
 `DIRECTOR`), skipping the role before its permissions were examined.
 
-**Impact:** Every user holding a scoped composer role (DIRECTOR, HOD, DEAN,
+**Impact (Phase 7.1):** Every user holding a scoped composer role (DIRECTOR, HOD, DEAN,
 CENTRE_COORDINATOR) was denied `announcement:create:*` even though the permission
 grant's scope is `"*"` (wildcard). Scoped composers could not post announcements.
 
-**Fix:** Added `and scope_type != "*"` to the outer condition in
-`durgam/auth/permissions.py`. When the caller passes `scope_type='*'`, the user
-role's own `scope_type` is not used to filter it out.
+**Phase 7.1 fix:** Added `and scope_type != "*"` to the outer condition. When the
+caller passes `scope_type='*'`, the user role's own `scope_type` is not used to filter
+it out.
 
-**Regression test:** `tests/integration/test_auth.py::TestCan::test_can_scope_wildcard_request_accepts_scoped_user_role`
+**Phase 8b.2 extension:** The same problem applies to `scope_type='own'`
+(per-instance ownership semantics, used by `announcement:soft_delete:own`). A
+campus-scoped DIRECTOR trying to withdraw their own announcement was denied because
+`"own" != "campus"` filtered out their `UserRole` before their permission was examined.
+`scope_type='own'` is not a structural role-scope — it signals that the handler body
+enforces ownership at runtime. The fix extends the bypass to include `"own"`:
 
-**Resolved:** commit on m9-announcements, Phase 7.1.
+```python
+if ... and scope_type not in ("*", "own"):
+```
+
+**Regression tests:**
+- `tests/integration/test_auth.py::TestCan::test_can_scope_wildcard_request_accepts_scoped_user_role` (Phase 7.1)
+- `tests/integration/test_auth.py::TestCan::test_can_scope_own_request_accepts_scoped_user_role` (Phase 8b.2)
+
+**Meta-test gap:** `test_announcement_decorator_actions.py` verified that all decorator
+`(action, resource)` pairs have seeded Permission rows but didn't catch the `'own'`
+runtime failure — data presence ≠ auth resolution success for scoped users. A tighter
+meta-test would invoke `can()` with a synthetic scoped user for each decorator. Filed
+as TD-062 for a future tightening pass.
+
+**Resolved:** Phase 7.1 + Phase 8b.2, both on m9-announcements.
 
 ---
 
@@ -918,3 +937,27 @@ or a future UI change could bypass the limit without the service guard.
 **Resolution path:** Add a `list_attachments(announcement_id)` count check in
 `attach_file_to_announcement`: if `len(existing) >= 1`, raise `AnnouncementError`.
 When the spec is relaxed to N attachments, replace `1` with the configured limit.
+
+---
+
+### TD-062 — Decorator meta-test: data presence ≠ auth resolution for scoped users
+
+**Phase:** M9 Phase 8b.2
+
+**Symptom:** `test_announcement_decorator_actions.py` verified that every `@require_role`
+decorator's `(resource, action)` pair has a seeded `Permission` row. This did NOT catch
+the Phase 8b.2 bug where a campus-scoped DIRECTOR was denied `announcement:soft_delete:own`
+because `can()` filtered out their `UserRole` before checking permissions.
+
+**Root cause:** Data presence (Permission row exists) does not imply resolution success
+(a scoped user can actually pass `can()` for that permission). The meta-test needs a
+separate layer: for each decorator's `(action, resource, scope)`, invoke `can()` with a
+synthetic user holding the canonical scoped role and assert it returns `True`.
+
+**Impact:** Latent permission bugs on scoped roles slip through gate verification.
+Found and fixed by Phase 8b.2, but only by manual testing.
+
+**Resolution path:** Add a second assertion level to `test_announcement_decorator_actions.py`
+or a companion test: for each decorator triple `(action, resource, scope)`, create a
+synthetic scoped UserRole, call `can(scope_type=scope)`, and assert `True`. This covers
+the `scope_type not in ("*", "own")` bypass semantics as a live runtime check.

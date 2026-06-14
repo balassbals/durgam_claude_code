@@ -113,6 +113,34 @@ class TestCan:
             "permission's scope is '*' — pre-fix this returned False."
         )
 
+    def test_can_scope_own_request_accepts_scoped_user_role(self, db_session) -> None:
+        """Regression: a campus-scoped UserRole with announcement:soft_delete:own
+        grant must satisfy a scope_type='own' request. Phase 7.1 handled scope='*';
+        Phase 8b.2 extends the same fix to scope='own' since neither is a structural
+        role-scope (both are operation-level semantics: '*'=global, 'own'=per-instance
+        ownership checked by handler body).
+        """
+        campus_id = uuid4()  # no FK enforcement on UserRole.scope_id
+        user = _make_user(db_session)
+        _grant_scoped(
+            db_session, user, "soft_delete", "announcement", "own",
+            role_scope_type="campus",
+            role_scope_id=campus_id,
+        )
+
+        result = can(
+            user_id=user.id,
+            action="soft_delete",
+            resource="announcement",
+            scope_type="own",
+            scope_id=None,
+            session=db_session,
+        )
+        assert result is True, (
+            "Campus-scoped UserRole must satisfy scope_type='own' request — "
+            "'own' is not a structural role-scope; pre-fix this returned False."
+        )
+
 
 class TestWriteAuditRow:
     def test_creates_row_with_diff(self, db_session):

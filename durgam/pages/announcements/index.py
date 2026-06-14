@@ -451,7 +451,7 @@ def _detail_panel() -> rx.Component:
                                 gap="0.35rem",
                                 align="center",
                             ),
-                            href=DOWNLOAD_PREFIX + att["file_id"],
+                            href=DOWNLOAD_PREFIX + "/api/files/" + att["file_id"],
                             color="var(--color-primary)",
                             text_decoration="none",
                             _hover={"text_decoration": "underline"},

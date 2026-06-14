@@ -40,6 +40,11 @@ def can(
        own scope_type is NOT used to filter it out — any scoped role can satisfy a
        wildcard-scope permission grant. Scope_type='*' means "I'll accept a grant for
        any scope"; it does not mean the permission itself must be scoped to '*'.
+    5. When scope_type='own' is passed (per-instance ownership, e.g. soft_delete:own),
+       a UserRole's scope_type is ALSO not used to filter it out — 'own' is an
+       operation-level semantic ("only the owner may do this"), not a structural
+       role-scope like 'department' or 'campus'. The handler body enforces the
+       ownership check; can() only verifies the permission grant exists.
 
     any_scope (keyword-only, default False):
         When True, a UserRole scoped to a specific scope_id is NOT skipped even when
@@ -59,7 +64,7 @@ def can(
     user_role_rows = session.exec(select(UserRole).where(UserRole.user_id == user_id)).all()
 
     for user_role in user_role_rows:
-        if user_role.scope_type is not None and scope_type is not None and scope_type != "*":
+        if user_role.scope_type is not None and scope_type is not None and scope_type not in ("*", "own"):
             if user_role.scope_type != scope_type:
                 continue
             # A role with a specific scope_id only grants access when the check
