@@ -1145,3 +1145,36 @@ The underlying E-022 feature (admin manual edit of leave records) may be partial
 **Why not stored:** The `Announcement` model already stores `composer_role_code`. Storing `composer_scope_type` + `composer_scope_id` + `composer_scope_name` at create time would require a migration and freeze the label at composition time. Deferred to a future revision when there is evidence this causes confusion (transfers within a posting's visible lifetime are rare).
 
 **Resolution path:** Add `composer_scope_type: str | None`, `composer_scope_id: UUID | None`, `composer_scope_label: str | None` columns to `announcements` table. Populate from `_resolve_composer_scope_label` at create time. Read stored label directly in state — no DB join needed at display time.
+
+---
+
+### TD-067 — `_resolve_composer_scope_label` underscore convention vs cross-module import
+
+**Phase:** M9 Phase 10.2. **Status:** Open.
+
+**Location:** `durgam/services/announcement.py` exposes `_resolve_composer_scope_label` as a module-private function (leading underscore), but it is imported across module boundaries from `durgam/states/announcements.py` and `durgam/pages/shared/recent_announcements_widget.py`.
+
+**Why it exists:** Phase 10.2 chose to resolve scope labels at the state-boundary rather than service-boundary to avoid changing `list_composer_eligible_roles`'s return type (which would have broken 4 existing tests). The resolution helper stayed in the service module but is called from state and widget.
+
+**Resolution path:** Either (1) drop the underscore to signal public surface, or (2) move the helper to a new module like `durgam/services/_label.py` to preserve underscore-private semantics. Trivial follow-up; one-line code change.
+
+---
+
+### TD-068 — Seed user count non-idempotent across runs
+
+**Phase:** M9 Phase 10 Step 8 (fresh-clone verification). **Status:** Open.
+
+**Location:** `scripts/seed.py`.
+
+**Observation:** During fresh-clone gate verification, two identical procedures (full `docker compose down -v` + `alembic upgrade head` + same seed command) produced different user counts: clone produced 26 users, main repo produced 44 users. All M9-specific entity counts matched exactly (composer configs 19, categories 9, audience groups 27).
+
+**Hypothesis:** Some user-creation block in seed.py is non-idempotent (missing "if not exists" check), or seed was inadvertently invoked twice. The 18-row delta is plausibly explained by a 9-user batch added per extra run.
+
+**Impact:** Low. Does not affect business logic; only complicates deterministic test-data setup for fresh-clone gate verification.
+
+**Resolution path:**
+1. Audit `scripts/seed.py` for user-creation paths lacking dedup guards.
+2. Add upsert-by-username pattern OR assert single-run-only contract and document in runbook.
+3. Add regression test that seeds twice on fresh DB and asserts user count unchanged after second run.
+
+**Priority:** Address at the start of M10 (Faculty Module) since faculty seed is likely a touchpoint.

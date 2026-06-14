@@ -4,8 +4,8 @@
 **Spec**: `docs/durgam_rfp_v3.pdf` — all section references (§8, §12, etc.) point to this file.
 **Python**: 3.13 (pinned via `.python-version`).
 **Theme**: Puttaparthi Saffron–Indigo–Ivory (§15.1). Single committed theme; no alternatives in v3.
-**Current milestone**: M9 in progress (branch: m9-announcements). Scope: Announcement Module per RFP §9.3 + §9.6 + §10.1, with composer roster, categories, and audience groups via three-tier governance (SYS_ADMIN / REGISTRAR-tier). All 18 design decisions frozen (2026-06-12) in docs/milestones/M9.md. Phase 1 ready to begin.
-**Previous milestone**: M8.1 closed 2026-06-11, merged as c8962fd, tag m8.1-close.
+**Current milestone**: M10 (Faculty Module) — next. M9 closed 2026-06-14, merged as 2d819c4, tag m9-close.
+**Previous milestone**: M9 closed 2026-06-14, merged as 2d819c4, tag m9-close.
 
 ## Authority files (binding, in priority order)
 
@@ -1630,9 +1630,9 @@ the code and seed content are syntactically correct. This is the third occurrenc
 bug class: M3 (course:delete:*), M8.1 Phase 8 (leave_request_admin:write:*), and M9 Phase 5 (announcement permissions).
 
 ## Current milestone
-**M9 in progress (branch: m9-announcements). Scope: Announcement Module per RFP §9.3 + §9.6 + §10.1, with composer roster, categories, and audience groups via three-tier governance (SYS_ADMIN / REGISTRAR-tier). All 18 design decisions frozen (2026-06-12) in docs/milestones/M9.md. Phase 1 ready to begin.**
+**M10 (Faculty Module) — next. M9 (Announcement Module) closed 2026-06-14, merged as 2d819c4, tag m9-close on afc1f4b.**
 
-**Previous milestone:** M8.1 closed 2026-06-11, merged as c8962fd, tag m8.1-close.
+**Previous milestone:** M9 closed 2026-06-14, merged as 2d819c4, tag m9-close on afc1f4b.
 
 This line is the source of truth for "where are we." Before opening a milestone-completing PR, Claude Code MUST:
 1. Grep this file for "Current milestone" and update both occurrences (the top status line and this section).
