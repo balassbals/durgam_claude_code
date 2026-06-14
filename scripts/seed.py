@@ -143,8 +143,9 @@ def seed(session: Session) -> dict[str, int]:
         {"code": "DIRECTOR",             "name": "Director",                "level": 75},
         {"code": "DEPUTY_DIRECTOR",      "name": "Deputy Director",         "level": 72},
         {"code": "DIRECTOR_OFFICE",      "name": "Director Office",         "level": 69},
-        # IQAC (M4)
+        # IQAC (M4 + M10)
         {"code": "IQAC_COORDINATOR",     "name": "IQAC Coordinator",        "level": 71},
+        {"code": "IQAC_OFFICE",          "name": "IQAC Office",             "level": 64},
         # Dean (school-scoped via UserRole.scope_type='school')
         {"code": "DEAN",                 "name": "Dean",                    "level": 70},
         {"code": "DEAN_STUDENT_WELFARE", "name": "Dean of Student Welfare",                          "level": 70},

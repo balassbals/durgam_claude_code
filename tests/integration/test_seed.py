@@ -24,8 +24,8 @@ class TestSeed:
         db_session.commit()
 
         # Assert TOTAL row counts after seed (stable regardless of pre-existing data).
-        # M8 Phase 4: 32 roles (30 prior + PROFESSOR, ASSOC_PROFESSOR).
-        assert _count(db_session, Role) == 32, "Expected 32 seeded roles at M8 Phase 4"
+        # M10 Phase 1A: 33 roles (32 prior + IQAC_OFFICE).
+        assert _count(db_session, Role) == 33, "Expected 33 seeded roles at M10 Phase 1A"
         # M9 Phase 4: 132 triples (+10: announcement module permissions).
         assert _count(db_session, Permission) == 132, "Expected 132 seeded permission triples at M9 Phase 4"
         assert _count(db_session, User) >= 25, "Expected at least 25 seeded users"

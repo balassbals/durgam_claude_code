@@ -169,3 +169,64 @@ class TestMigrations:
             assert result.returncode == 0
         finally:
             engine.dispose()
+
+    def test_m10_phase1a_faculty_tables(self):
+        """M10 Phase 1A: verify 6 Faculty tables created by migration f74557aa7d0d.
+
+        Upgrade to head → assert tables + key columns exist.
+        Downgrade to pre-Phase-1A revision (aa2ce5577e9e) → assert tables gone.
+        Upgrade back to head.
+        """
+        _reset_test_db()
+
+        engine = sqlalchemy.create_engine(settings.test_database_url)
+        try:
+            inspector = sqlalchemy.inspect(engine)
+            tables = inspector.get_table_names()
+
+            for table in (
+                "faculties",
+                "faculty_documents",
+                "faculty_education",
+                "faculty_experience",
+                "faculty_expertise",
+                "faculty_workload",
+            ):
+                assert table in tables, f"Expected table {table!r} after upgrade head"
+
+            # Verify key columns on faculties
+            faculty_cols = {c["name"] for c in inspector.get_columns("faculties")}
+            for col in (
+                "id", "user_id", "employee_id", "title", "first_name", "last_name",
+                "designation_id", "department_id", "campus_id", "joining_date",
+                "is_vacation_employee", "phone", "is_phd", "photo_file_id",
+                "emergency_contact_name", "emergency_contact_relation",
+                "emergency_contact_phone", "is_deleted", "created_at",
+            ):
+                assert col in faculty_cols, f"faculties missing column {col!r}"
+
+            # Verify JSONB entries_json on faculty_workload
+            wl_cols = {c["name"] for c in inspector.get_columns("faculty_workload")}
+            assert "entries_json" in wl_cols
+
+            # Downgrade to the revision before Phase 1A
+            result = _alembic("downgrade", "aa2ce5577e9e")
+            assert result.returncode == 0, f"downgrade to aa2ce5577e9e failed:\n{result.stderr}"
+
+            inspector = sqlalchemy.inspect(engine)
+            tables_after = inspector.get_table_names()
+            for table in (
+                "faculties",
+                "faculty_documents",
+                "faculty_education",
+                "faculty_experience",
+                "faculty_expertise",
+                "faculty_workload",
+            ):
+                assert table not in tables_after, f"Table {table!r} should be gone after downgrade"
+
+            # Upgrade back to head
+            result = _alembic("upgrade", "head")
+            assert result.returncode == 0, f"re-upgrade to head failed:\n{result.stderr}"
+        finally:
+            engine.dispose()

@@ -65,6 +65,14 @@ from .vision_mission import (
     UniversityMission,
     UniversityVisionMission,
 )
+from .faculty import (
+    Faculty,
+    FacultyDocument,
+    FacultyEducation,
+    FacultyExperience,
+    FacultyExpertise,
+    FacultyWorkload,
+)
 
 __all__ = [
     # Base
@@ -129,6 +137,13 @@ __all__ = [
     "UniversityMission",
     "DepartmentVisionMission",
     "DepartmentMission",
+    # M10 Faculty
+    "Faculty",
+    "FacultyDocument",
+    "FacultyEducation",
+    "FacultyExperience",
+    "FacultyExpertise",
+    "FacultyWorkload",
     # M9 Announcements
     "Announcement",
     "AnnouncementCategory",
