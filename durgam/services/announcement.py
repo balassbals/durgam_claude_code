@@ -49,6 +49,59 @@ from durgam.services.holiday import get_holiday_dates_in_window
 log = structlog.get_logger(__name__)
 
 _VALID_IMPORTANCE = frozenset({"very_important", "normal"})
+
+
+# ---------------------------------------------------------------------------
+# Scope-aware composer label (M9 Phase 10.2)
+# ---------------------------------------------------------------------------
+
+def _resolve_composer_scope_label(
+    user_id: UUID, role_code: str, session: Session
+) -> str:
+    """Return "Role name, Scope entity name" or just "Role name" when not scoped.
+
+    Used for displaying who composed an announcement (both in browse list and
+    detail panel). Queries Role + UserRole + scope entity in one session.
+
+    Notes:
+    - Role.name is used (no display_name field on Role model).
+    - UserRole has no is_deleted field (plain SQLModel join table).
+    - UserRole PK is (user_id, role_id); at most one row per user+role.
+    - Centre scope uses CentreOfExcellence model (scope_type="centre").
+    """
+    from durgam.models.campus import Campus
+    from durgam.models.centre import CentreOfExcellence
+    from durgam.models.department import Department
+    from durgam.models.school import School
+
+    role = session.exec(select(Role).where(Role.code == role_code)).first()
+    if role is None:
+        return role_code
+    role_label = role.name
+
+    ur = session.exec(
+        select(UserRole)
+        .where(UserRole.user_id == user_id, UserRole.role_id == role.id)
+    ).first()
+
+    if ur is None or ur.scope_type is None or ur.scope_id is None:
+        return role_label
+
+    scope_name = ""
+    if ur.scope_type == "campus":
+        entity = session.get(Campus, ur.scope_id)
+        scope_name = entity.name if entity else ""
+    elif ur.scope_type == "department":
+        entity = session.get(Department, ur.scope_id)
+        scope_name = entity.name if entity else ""
+    elif ur.scope_type == "school":
+        entity = session.get(School, ur.scope_id)
+        scope_name = entity.name if entity else ""
+    elif ur.scope_type == "centre":
+        entity = session.get(CentreOfExcellence, ur.scope_id)
+        scope_name = entity.name if entity else ""
+
+    return f"{role_label}, {scope_name}" if scope_name else role_label
 _HOLIDAY_WINDOW_DAYS = 14  # safe upper bound for 2-working-day window
 
 

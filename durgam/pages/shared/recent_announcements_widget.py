@@ -18,8 +18,9 @@ from durgam.repositories.announcement import (
     AnnouncementRepository,
     AudienceGroupRepository,
 )
-from durgam.services.announcement import AnnouncementService
+from durgam.services.announcement import AnnouncementService, _resolve_composer_scope_label
 from durgam.states.base import BaseState
+from durgam.utils.ist_format import format_ist
 
 log = structlog.get_logger(__name__)
 
@@ -62,12 +63,10 @@ class RecentAnnouncementsState(BaseState):
                         "id": str(a.id),
                         "title": a.title,
                         "importance": a.importance,
-                        "composer_role_code": a.composer_role_code,
-                        "scheduled_at_str": (
-                            a.scheduled_at.strftime("%Y-%m-%d %H:%M")
-                            if a.scheduled_at
-                            else ""
+                        "composer_scope_label": _resolve_composer_scope_label(
+                            a.composer_user_id, a.composer_role_code, session
                         ),
+                        "scheduled_at_str": format_ist(a.scheduled_at),
                     }
                     for a in items
                 ]
@@ -94,7 +93,7 @@ def _row(row: rx.Var) -> rx.Component:
             flex="1",
         ),
         rx.text(
-            row["composer_role_code"],
+            row["composer_scope_label"],
             font_size="0.75rem",
             color="var(--color-muted)",
         ),

@@ -87,7 +87,7 @@ def _row_card(row: rx.Var) -> rx.Component:
                 rx.text(
                     rx.icon("user", size=13),
                     " ",
-                    row["composer_role_code"],
+                    row["composer_scope_label"],
                     font_size="0.78rem",
                     color="var(--color-muted)",
                 ),
@@ -185,8 +185,8 @@ def _audience_checkbox(grp: rx.Var) -> rx.Component:
     )
 
 
-def _role_option(code: rx.Var) -> rx.Component:
-    return rx.select.item(code, value=code)
+def _role_option(role: rx.Var) -> rx.Component:
+    return rx.select.item(role["label"], value=role["code"])
 
 
 def _category_option(cat: rx.Var) -> rx.Component:
@@ -206,7 +206,7 @@ def _composer_modal() -> rx.Component:
                             rx.select.trigger(placeholder="Select your role"),
                             rx.select.content(
                                 rx.foreach(
-                                    AnnouncementComposerState.available_role_codes,
+                                    AnnouncementComposerState.available_roles,
                                     _role_option,
                                 )
                             ),
@@ -428,8 +428,8 @@ def _detail_panel() -> rx.Component:
                 color="var(--color-muted)",
             ),
             rx.text(
-                "By role: ",
-                AnnouncementDetailState.detail["composer_role_code"],
+                "By: ",
+                AnnouncementDetailState.detail["composer_scope_label"],
                 font_size="0.85rem",
                 color="var(--color-muted)",
             ),

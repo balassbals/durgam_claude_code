@@ -1131,3 +1131,17 @@ All 3 tests are marked `@pytest.mark.xfail(strict=False, reason="E-017 ...")` so
 The underlying E-022 feature (admin manual edit of leave records) may be partially implemented in M8.1; the selector bug is separable from the feature completeness question.
 
 **Trigger to re-open:** When E-022 is scheduled, fix the selector (`get_by_placeholder(...)` or an `input[name=...]` locator verified against the rendered form) and remove the xfail decorator. Run locally against the running app to verify the selector before committing.
+
+---
+
+### TD-066 — Composer scope label resolved at display time, not stored
+
+**Phase:** M9 Phase 10.2. **Status: Open.**
+
+**Location:** `durgam/services/announcement.py` — `_resolve_composer_scope_label()`; called from `durgam/states/announcements.py` (`load_announcements`, `open_detail`) and `durgam/pages/shared/recent_announcements_widget.py` (`load_widget_data`).
+
+**What it is:** `_resolve_composer_scope_label(user_id, role_code, session)` queries `Role` + `UserRole` + the scope entity (Campus, Department, School, CentreOfExcellence) at display time to produce the label "Dean, School of Science" / "Head of Department, Mathematics & Computer Science" etc. This is correct at render time but means: if the user's scope changes after posting (transfer, rename of entity, or role revocation + re-grant with a different scope), the displayed label will reflect the NEW scope, not the scope at composition time.
+
+**Why not stored:** The `Announcement` model already stores `composer_role_code`. Storing `composer_scope_type` + `composer_scope_id` + `composer_scope_name` at create time would require a migration and freeze the label at composition time. Deferred to a future revision when there is evidence this causes confusion (transfers within a posting's visible lifetime are rare).
+
+**Resolution path:** Add `composer_scope_type: str | None`, `composer_scope_id: UUID | None`, `composer_scope_label: str | None` columns to `announcements` table. Populate from `_resolve_composer_scope_label` at create time. Read stored label directly in state — no DB join needed at display time.

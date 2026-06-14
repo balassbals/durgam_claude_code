@@ -21,6 +21,7 @@ import structlog
 from durgam.auth.decorators import audit_action, require_role
 from durgam.db import open_session
 from durgam.states.base import BaseState
+from durgam.utils.ist_format import format_ist
 
 log = structlog.get_logger(__name__)
 
@@ -30,12 +31,6 @@ def _resolve_or_redirect(state: BaseState):
     if not state.current_user_id:
         return rx.redirect("/login")
     return None
-
-
-def _format_dt(dt: datetime | None) -> str:
-    if dt is None:
-        return "—"
-    return dt.strftime("%Y-%m-%d %H:%M UTC")
 
 
 # ── Browse ─────────────────────────────────────────────────────────────────
@@ -83,7 +78,10 @@ class AnnouncementBrowseState(BaseState):
             AnnouncementRepository,
             AudienceGroupRepository,
         )
-        from durgam.services.announcement import AnnouncementService
+        from durgam.services.announcement import (
+            AnnouncementService,
+            _resolve_composer_scope_label,
+        )
 
         imp_filter = None if self.importance_filter == "all" else self.importance_filter
         d_from: date_type | None = None
@@ -124,8 +122,10 @@ class AnnouncementBrowseState(BaseState):
                     "title": a.title,
                     "category_code": a.category_code,
                     "importance": a.importance,
-                    "scheduled_at": _format_dt(a.scheduled_at),
-                    "composer_role_code": a.composer_role_code,
+                    "scheduled_at": format_ist(a.scheduled_at),
+                    "composer_scope_label": _resolve_composer_scope_label(
+                        a.composer_user_id, a.composer_role_code, session
+                    ),
                     "is_withdrawn": a.is_deleted,
                     "is_pending": is_pending,
                     "can_withdraw": is_pending and not a.is_deleted,
@@ -170,7 +170,7 @@ class AnnouncementComposerState(BaseState):
     selected_audience_codes: list[str] = []
 
     # Populated on open_composer
-    available_role_codes: list[str] = []
+    available_roles: list[dict[str, str]] = []
     available_categories: list[dict[str, str]] = []
     available_audience_groups: list[dict[str, str]] = []
 
@@ -224,7 +224,7 @@ class AnnouncementComposerState(BaseState):
         self.form_importance = "normal"
         self.form_scheduled_at = ""
         self.selected_audience_codes = []
-        self.available_role_codes = []
+        self.available_roles = []
         self.available_categories = []
         self.available_audience_groups = []
         self.staged_attachment_bytes = b""
@@ -258,6 +258,7 @@ class AnnouncementComposerState(BaseState):
         )
         from durgam.services.announcement import (
             AnnouncementService,
+            _resolve_composer_scope_label,
         )
 
         user_id = UUID(self.current_user_id)
@@ -269,8 +270,8 @@ class AnnouncementComposerState(BaseState):
                 audience_repo=AudienceGroupRepository(session),
                 session=session,
             )
-            eligible_roles = svc.list_composer_eligible_roles(user_id)
-            if not eligible_roles:
+            eligible_role_codes = svc.list_composer_eligible_roles(user_id)
+            if not eligible_role_codes:
                 self.flash = "You are not configured as an announcement composer."
                 self.flash_type = "error"
                 return
@@ -280,14 +281,20 @@ class AnnouncementComposerState(BaseState):
             ag_repo = AudienceGroupRepository(session)
             groups = ag_repo.list_active()
 
-            role_codes = list(eligible_roles)
+            available_roles = [
+                {
+                    "code": rc,
+                    "label": _resolve_composer_scope_label(user_id, rc, session),
+                }
+                for rc in eligible_role_codes
+            ]
             categories = [{"code": c.code, "name": c.name} for c in cats]
             audience_groups = [{"code": g.code, "name": g.name} for g in groups]
 
-        self.available_role_codes = role_codes
+        self.available_roles = available_roles
         self.available_categories = categories
         self.available_audience_groups = audience_groups
-        self.form_role_code = role_codes[0] if role_codes else ""
+        self.form_role_code = available_roles[0]["code"] if available_roles else ""
         self.form_category_code = categories[0]["code"] if categories else ""
         self.form_importance = "normal"
         self.selected_audience_codes = []
@@ -440,6 +447,7 @@ class AnnouncementDetailState(BaseState):
         from durgam.services.announcement import (
             AnnouncementNotFoundError,
             AnnouncementService,
+            _resolve_composer_scope_label,
         )
 
         user_id = UUID(self.current_user_id)
@@ -468,8 +476,10 @@ class AnnouncementDetailState(BaseState):
                     "message_text": ann.message_text,
                     "category_code": ann.category_code,
                     "importance": ann.importance,
-                    "scheduled_at": _format_dt(ann.scheduled_at),
-                    "composer_role_code": ann.composer_role_code,
+                    "scheduled_at": format_ist(ann.scheduled_at),
+                    "composer_scope_label": _resolve_composer_scope_label(
+                        ann.composer_user_id, ann.composer_role_code, session
+                    ),
                     "composer_user_id": str(ann.composer_user_id),
                     "is_withdrawn": ann.is_deleted,
                     "is_pending": is_pending,
