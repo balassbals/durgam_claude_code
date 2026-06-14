@@ -165,3 +165,35 @@ Likely root cause: interaction between Radix UI `Table.Root` internals and a par
 **Impact:** Purely visual. The table is functional; users must scroll left to see the username after scrolling right. No data or action is blocked.
 
 **Proposed fix for UI Polish milestone:** Replace `rx.table` with a plain HTML table rendered via `rx.el.table` (non-Radix) for this specific page, where `position: sticky; left: 0; z-index: 1; background: var(--color-background)` on the first cell is reliable. Alternatively, use a CSS Grid layout for the table body rows so the first column can be independently overflow-hidden.
+
+---
+
+## M9 Announcement Module — polish backlog
+
+### UI-POLISH-M9-01 — Withdraw window countdown timer
+
+The detail panel shows a "Withdraw" button while `can_withdraw = True`. If the user leaves the panel open across the window boundary, the button remains visible but the service will reject the action. A live countdown timer ("Withdraw window closes in 14:23") with a client-side disable at T=0 would prevent the confusing rejected-action UX.
+
+**Deferred to UI Polish milestone.** Requires either a `rx.moment`-style countdown component or a periodic WebSocket ping from the server. Neither pattern is established in the codebase.
+
+### UI-POLISH-M9-02 — Multi-file attachments per announcement
+
+The spec and Phase 8b shipped one attachment per announcement (UI-only limit; service has no count guard — TD-057). The compose form has one upload zone. A future design should consider:
+
+- Drag-and-drop multi-file zone (up to N files, N configurable via a category setting or a global config row)
+- Per-file remove button before save
+- Preview thumbnails for images
+
+**Deferred to a future milestone.** UI Polish milestone should address TD-057's service-layer count guard first; multi-file UI second.
+
+### UI-POLISH-M9-03 — Publish delay display on category list page
+
+The category config list table does not show `publish_delay_seconds`. Admins must open the edit modal to see the delay. For tables with many categories, scanning delays requires the admin to open each row. A "Delay" column (formatted as "30 min" or "Instant") would improve scanability.
+
+**Deferred to UI Polish milestone.** Low impact for M9 (9 default categories; most have delay=0).
+
+### UI-POLISH-M9-04 — Per-module announcement surfacing
+
+The informal requirement says "Announcement meant for them should come to their module or page." M9 ships: (a) `/announcements` dedicated page, (b) dashboard widget (top 3). Surfacing announcements within other module pages (e.g., in the leave module header) is deferred.
+
+**Target: M15 (Role-based dashboards).** See coverage_matrix.md M9 deferred items.

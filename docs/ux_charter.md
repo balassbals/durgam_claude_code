@@ -284,3 +284,37 @@ When an admin opens the edit modal for an approved leave whose `ends_on < today`
 This prevents a confusing UX where the admin selects a transition, submits, and receives a service-layer error with no visible feedback. The UI communicates the constraint before any server round-trip.
 
 Pattern reference: `durgam/states/leave_request_admin.py` `edit_window_elapsed` and `allowed_new_states_filtered`; `durgam/pages/admin/leave_request_edit.py` `_edit_modal()`.
+
+---
+
+## M9 Announcements — UX conventions
+
+### 1. Status badges on announcements
+
+Three mutually exclusive status badges, applied in priority order (first match wins):
+
+| Status | Badge text | Radix color_scheme | variant | Condition |
+|--------|-----------|-------------------|---------|-----------|
+| Withdrawn | "Withdrawn" | `gray` | `outline` | `is_deleted = True` |
+| Pending | "Pending" | `amber` | `soft` | `scheduled_at > NOW()` and not withdrawn |
+| (none) | — | — | — | Published and not withdrawn |
+
+The badge appears in both the browse-list row card and the detail panel metadata row. An announcement cannot be both Withdrawn and Pending (withdraw is blocked after the window closes; if it was withdrawn during the window, it's Withdrawn).
+
+### 2. Withdraw button gating
+
+The "Withdraw" destructive button in the detail panel renders only when `can_withdraw = True`:
+
+```python
+can_withdraw = is_pending and not is_deleted
+```
+
+`is_pending` is computed at state load time (server-side). The client does not re-check the window boundary in real time. If a user keeps a detail panel open across the window boundary, they will see the Withdraw button until they next open the panel. This is acceptable for M9 — a stale UI state shows the button but the service rejects the action with "Announcement is already published."
+
+For a future UI-polish pass: show a countdown timer and disable the button client-side when the deadline passes (requires a `rx.moment` or similar component — deferred to UI Polish milestone).
+
+### 3. Pending window UX in category admin
+
+The Withdraw Window field in `/admin/config/announcement-categories` is labeled "Withdraw Window (seconds)" with a helper text: "Seconds after composing during which the announcement is pending (invisible to recipients but withdrawable). 0 = publish immediately." The input is a number field, min=0, max=86400.
+
+For admin convenience: the category list page does not show the delay value in the table (too low information density). It is only visible on the edit modal. If admins need to scan delays, direct SQL is the recommended approach for M9.

@@ -303,3 +303,28 @@ model exists and is verified by integration tests.
 | Withdrawal notification campus-dept scope | TD-038 | M10 | Deferred | Requires Faculty/Campus assignment model. |
 | Leave admin pages campus-scope enforcement | TD-039 | M10 | Deferred | DIRECTOR-tier scope filter blocked on M10 Faculty model. |
 | credit_annual_cl beat schedule DB-driven | TD-040 | Future | Deferred | Hardcoded Jan 1 is statutory; non-Jan-1 deferred. |
+
+---
+
+## M9 — Announcement Module
+
+**Gate pending (Phase 10).** Branch: `m9-announcements`. See `docs/milestones/M9.md`.
+
+| Resource | Actions permitted | Scope | Audit | Notes |
+|----------|-------------------|-------|-------|-------|
+| `announcement` | create, read, update, soft_delete (own) | `*` (create/read/update); `own` (soft_delete) | ✓ direct write_audit_row in service | Composer roster gated by AnnouncementComposerConfig; received tab hides pending (scheduled_at > now) |
+| `announcement_composer_config` | read, configure | `*` | ✓ @audit_action on state handlers | SYS_ADMIN-tier. Manages which roles can compose and at what priority. |
+| `announcement_category` | read, configure | `*` | ✓ @audit_action on state handlers | Registrar-tier. 9 default seed rows. publish_delay_seconds controls pending window (0–86400s). |
+| `audience_group` | read, configure | `*` | ✓ @audit_action on state handlers | Registrar-tier. 23+ seed rows. filter_json validated at save time. program_degree_types axis = stub (TD-043). |
+| Attachment download (`/api/files/{id}`) | read (permissive default) | authenticated | ✓ (FileAsset row) | TD-056: no audience gate on attachment download — deferred post-M9. |
+
+**Auto-announce hook** (`ApprovalProcess.auto_announce_on_approve`): triggers `create_auto_announcement` on terminal approval, bypasses composer eligibility and publish delay. audit row written inside service. TD-054: composer_role_code = "SYSTEM" literal for auto-announcements.
+
+**Deferred M9 forward concerns:**
+
+| Feature | M9 status | Target |
+|---------|-----------|--------|
+| Per-user email opt-out for calendar delivery (coverage_matrix line 147/215) | Out of scope | Future Notifications milestone |
+| Faculty mentor confirmation email (coverage_matrix line 243) | Out of scope | M14 (Director workflow) |
+| Per-module announcement surfacing (§10.1 beyond dashboard widget) | Out of scope | M15 (Role-based dashboards) |
+| Clubs/Meetings auto-announce hooks | Out of scope | M15 |
