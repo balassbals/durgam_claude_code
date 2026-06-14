@@ -37,6 +37,11 @@ from durgam.models.config_anchors import (
     StudentCategoryCount,
     WorkingDaysConfig,
 )
+from durgam.models.announcement import (
+    AnnouncementCategory,
+    AnnouncementComposerConfig,
+    AudienceGroup,
+)
 from durgam.models.crosscutting import ApprovalProcess, FileAsset
 from durgam.models.leave import LeaveCreditPolicy
 from durgam.models.course import Course
@@ -374,6 +379,17 @@ def seed(session: Session) -> dict[str, int]:
         # M5b-R3 V2 — per-entity bulk-import permissions
         {"resource": "program_import",               "action": "write",   "scope": "*"},
         {"resource": "course_import",                "action": "write",   "scope": "*"},
+        # M9 — Announcement Module permissions
+        {"resource": "announcement",                 "action": "create",    "scope": "*"},
+        {"resource": "announcement",                 "action": "read",      "scope": "*"},
+        {"resource": "announcement",                 "action": "update",    "scope": "own"},
+        {"resource": "announcement",                 "action": "soft_delete", "scope": "own"},
+        {"resource": "announcement_composer_config", "action": "read",      "scope": "*"},
+        {"resource": "announcement_composer_config", "action": "configure", "scope": "*"},
+        {"resource": "announcement_category",        "action": "read",      "scope": "*"},
+        {"resource": "announcement_category",        "action": "configure", "scope": "*"},
+        {"resource": "audience_group",               "action": "read",      "scope": "*"},
+        {"resource": "audience_group",               "action": "configure", "scope": "*"},
     ]
     perm_inserted = 0
     for p in perms_data:
@@ -428,6 +444,12 @@ def seed(session: Session) -> dict[str, int]:
         ("ug_timetable",              "read", "*"),
         # M5b — class coordinator list viewable by all (B1: coordinator is a student)
         ("class_coordinator_assignment", "read", "*"),
+        # M9 — Announcement Module reads (broad transparency: every role can see announcements,
+        # the composer roster, categories, and audience groups)
+        ("announcement",                 "read", "*"),
+        ("announcement_composer_config", "read", "*"),
+        ("announcement_category",        "read", "*"),
+        ("audience_group",               "read", "*"),
     ]
 
     # M8 — permissions for all employees who can submit leave requests.
@@ -630,26 +652,46 @@ def seed(session: Session) -> dict[str, int]:
         ("leave_request_admin",        "write",     "*"),
     ]
 
+    # M9 — Announcement Module
+    _ANNOUNCEMENT_COMPOSER = [
+        ("announcement",   "create",      "*"),
+        ("announcement",   "update",      "own"),
+        ("announcement",   "soft_delete", "own"),
+    ]
+
+    # Registrar-tier operational config (categories + audience groups)
+    _ANNOUNCEMENT_REGISTRAR_CONFIG = [
+        ("announcement_category", "configure", "*"),
+        ("audience_group",        "configure", "*"),
+    ]
+
+    # Sys-admin-only configuration of the composer roster itself.
+    # SYSTEM_ADMIN receives this automatically via the perms.values() loop above;
+    # this list is defined here for clarity but not added to role_perm_map.
+    _ANNOUNCEMENT_SYS_ADMIN_CONFIG = [
+        ("announcement_composer_config", "configure", "*"),
+    ]
+
     role_perm_map: dict[str, list[tuple[str, str, str]]] = {
-        "REGISTRAR":            _PUBLIC_READ + _LEAVE_REQUESTOR + _REGISTRAR_SPECIFIC + _CL_CREDIT_POLICY_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN + [
+        "REGISTRAR":            _PUBLIC_READ + _LEAVE_REQUESTOR + _REGISTRAR_SPECIFIC + _CL_CREDIT_POLICY_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN + _ANNOUNCEMENT_COMPOSER + _ANNOUNCEMENT_REGISTRAR_CONFIG + [
             ("approval_request",           "approve",   "*"),
         ],
         "DEPUTY_REGISTRAR":     _PUBLIC_READ + _LEAVE_REQUESTOR + _REGISTRAR_SPECIFIC + _CL_CREDIT_POLICY_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN + [
             ("approval_request",           "approve",   "*"),
         ],
-        "REGISTRAR_OFFICE":     _PUBLIC_READ + _LEAVE_REQUESTOR + _REGISTRAR_SPECIFIC + _CL_CREDIT_POLICY_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN,
-        "DIRECTOR":             _PUBLIC_READ + _LEAVE_REQUESTOR + _DIRECTOR_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN,
+        "REGISTRAR_OFFICE":     _PUBLIC_READ + _LEAVE_REQUESTOR + _REGISTRAR_SPECIFIC + _CL_CREDIT_POLICY_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN + _ANNOUNCEMENT_COMPOSER + _ANNOUNCEMENT_REGISTRAR_CONFIG,
+        "DIRECTOR":             _PUBLIC_READ + _LEAVE_REQUESTOR + _DIRECTOR_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN + _ANNOUNCEMENT_COMPOSER,
         "DEPUTY_DIRECTOR":      _PUBLIC_READ + _LEAVE_REQUESTOR + _DIRECTOR_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN,
-        "DIRECTOR_OFFICE":      _PUBLIC_READ + _LEAVE_REQUESTOR + _DIRECTOR_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN,
-        "IQAC_COORDINATOR":     _PUBLIC_READ + _LEAVE_REQUESTOR + _IQAC_SPECIFIC,
-        "DEAN":                 _PUBLIC_READ + _LEAVE_REQUESTOR + _DEAN_SPECIFIC + [
+        "DIRECTOR_OFFICE":      _PUBLIC_READ + _LEAVE_REQUESTOR + _DIRECTOR_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN + _ANNOUNCEMENT_COMPOSER,
+        "IQAC_COORDINATOR":     _PUBLIC_READ + _LEAVE_REQUESTOR + _IQAC_SPECIFIC + _ANNOUNCEMENT_COMPOSER,
+        "DEAN":                 _PUBLIC_READ + _LEAVE_REQUESTOR + _DEAN_SPECIFIC + _ANNOUNCEMENT_COMPOSER + [
             ("approval_request",           "approve",   "*"),
         ],
-        "DEAN_STUDENT_WELFARE": _PUBLIC_READ + _LEAVE_REQUESTOR + _DEAN_SW_SPECIFIC,
-        "DEAN_STUDENT_WELFARE_OFFICE": _PUBLIC_READ + _LEAVE_REQUESTOR + _DEAN_SW_SPECIFIC,
-        "DEAN_ACADEMIC_AFFAIRS": _PUBLIC_READ + _LEAVE_REQUESTOR + _DEAN_AA_SPECIFIC,
-        "DEAN_ACADEMIC_AFFAIRS_OFFICE": _PUBLIC_READ + _LEAVE_REQUESTOR + _DEAN_AA_SPECIFIC,
-        "HOD":                  _PUBLIC_READ + _LEAVE_REQUESTOR + _HOD_SPECIFIC + [
+        "DEAN_STUDENT_WELFARE": _PUBLIC_READ + _LEAVE_REQUESTOR + _DEAN_SW_SPECIFIC + _ANNOUNCEMENT_COMPOSER,
+        "DEAN_STUDENT_WELFARE_OFFICE": _PUBLIC_READ + _LEAVE_REQUESTOR + _DEAN_SW_SPECIFIC + _ANNOUNCEMENT_COMPOSER,
+        "DEAN_ACADEMIC_AFFAIRS": _PUBLIC_READ + _LEAVE_REQUESTOR + _DEAN_AA_SPECIFIC + _ANNOUNCEMENT_COMPOSER,
+        "DEAN_ACADEMIC_AFFAIRS_OFFICE": _PUBLIC_READ + _LEAVE_REQUESTOR + _DEAN_AA_SPECIFIC + _ANNOUNCEMENT_COMPOSER,
+        "HOD":                  _PUBLIC_READ + _LEAVE_REQUESTOR + _HOD_SPECIFIC + _ANNOUNCEMENT_COMPOSER + [
             ("class_teacher_assignment",   "read",      "*"),
             ("class_teacher_assignment",   "write",     "*"),
             ("class_teacher_assignment",   "delete",    "*"),
@@ -679,26 +721,26 @@ def seed(session: Session) -> dict[str, int]:
             ("course_import",              "write",     "*"),
         ],
         # M5b/M7 — approver/channel roles
-        "VC":                   _PUBLIC_READ + _LEAVE_REQUESTOR + [
+        "VC":                   _PUBLIC_READ + _LEAVE_REQUESTOR + _ANNOUNCEMENT_COMPOSER + [
             ("approval_request",           "approve",   "*"),
         ],
-        "VC_OFFICE":            _PUBLIC_READ + _LEAVE_REQUESTOR,
-        "FINANCE_OFFICER":      _PUBLIC_READ + _LEAVE_REQUESTOR + _FINANCE_SPECIFIC,
+        "VC_OFFICE":            _PUBLIC_READ + _LEAVE_REQUESTOR + _ANNOUNCEMENT_COMPOSER,
+        "FINANCE_OFFICER":      _PUBLIC_READ + _LEAVE_REQUESTOR + _FINANCE_SPECIFIC + _ANNOUNCEMENT_COMPOSER,
         "CPC_CHAIRPERSON":      _PUBLIC_READ + _LEAVE_REQUESTOR + [
             ("approval_request",           "approve",   "*"),
         ],
         # M8 — new roles
-        "CONTROLLER_OF_EXAMINATIONS": _PUBLIC_READ + _LEAVE_REQUESTOR + _CONTROLLER_OF_EXAMINATIONS_SPECIFIC,
-        "HR_HEAD":              _PUBLIC_READ + _LEAVE_REQUESTOR + _HR_HEAD_SPECIFIC,
+        "CONTROLLER_OF_EXAMINATIONS": _PUBLIC_READ + _LEAVE_REQUESTOR + _CONTROLLER_OF_EXAMINATIONS_SPECIFIC + _ANNOUNCEMENT_COMPOSER,
+        "HR_HEAD":              _PUBLIC_READ + _LEAVE_REQUESTOR + _HR_HEAD_SPECIFIC + _ANNOUNCEMENT_COMPOSER,
         "HR_OFFICE":            _PUBLIC_READ + _LEAVE_REQUESTOR + _HR_OFFICE_SPECIFIC,
         # Faculty designation roles (M8 — inherit PUBLIC_READ + LEAVE_REQUESTOR)
         "PROFESSOR":            _PUBLIC_READ + _LEAVE_REQUESTOR + [("approval_request", "approve", "*")],
         "ASSOC_PROFESSOR":      _PUBLIC_READ + _LEAVE_REQUESTOR + [("approval_request", "approve", "*")],
         "FACULTY":              _PUBLIC_READ + _LEAVE_REQUESTOR,
         "LIBRARIAN":            _PUBLIC_READ + _LEAVE_REQUESTOR,
-        "PLACEMENT_OFFICER":    _PUBLIC_READ + _LEAVE_REQUESTOR,
-        "CESRC_COORDINATOR":    _PUBLIC_READ + _LEAVE_REQUESTOR,
-        "CENTRE_COORDINATOR":   _PUBLIC_READ + _LEAVE_REQUESTOR,
+        "PLACEMENT_OFFICER":    _PUBLIC_READ + _LEAVE_REQUESTOR + _ANNOUNCEMENT_COMPOSER,
+        "CESRC_COORDINATOR":    _PUBLIC_READ + _LEAVE_REQUESTOR + _ANNOUNCEMENT_COMPOSER,
+        "CENTRE_COORDINATOR":   _PUBLIC_READ + _LEAVE_REQUESTOR + _ANNOUNCEMENT_COMPOSER,
         "STUDENT":              _PUBLIC_READ,
         "BASIC_USER":           _PUBLIC_READ,
     }
@@ -2374,6 +2416,172 @@ def seed(session: Session) -> dict[str, int]:
         updated=_matrix_counts["updated"],
         orphaned=_matrix_counts["orphaned_soft_deleted"],
     )
+
+    # ── AnnouncementCategory (M9) ──────────────────────────────────────────────
+    # Default 9 categories per M9.md Q17 freeze. Operational additions via
+    # Registrar-tier admin UI post-launch.
+    categories_data = [
+        {"code": "CIRCULAR",     "name": "Circular",          "display_order": 10, "is_active": True},
+        {"code": "ORDER",        "name": "Order",             "display_order": 20, "is_active": True},
+        {"code": "NOTICE",       "name": "Notice",            "display_order": 30, "is_active": True},
+        {"code": "NOTIFICATION", "name": "Notification",      "display_order": 40, "is_active": True},
+        {"code": "MEMORANDUM",   "name": "Office Memorandum", "display_order": 50, "is_active": True},
+        {"code": "INVITATION",   "name": "Invitation",        "display_order": 60, "is_active": True},
+        {"code": "RESULT",       "name": "Result",            "display_order": 70, "is_active": True},
+        {"code": "ADVISORY",     "name": "Advisory",          "display_order": 80, "is_active": True},
+        {"code": "GENERAL",      "name": "General",           "display_order": 90, "is_active": True},
+    ]
+    cat_inserted = 0
+    for c in categories_data:
+        cat_inserted += _exec_insert(
+            session,
+            pg_insert(AnnouncementCategory)
+            .values(**c)
+            .on_conflict_do_nothing(constraint="uq_announcement_categories_code"),
+        )
+    counts["announcement_categories"] = cat_inserted
+
+    # ── AnnouncementComposerConfig (M9) ────────────────────────────────────────
+    # 19 rows per M9.md Q11 freeze. All role_code values verified in seed.py roles list.
+    composer_config_data = [
+        {"role_code": "VC",                           "priority_rank": 10,  "scope_restriction": None,         "enabled": True},
+        {"role_code": "VC_OFFICE",                    "priority_rank": 20,  "scope_restriction": None,         "enabled": True},
+        {"role_code": "REGISTRAR",                    "priority_rank": 30,  "scope_restriction": None,         "enabled": True},
+        {"role_code": "REGISTRAR_OFFICE",             "priority_rank": 40,  "scope_restriction": None,         "enabled": True},
+        {"role_code": "HR_HEAD",                      "priority_rank": 50,  "scope_restriction": None,         "enabled": True},
+        {"role_code": "IQAC_COORDINATOR",             "priority_rank": 60,  "scope_restriction": None,         "enabled": True},
+        {"role_code": "DEAN",                         "priority_rank": 70,  "scope_restriction": "school",     "enabled": True},
+        {"role_code": "DEAN_STUDENT_WELFARE",         "priority_rank": 70,  "scope_restriction": None,         "enabled": True},
+        {"role_code": "DEAN_ACADEMIC_AFFAIRS",        "priority_rank": 70,  "scope_restriction": None,         "enabled": True},
+        {"role_code": "DEAN_STUDENT_WELFARE_OFFICE",  "priority_rank": 71,  "scope_restriction": None,         "enabled": True},
+        {"role_code": "DEAN_ACADEMIC_AFFAIRS_OFFICE", "priority_rank": 71,  "scope_restriction": None,         "enabled": True},
+        {"role_code": "DIRECTOR",                     "priority_rank": 80,  "scope_restriction": "campus",     "enabled": True},
+        {"role_code": "DIRECTOR_OFFICE",              "priority_rank": 90,  "scope_restriction": "campus",     "enabled": True},
+        {"role_code": "CONTROLLER_OF_EXAMINATIONS",   "priority_rank": 100, "scope_restriction": None,         "enabled": True},
+        {"role_code": "FINANCE_OFFICER",              "priority_rank": 110, "scope_restriction": None,         "enabled": True},
+        {"role_code": "PLACEMENT_OFFICER",            "priority_rank": 120, "scope_restriction": None,         "enabled": True},
+        {"role_code": "HOD",                          "priority_rank": 130, "scope_restriction": "department", "enabled": True},
+        {"role_code": "CESRC_COORDINATOR",            "priority_rank": 140, "scope_restriction": None,         "enabled": True},
+        {"role_code": "CENTRE_COORDINATOR",           "priority_rank": 150, "scope_restriction": "centre",     "enabled": True},
+    ]
+    ccfg_inserted = 0
+    for cc in composer_config_data:
+        ccfg_inserted += _exec_insert(
+            session,
+            pg_insert(AnnouncementComposerConfig)
+            .values(**cc)
+            .on_conflict_do_nothing(constraint="uq_announcement_composer_configs_role_code"),
+        )
+    counts["announcement_composer_configs"] = ccfg_inserted
+
+    # ── AudienceGroup (M9) ─────────────────────────────────────────────────────
+    # 23 explicit rows per M9.md Q18 freeze + dynamic per-campus EVERYONE_<code> rows.
+    # All school/centre codes verified to exist in DB (SCI/HSS/LL/MC; CMB/CSSS/CADS/CSD).
+    # STUDENT_UG/PG/PHD program_degree_types subject to TD-043 (resolves empty until
+    # User-Program enrollment link is built).
+    audience_groups_explicit = [
+        # All-hands
+        {"code": "ALL", "name": "Everyone", "description": "All active users.",
+         "filter_json": {}, "is_active": True},
+        # Faculty
+        {"code": "FACULTY_ALL", "name": "All Faculty",
+         "filter_json": {"role_codes": ["FACULTY", "PROFESSOR", "ASSOC_PROFESSOR"]},
+         "is_active": True, "description": None},
+        {"code": "FACULTY_SCI", "name": "Sciences Faculty",
+         "filter_json": {"role_codes": ["FACULTY", "PROFESSOR", "ASSOC_PROFESSOR"], "scope_type": "school", "scope_codes": ["SCI"]},
+         "is_active": True, "description": None},
+        {"code": "FACULTY_HSS", "name": "Humanities & Social Sciences Faculty",
+         "filter_json": {"role_codes": ["FACULTY", "PROFESSOR", "ASSOC_PROFESSOR"], "scope_type": "school", "scope_codes": ["HSS"]},
+         "is_active": True, "description": None},
+        {"code": "FACULTY_LL", "name": "Languages & Literature Faculty",
+         "filter_json": {"role_codes": ["FACULTY", "PROFESSOR", "ASSOC_PROFESSOR"], "scope_type": "school", "scope_codes": ["LL"]},
+         "is_active": True, "description": None},
+        {"code": "FACULTY_MC", "name": "Management & Commerce Faculty",
+         "filter_json": {"role_codes": ["FACULTY", "PROFESSOR", "ASSOC_PROFESSOR"], "scope_type": "school", "scope_codes": ["MC"]},
+         "is_active": True, "description": None},
+        {"code": "PROFESSORS_ALL", "name": "All Professors",
+         "filter_json": {"role_codes": ["PROFESSOR"]},
+         "is_active": True, "description": None},
+        # Students — STUDENT_UG/PG/PHD subject to TD-043
+        {"code": "STUDENT_ALL", "name": "All Students",
+         "filter_json": {"role_codes": ["STUDENT"]},
+         "is_active": True, "description": None},
+        {"code": "STUDENT_UG", "name": "Undergraduate Students",
+         "filter_json": {"role_codes": ["STUDENT"], "program_degree_types": ["BSc", "BA", "BCom", "BTech", "BBA", "BPharm", "MBBS"]},
+         "is_active": True, "description": "Subject to TD-043: resolves empty until User-Program link exists."},
+        {"code": "STUDENT_PG", "name": "Postgraduate Students",
+         "filter_json": {"role_codes": ["STUDENT"], "program_degree_types": ["MSc", "MA", "MCom", "MBA", "MTech", "MPharm", "MD", "MS"]},
+         "is_active": True, "description": "Subject to TD-043: resolves empty until User-Program link exists."},
+        {"code": "STUDENT_PHD", "name": "PhD Scholars",
+         "filter_json": {"role_codes": ["STUDENT"], "program_degree_types": ["PhD", "DPhil"]},
+         "is_active": True, "description": "Subject to TD-043: resolves empty until User-Program link exists."},
+        {"code": "STUDENT_SCI", "name": "Sciences Students",
+         "filter_json": {"role_codes": ["STUDENT"], "scope_type": "school", "scope_codes": ["SCI"]},
+         "is_active": True, "description": None},
+        {"code": "STUDENT_HSS", "name": "Humanities & Social Sciences Students",
+         "filter_json": {"role_codes": ["STUDENT"], "scope_type": "school", "scope_codes": ["HSS"]},
+         "is_active": True, "description": None},
+        {"code": "STUDENT_LL", "name": "Languages & Literature Students",
+         "filter_json": {"role_codes": ["STUDENT"], "scope_type": "school", "scope_codes": ["LL"]},
+         "is_active": True, "description": None},
+        {"code": "STUDENT_MC", "name": "Management & Commerce Students",
+         "filter_json": {"role_codes": ["STUDENT"], "scope_type": "school", "scope_codes": ["MC"]},
+         "is_active": True, "description": None},
+        # Centres of Excellence
+        {"code": "CENTRE_CMB",  "name": "Centre of Excellence — CMB",
+         "filter_json": {"scope_type": "centre", "scope_codes": ["CMB"]},
+         "is_active": True, "description": None},
+        {"code": "CENTRE_CSSS", "name": "Centre of Excellence — CSSS",
+         "filter_json": {"scope_type": "centre", "scope_codes": ["CSSS"]},
+         "is_active": True, "description": None},
+        {"code": "CENTRE_CADS", "name": "Centre of Excellence — CADS",
+         "filter_json": {"scope_type": "centre", "scope_codes": ["CADS"]},
+         "is_active": True, "description": None},
+        {"code": "CENTRE_CSD",  "name": "Centre of Excellence — CSD",
+         "filter_json": {"scope_type": "centre", "scope_codes": ["CSD"]},
+         "is_active": True, "description": None},
+        # Leadership / staff
+        {"code": "HODS_ALL", "name": "All HoDs",
+         "filter_json": {"role_codes": ["HOD"]},
+         "is_active": True, "description": None},
+        {"code": "DEANS_ALL", "name": "All Deans (incl. office variants)",
+         "filter_json": {"role_codes": ["DEAN", "DEAN_STUDENT_WELFARE", "DEAN_ACADEMIC_AFFAIRS", "DEAN_STUDENT_WELFARE_OFFICE", "DEAN_ACADEMIC_AFFAIRS_OFFICE"]},
+         "is_active": True, "description": None},
+        {"code": "DIRECTORS_ALL", "name": "All Directors (incl. office)",
+         "filter_json": {"role_codes": ["DIRECTOR", "DIRECTOR_OFFICE"]},
+         "is_active": True, "description": None},
+        {"code": "OFFICE_STAFF_ALL", "name": "All Office Staff",
+         "filter_json": {"role_codes": ["VC_OFFICE", "REGISTRAR_OFFICE", "DIRECTOR_OFFICE", "DEAN_STUDENT_WELFARE_OFFICE", "DEAN_ACADEMIC_AFFAIRS_OFFICE", "HR_OFFICE"]},
+         "is_active": True, "description": None},
+    ]
+    ag_inserted = 0
+    for ag in audience_groups_explicit:
+        ag_inserted += _exec_insert(
+            session,
+            pg_insert(AudienceGroup)
+            .values(**ag)
+            .on_conflict_do_nothing(constraint="uq_audience_groups_code"),
+        )
+
+    # Dynamic per-campus EVERYONE_<code> rows — read campuses seeded earlier this run
+    all_campuses = session.exec(
+        select(Campus).where(Campus.is_deleted == False)  # noqa: E712
+    ).all()
+    for campus in all_campuses:
+        row = {
+            "code": f"EVERYONE_{campus.code}",
+            "name": f"Everyone in {campus.name}",
+            "description": f"All users assigned to the {campus.name} campus.",
+            "filter_json": {"scope_type": "campus", "scope_codes": [campus.code]},
+            "is_active": True,
+        }
+        ag_inserted += _exec_insert(
+            session,
+            pg_insert(AudienceGroup)
+            .values(**row)
+            .on_conflict_do_nothing(constraint="uq_audience_groups_code"),
+        )
+    counts["audience_groups"] = ag_inserted
 
     # ── LeaveCreditPolicy — CL row (M8.1 TD-036) ─────────────────────────────
     # Bootstrap placeholder — real entitlement values managed via admin UI.

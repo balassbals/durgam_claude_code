@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from uuid import UUID
+
+import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import select
 
 from durgam.models.crosscutting import FileAsset
@@ -18,3 +22,14 @@ class FileAssetRepository(BaseRepository[FileAsset]):
             FileAsset.is_deleted == False,  # noqa: E712
         )
         return self._session.exec(stmt).first()
+
+    def list_by_announcement_id(self, announcement_id: UUID) -> list[FileAsset]:
+        """Return non-deleted FileAssets linked to an announcement via metadata_json."""
+        stmt = select(FileAsset).where(
+            FileAsset.is_deleted == False,  # noqa: E712
+            FileAsset.purpose == "announcement_attachment",
+            FileAsset.metadata_json.op("@>")(  # type: ignore[union-attr]
+                sa.cast({"announcement_id": str(announcement_id)}, JSONB)
+            ),
+        )
+        return list(self._session.exec(stmt).all())

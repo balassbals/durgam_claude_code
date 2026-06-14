@@ -6,6 +6,7 @@ from datetime import UTC, date, datetime
 from uuid import UUID
 
 import structlog
+from sqlmodel import Session, select
 
 from durgam.models.config_anchors import Holiday
 from durgam.repositories.holiday import HolidayRepository
@@ -83,3 +84,33 @@ class HolidayService:
         holiday = self._holidays.soft_delete(holiday, actor_id)
         log.info("holiday_deleted", holiday_id=str(holiday_id), actor=str(actor_id))
         return holiday
+
+
+def get_holiday_dates_in_window(
+    session: Session,
+    window_start: date,
+    window_end: date,
+) -> frozenset[date]:
+    """Return distinct calendar dates that are declared holidays in any
+    non-deleted Holiday row whose date falls in [window_start, window_end].
+
+    Implements the Q4(a) AY-union semantics implicitly: the query is over
+    all Holiday rows regardless of academic_year_id, so a date that appears
+    as a Holiday in either AY1 or AY2 (when the window straddles a rollover)
+    is included exactly once in the returned frozenset.
+
+    window_start and window_end are INCLUSIVE bounds. Caller is responsible
+    for choosing a sufficiently wide window — recommend scheduled_date to
+    scheduled_date + 14 days as the safe upper bound (worst-case 2-working-day
+    extension if every day were a holiday).
+    """
+    stmt = (
+        select(Holiday.holiday_date)
+        .where(
+            Holiday.holiday_date >= window_start,
+            Holiday.holiday_date <= window_end,
+            Holiday.is_deleted == False,  # noqa: E712
+        )
+        .distinct()
+    )
+    return frozenset(session.exec(stmt).all())

@@ -740,6 +740,40 @@ the direct and table-based pathways.
 
 ---
 
+### TD-043 — AudienceGroup program_degree_types filter is a non-functional stub
+
+**Surfaced**: M9 Phase 2 (resolver implementation).
+**Severity**: Medium — three frozen audience groups (STUDENT_UG, STUDENT_PG, STUDENT_PHD per M9 Q18) will not resolve to any users on launch.
+
+**Root cause**: `AudienceResolver._evaluate_filter` in `durgam/services/audience_resolver.py` reads the `program_degree_types` key from `filter_json` but cannot execute it because STUDENT users in `scripts/seed.py` (and in the production data model) are not linked to a `Program` via `UserRole.scope_type='program'`. The link does not exist anywhere in the schema today.
+
+**Test** capturing the stub: `tests/integration/test_audience_resolver.py::test_program_degree_types_returns_false_forward_concern`.
+
+**Fix paths** (pick one in a future milestone):
+(a) Extend STUDENT user seed + admission flows to populate `UserRole(role_id=<STUDENT>, scope_type='program', scope_id=<program_id>)` and update `_evaluate_filter` to query by it.
+(b) Introduce a dedicated `StudentEnrollment(user_id, program_id, batch_year, ...)` table and route `program_degree_types` through it. This also unlocks classwise/batchwise targeting (M13 forward concern in M9 out-of-scope).
+
+**Recommendation**: bundle with M13 (Student records) which has the same data-model dependency.
+
+---
+
+### TD-044 — 22 latent unit test failures in tests/unit/ pre-dating M9
+
+**Surfaced**: M9 Phase 2 (first time `pytest tests/` was run during M9 — prior gate rituals scoped to `tests/integration/` only).
+**Severity**: Medium — non-functional code paths, but masks any new unit-level regressions in those areas.
+
+**Failing tests** (verified to also fail at Phase 1 SHA e20ccc1, so pre-existing):
+- `tests/unit/test_audit_label_resolver.py` — 8 tests (TestAcademicYearResolver, TestCampusResolver, TestCentreResolver, TestCourseResolver, TestDepartmentResolver, TestLetterheadAssetResolver, TestRoleEmailResolver, TestSchoolResolver, each ::test_label)
+- `tests/unit/test_credit_annual_cl.py` — 6 tests
+- `tests/unit/test_leave_balance_import.py::test_resolve_active_ay_scenarios` — 1 test
+- `tests/unit/test_leave_jobs.py::TestCreditPeriodicElHpl` — 3 tests
+- `tests/unit/test_leave_notification_resolution.py::TestResolutionChain` — 2 tests
+- `tests/unit/test_leave_sanction_rule.py` — 2 tests
+
+**Action**: Open as separate triage at next milestone close. Each cluster likely has a different root cause. The gate-ritual definition should be updated to include `pytest tests/` (broad) in addition to `pytest tests/integration/` so future drift is caught at the milestone where it occurs, not later.
+
+---
+
 ## Resolved
 
 ### TD-036 — CL annual credit at AY start not implemented (resolved in M8.1 Phase 2)
@@ -788,3 +822,326 @@ removal targeted for 3.14), OR a SQLModel release introduces an internal `utcnow
 as a no-op safety net. It is currently inert against SQLModel 0.0.38.
 
 
+
+
+### TD-052 (EXTENDED in M9 Phase 8b.2 — originally RESOLVED in Phase 7.1)
+
+**Bug:** `can()` filtered out scoped `UserRole` rows even when the request passed
+`scope_type='*'` (meaning "accept a grant for any scope"). The outer condition:
+
+```python
+if user_role.scope_type is not None and scope_type is not None:
+    if user_role.scope_type != scope_type:
+        continue
+```
+
+evaluated `"*" != scope_type` as `True` for any scoped role (e.g. campus-scoped
+`DIRECTOR`), skipping the role before its permissions were examined.
+
+**Impact (Phase 7.1):** Every user holding a scoped composer role (DIRECTOR, HOD, DEAN,
+CENTRE_COORDINATOR) was denied `announcement:create:*` even though the permission
+grant's scope is `"*"` (wildcard). Scoped composers could not post announcements.
+
+**Phase 7.1 fix:** Added `and scope_type != "*"` to the outer condition. When the
+caller passes `scope_type='*'`, the user role's own `scope_type` is not used to filter
+it out.
+
+**Phase 8b.2 extension:** The same problem applies to `scope_type='own'`
+(per-instance ownership semantics, used by `announcement:soft_delete:own`). A
+campus-scoped DIRECTOR trying to withdraw their own announcement was denied because
+`"own" != "campus"` filtered out their `UserRole` before their permission was examined.
+`scope_type='own'` is not a structural role-scope — it signals that the handler body
+enforces ownership at runtime. The fix extends the bypass to include `"own"`:
+
+```python
+if ... and scope_type not in ("*", "own"):
+```
+
+**Regression tests:**
+- `tests/integration/test_auth.py::TestCan::test_can_scope_wildcard_request_accepts_scoped_user_role` (Phase 7.1)
+- `tests/integration/test_auth.py::TestCan::test_can_scope_own_request_accepts_scoped_user_role` (Phase 8b.2)
+
+**Meta-test gap:** `test_announcement_decorator_actions.py` verified that all decorator
+`(action, resource)` pairs have seeded Permission rows but didn't catch the `'own'`
+runtime failure — data presence ≠ auth resolution success for scoped users. A tighter
+meta-test would invoke `can()` with a synthetic scoped user for each decorator. Filed
+as TD-062 for a future tightening pass.
+
+**Resolved:** Phase 7.1 + Phase 8b.2, both on m9-announcements.
+
+---
+
+### TD-054 — Auto-announcement `composer_role_code = "SYSTEM"` literal
+
+**Phase:** M9 Phase 8a
+
+**Symptom:** Auto-announcements created via `_run_post_approval` use the literal
+string `"SYSTEM"` as `composer_role_code` because the approver's actual composer-
+eligible role is not readily determined from the approval context.
+
+**Root cause:** `ApprovalRequestService._run_post_approval` receives `approver_user_id`
+but does not look up which (if any) of that user's roles is in `announcement_composer_configs`.
+The `Announcement` model requires `composer_role_code` to be non-null.
+
+**Impact:** Auto-announcements display "SYSTEM" as their composer role in the browse
+list / detail panel. This is a minor cosmetic issue — the `source_type="auto"` field
+already distinguishes these from manual announcements.
+
+**Resolution path:** In a future milestone, query `AnnouncementComposerConfigRepository`
+for the approver's highest-priority enabled role at post-approval time, or extend the
+model with a nullable `composer_role_code` for `source_type="auto"` rows.
+
+---
+
+### TD-056 — Announcement attachments: no download-permission restriction
+
+**Phase:** M9 Phase 8b
+
+**Symptom:** Files uploaded with `purpose="announcement_attachment"` are downloadable
+by any authenticated user with `file_asset:read` permission (the permissive default
+of `_PURPOSE_PERMISSION_MAP` in `durgam/api/download.py`). There is no audience-based
+gate — a user not in the announcement's target audience groups can still download the
+attachment if they know the `file_id`.
+
+**Root cause:** Adding `"announcement_attachment"` to `_PURPOSE_PERMISSION_MAP` would
+require the download endpoint to know the announcement's audience groups, which means
+a DB join at download time. The endpoint currently has no context about which
+announcement the file belongs to.
+
+**Impact:** Low for M9 launch since announcement content itself is not access-restricted
+(the browse list shows all visible announcements). If future milestones add confidential
+announcements with restricted audience, this gap must be addressed.
+
+**Resolution path:** Add an announcement-aware download guard: look up
+`FileAsset.metadata_json["announcement_id"]`, resolve the announcement's audience
+groups, and gate on the requesting user's identity. Alternatively, use signed time-limited
+URLs (MinIO presigned URLs) for attachments with a short TTL.
+
+---
+
+### TD-057 — Announcement attachments: single-file limit enforced only by UI
+
+**Phase:** M9 Phase 8b
+
+**Symptom:** The spec allows one attachment per announcement (M9 design decision).
+This limit is enforced only at the UI layer (one file upload zone, no multi-select).
+The service method `attach_file_to_announcement` has no guard against calling it
+multiple times on the same announcement.
+
+**Root cause:** Adding the count check in the service layer was deferred to keep
+Phase 8b focused. The UI currently presents only one upload slot.
+
+**Impact:** Low for M9 — the UI prevents accidental multi-attach. A direct API call
+or a future UI change could bypass the limit without the service guard.
+
+**Resolution path:** Add a `list_attachments(announcement_id)` count check in
+`attach_file_to_announcement`: if `len(existing) >= 1`, raise `AnnouncementError`.
+When the spec is relaxed to N attachments, replace `1` with the configured limit.
+
+---
+
+### TD-062 — Decorator meta-test: data presence ≠ auth resolution for scoped users
+
+**Phase:** M9 Phase 8b.2
+
+**Symptom:** `test_announcement_decorator_actions.py` verified that every `@require_role`
+decorator's `(resource, action)` pair has a seeded `Permission` row. This did NOT catch
+the Phase 8b.2 bug where a campus-scoped DIRECTOR was denied `announcement:soft_delete:own`
+because `can()` filtered out their `UserRole` before checking permissions.
+
+**Root cause:** Data presence (Permission row exists) does not imply resolution success
+(a scoped user can actually pass `can()` for that permission). The meta-test needs a
+separate layer: for each decorator's `(action, resource, scope)`, invoke `can()` with a
+synthetic user holding the canonical scoped role and assert it returns `True`.
+
+**Impact:** Latent permission bugs on scoped roles slip through gate verification.
+Found and fixed by Phase 8b.2, but only by manual testing.
+
+**Resolution path:** Add a second assertion level to `test_announcement_decorator_actions.py`
+or a companion test: for each decorator triple `(action, resource, scope)`, create a
+synthetic scoped UserRole, call `can(scope_type=scope)`, and assert `True`. This covers
+the `scope_type not in ("*", "own")` bypass semantics as a live runtime check.
+
+---
+
+## M9 Tech Debt — Phase 9 Consolidation (TD-045 through TD-063)
+
+### Summary disposition table
+
+| ID | Title | Status | Resolution |
+|----|-------|--------|------------|
+| TD-043 | AudienceGroup program_degree_types filter is a non-functional stub | Deferred | M13 (Student records) — see formal entry above |
+| TD-044 | 22 latent unit test failures pre-dating M9 | Open | Test-hygiene phase; 61 failures observed in full-suite runs post-Phase-7 |
+| TD-045 | Distinct `withdrawn` vs `is_deleted` states for announcements | Open | Post-M9 model refinement; currently `is_deleted=True` means withdrawn, conflating two semantics |
+| TD-046 | Repository-level pagination for AnnouncementRepository | Open | Post-launch when volume warrants; current service-side slice is correct for M9 scale |
+| TD-047 | True baseline is ~61 failures, not the 22 filed at Phase 2 | Open | Phase 7 established 61 as the correct baseline; TD-044 entry should be updated at test-hygiene phase |
+| TD-048 | Compose button visibility for non-composer users | Resolved | Phase 8b.2 — UI confirmed; sys_admin button hides correctly via list_composer_eligible_roles returning empty |
+| TD-049 | Seed lacks composer-eligible users for manual walkthroughs | Resolved | Root cause: DB not reseeded after Phase 4; resolved mid-Phase-7 (TD-050) |
+| TD-050 | Local dev DB needed reseed after Phase 4 seed expansion | Resolved | Reseeded during Phase 7 walkthrough setup |
+| TD-051 | Seed re-run discipline not documented for fresh-clone setup | Open | Add to onboarding docs / Session start checklist at a future docs milestone |
+| TD-052 | `can()` scope_type filter too aggressive | Resolved | Phase 7.1 (scope `"*"`) + Phase 8b.2 (scope `"own"`) — see formal entry above |
+| TD-053 | Auth tests lack scoped-UserRole coverage for all decorator pairs | Open | Phase 8b.1 meta-test covers (action, resource) existence only; runtime resolution not verified for scoped roles |
+| TD-054 | Auto-announcement `composer_role_code = "SYSTEM"` literal | Open | Future refinement; see formal entry above |
+| TD-055 | Manual E2E test of auto-announce hook requires leave-balance fixture | Deferred | Phase 10 if fixture available; otherwise M10 when Leave/Approval cross-testing is simpler |
+| TD-056 | Announcement attachments: no download-permission restriction | Open | Post-M9 confidentiality hardening; see formal entry above |
+| TD-057 | Announcement attachments: single-file limit enforced only by UI | Open | Future UI multi-file work; see formal entry above |
+| TD-058 | CC test-suite totals have been paraphrased rather than verbatim in reports | Open | Process discipline; raw output mandate added to gate_verification.md M9 lessons |
+| TD-059 | Time-bounded withdraw window (announce then withdraw before publish) | Resolved | Phase 8c — publish_delay_seconds per category; withdraw_announcement rejects if scheduled_at ≤ now |
+| TD-060 | Read-receipt + withdraw notification | Deferred | Future Notifications milestone |
+| TD-061 | Scheduled publishing with grace period | Resolved | Phase 8c — publish_delay_seconds achieves configurable grace period; scheduled_at used as the publish boundary |
+| TD-062 | Decorator meta-test: data presence ≠ auth resolution for scoped users | Open | Test-hygiene phase; see formal entry above |
+| TD-063 | Baseline-capture requires 3-run determinism check | Resolved | Protocol established in Phase 8b.2; gate_verification.md M9 lessons record it |
+
+---
+
+### TD-045 — Distinct `withdrawn` vs `is_deleted` states for announcements
+
+**Phase:** M9 Phase 6a (filed in design discussion; formalized in Phase 9 sweep).
+**Severity:** Low — cosmetic/semantic only.
+
+**Root cause:** `Announcement` inherits `TimestampedSoftDelete`, which uses `is_deleted=True` for all soft-deletes. Announcements use soft-delete as "withdrawn" — a semantically distinct operation (composer reclaims an unread announcement) vs the default "administrative removal." The conflation means hard-delete is theoretically possible via the admin hard-delete endpoint (though no UI exposes it for announcements), and audit rows use `action="withdraw"` while the model flag is `is_deleted`. Future query patterns (e.g., "list withdrawn announcements for audit") must filter by audit action, not model field.
+
+**Resolution path:** Add a `withdrawn_at: datetime | None` field and `withdrawn_by: UUID | None` field to `Announcement`. Keep `is_deleted` for actual admin-removal; use `withdrawn_at IS NOT NULL` for user-facing withdraw state. Requires a migration.
+
+---
+
+### TD-046 — Repository-level pagination for AnnouncementRepository
+
+**Phase:** M9 Phase 6a (filed during service implementation; formalized in Phase 9 sweep).
+**Severity:** Low — correct at M9 scale; performance risk at scale.
+
+**Root cause:** `AnnouncementService.list_for_browse` loads all candidates into Python (via `list_by_composer` or `list_visible_to_user`), applies audience resolution and priority sorting, then slices by `offset/limit`. For M9 institutional scale (hundreds of announcements) this is acceptable. At thousands of announcements, the full-load approach wastes memory.
+
+**Resolution path:** Push the `ORDER BY` + `LIMIT/OFFSET` into the repository query. The priority sort (`sort_for_viewer`) must be adapted to work in SQL (CASE WHEN + JOIN on composer_config) or via a pre-computed rank column.
+
+---
+
+### TD-047 — True baseline is ~61 failures, not 22 (TD-044 undercount)
+
+**Phase:** M9 Phase 7 (baseline recalibrated after seeded_db contamination spread).
+**Severity:** Low — administrative.
+
+**Root cause:** TD-044 was filed at Phase 2 when only `tests/unit/` failures were counted (22). Full-suite `pytest tests/` runs reveal additional order-dependent failures in `tests/integration/` (seeded_db_engine contaminating db_session tests). The 61-failure baseline is the correct operational number from Phase 7 onward.
+
+**Resolution path:** Update TD-044 to note the 61-failure operational baseline. Triage and fix the contamination at a test-hygiene milestone (likely a small M9.1 or between M9 and M10).
+
+---
+
+### TD-051 — Seed re-run discipline undocumented for fresh-clone setup
+
+**Phase:** M9 Phase 7 (discovered when walkthrough failed due to missing seed data).
+**Severity:** Low — affects new developer setup, not production.
+
+**Root cause:** The CLAUDE.md Session start checklist does not include `uv run python scripts/seed.py` as a step after `alembic upgrade head` on a fresh clone. A developer who migrates the DB but does not seed it sees `PermissionDenied` for all announcement operations, which is hard to diagnose.
+
+**Resolution path:** Add a Step 5 to the Session start checklist in CLAUDE.md: "If this is a fresh clone or DB was reset: `uv run python scripts/seed.py`." Also document in runbook.md (already added in Phase 9 sweep).
+
+---
+
+### TD-053 — Auth meta-test: decorator (action, resource) existence ≠ runtime resolution for scoped users
+
+**Phase:** M9 Phase 8b.1 (meta-test filed); Phase 8b.2 (scoped-role gap confirmed).
+**Severity:** Medium — bugs in this class bypass CI.
+
+**Root cause:** `test_announcement_decorator_actions.py` checks that every `@require_role` decorator's `(action, resource)` pair has a matching seeded `Permission` row. This confirmed correctness at the schema level but not at the runtime `can()` resolution level. Phase 8b.2 showed that a campus-scoped `DIRECTOR` was denied despite having a valid permission row — because `can()` filtered out their `UserRole` before examining permissions (pre-8b.2 bug). The meta-test would have missed this.
+
+**Resolution path:** Add a second tier to `test_announcement_decorator_actions.py`: for each decorator triple `(action, resource, scope)`, create a synthetic `UserRole` with a structural scope (e.g., campus), call `can(scope_type=scope)`, and assert `True`. This exercises the runtime resolution path, not just schema presence.
+
+---
+
+### TD-055 — Manual E2E test of auto-announce hook requires a valid leave-balance fixture
+
+**Phase:** M9 Phase 8a (auto-announce hook shipped but E2E not verified via a real approval flow).
+**Severity:** Low — the hook is unit-tested; the integration gap is in the E2E layer only.
+
+**Root cause:** Triggering the auto-announce hook in an E2E test requires: (a) a seeded leave request, (b) an approval process with `auto_announce_on_approve=True`, and (c) a user with the approver role to progress the request to the final stage. The M9 E2E fixture base doesn't include a leave-balance fixture (that's M8 territory). Setting up a full leave-approval flow in a Phase 10 E2E test is feasible but adds complexity.
+
+**Resolution path:** Phase 10 E2E: add a focused integration test (not Playwright) that directly calls `ApprovalRequestService.approve()` with a seeded process that has `auto_announce_on_approve=True` and asserts that an `Announcement` row is created. Playwright verification of the created announcement in the browse list can be a separate E2E scenario.
+
+---
+
+### TD-058 — CC test-suite report numbers were paraphrased, not verbatim
+
+**Phase:** M9 (cross-phase observation; formalized in Phase 9 sweep).
+**Severity:** Low — process discipline only.
+
+**Root cause:** Multiple phase reports (Phase 6a "898", Phase 6b "1474", Phase 8b "87") stated test counts that didn't match actual `pytest` output. The root cause is that CC paraphrased suite results instead of pasting verbatim `tail -3` output. This made it impossible to verify whether regressions were introduced between phases.
+
+**Resolution path:** All phase reports must paste verbatim `pytest ... 2>&1 | tail -3` output. The raw output mandate is documented in `docs/prompts/gate_verification.md` M9 lessons section. `docs/milestones/M9.md` Phase 9 row corrects the Phase 8c stale numbers.
+
+---
+
+### TD-059 — Time-bounded withdraw window
+
+**Phase:** M9 Phase 8c. **Status: Resolved.**
+
+`Announcement.scheduled_at` is set to `now + category.publish_delay_seconds` at create time. `withdraw_announcement` rejects if `scheduled_at <= now`. The pending window is thus exactly `publish_delay_seconds` seconds from composition time. After the window the announcement is visible to recipients and withdraw is blocked.
+
+---
+
+### TD-060 — Read-receipt + withdraw notification not implemented
+
+**Phase:** M9 (filed during Phase 8 design discussion).
+**Severity:** Low — enhancement.
+
+**Root cause:** When an announcement is withdrawn, recipients currently see no notification. Similarly, there is no read-receipt mechanism. Both require the push-notification infrastructure that `TD-032` describes as not yet built.
+
+**Resolution path:** Defer to a future Notifications milestone after TD-032's dispatch worker exists.
+
+---
+
+### TD-061 — Scheduled publishing with grace period
+
+**Phase:** M9 Phase 8c. **Status: Resolved.**
+
+The `publish_delay_seconds` field on `AnnouncementCategory` provides a configurable grace period between composition and publication. `create_announcement` sets `scheduled_at = now + delay`; `list_visible_to_user` already filters `scheduled_at <= now`, so pending announcements are invisible to recipients during the grace period. This achieves the "scheduled publishing with grace period" goal without a separate `status` field.
+
+---
+
+### TD-063 — Baseline-capture requires 3-run determinism check
+
+**Phase:** M9 Phase 8b.2. **Status: Resolved.**
+
+Protocol established: before declaring a test suite baseline, the full non-E2E suite must be run 3 consecutive times. Any test that fails in some runs but not others is a flake and must be investigated before it can be excluded from the baseline count. The protocol is documented in `docs/prompts/gate_verification.md` M9 lessons.
+
+---
+
+### TD-064 — E-017 E2E tests xfailed: `_create_approved_leave` missing `half_day` column
+
+**Phase:** M9 Phase 10.1. **Status: Open.**
+
+**Location:** `tests/e2e/test_leave_withdraw_approved.py` — `TestWithdrawApprovedLeave` (all 3 tests).
+
+**What it is:** The `_create_approved_leave()` SQL helper was written before commit `f903c28` (M8) added the `half_day` column to `leave_requests` with `NOT NULL DEFAULT false`. The helper's INSERT omits `half_day`, so PostgreSQL raises `null value in column "half_day"` and all 3 E2E tests error at fixture setup, before reaching any assertion about the E-017 feature itself.
+
+All 3 tests are marked `@pytest.mark.xfail(strict=False, reason="E-017 ...")` so the M9 E2E gate is green. The underlying E-017 feature (withdraw post-approval) was not implemented in M9.
+
+**Trigger to re-open:** When E-017 is scheduled for implementation, the fix requires two changes: (1) add `half_day = false` to the INSERT in `_create_approved_leave()`; (2) implement the post-approval withdraw service method and UI. Remove the xfail decorators and verify all 3 tests pass.
+
+---
+
+### TD-065 — E-022 E2E test xfailed: `get_by_label("Availed")` finds no match
+
+**Phase:** M9 Phase 10.1. **Status: Open.**
+
+**Location:** `tests/e2e/test_leave_balance_admin.py` — `TestLeaveBalanceAdminEdit.test_search_edit_save_shows_updated_closing`.
+
+**What it is:** The E2E test for admin manual balance editing uses `page.get_by_label("Availed")` to locate the availed input in the edit form. Per the M2 E2E selector rule, `rx.text()` renders as `<p>`, not `<label>`, so `get_by_label` will not find inputs. The correct selector pattern is `get_by_placeholder(...)`. The test was written without verifying the selector against the rendered page. The test is marked `@pytest.mark.xfail(strict=False, reason="E-022 ...")` so the M9 E2E gate is green.
+
+The underlying E-022 feature (admin manual edit of leave records) may be partially implemented in M8.1; the selector bug is separable from the feature completeness question.
+
+**Trigger to re-open:** When E-022 is scheduled, fix the selector (`get_by_placeholder(...)` or an `input[name=...]` locator verified against the rendered form) and remove the xfail decorator. Run locally against the running app to verify the selector before committing.
+
+---
+
+### TD-066 — Composer scope label resolved at display time, not stored
+
+**Phase:** M9 Phase 10.2. **Status: Open.**
+
+**Location:** `durgam/services/announcement.py` — `_resolve_composer_scope_label()`; called from `durgam/states/announcements.py` (`load_announcements`, `open_detail`) and `durgam/pages/shared/recent_announcements_widget.py` (`load_widget_data`).
+
+**What it is:** `_resolve_composer_scope_label(user_id, role_code, session)` queries `Role` + `UserRole` + the scope entity (Campus, Department, School, CentreOfExcellence) at display time to produce the label "Dean, School of Science" / "Head of Department, Mathematics & Computer Science" etc. This is correct at render time but means: if the user's scope changes after posting (transfer, rename of entity, or role revocation + re-grant with a different scope), the displayed label will reflect the NEW scope, not the scope at composition time.
+
+**Why not stored:** The `Announcement` model already stores `composer_role_code`. Storing `composer_scope_type` + `composer_scope_id` + `composer_scope_name` at create time would require a migration and freeze the label at composition time. Deferred to a future revision when there is evidence this causes confusion (transfers within a posting's visible lifetime are rare).
+
+**Resolution path:** Add `composer_scope_type: str | None`, `composer_scope_id: UUID | None`, `composer_scope_label: str | None` columns to `announcements` table. Populate from `_resolve_composer_scope_label` at create time. Read stored label directly in state — no DB join needed at display time.

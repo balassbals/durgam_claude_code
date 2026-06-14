@@ -103,6 +103,10 @@ class ApprovalProcess(TimestampedSoftDelete, table=True):
     informational_cc_role_codes: list[str] | None = Field(
         default=None, sa_column=Column(JSONB, nullable=True)
     )
+    auto_announce_on_approve: bool = Field(default=False, nullable=False)
+    auto_announce_target_json: dict[str, Any] | None = Field(
+        default=None, sa_column=Column(JSONB, nullable=True)
+    )
 
 
 class ApprovalRequest(TimestampedSoftDelete, table=True):

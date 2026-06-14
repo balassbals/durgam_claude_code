@@ -53,6 +53,9 @@ register(NavEntry(
         ("write",     "approval_process",                None),
         ("write",     "designation",                     None),
         ("configure", "leave_sanction_rule",             None),
+        ("configure", "announcement_composer_config",     None),
+        ("configure", "announcement_category",            None),
+        ("configure", "audience_group",                   None),
     ),
 ))
 register(NavEntry(
@@ -288,4 +291,29 @@ register(NavEntry(
     group="Config",
     permission_action="configure",
     permission_resource="leave_sanction_rule",
+))
+# ── M9 Announcement config nav entries ─────────────────────────────────────────
+register(NavEntry(
+    label="Composer Roles",
+    href="/admin/config/announcement-composer",
+    icon="mic",
+    group="Config",
+    permission_action="configure",
+    permission_resource="announcement_composer_config",
+))
+register(NavEntry(
+    label="Announcement Categories",
+    href="/admin/config/announcement-categories",
+    icon="tag",
+    group="Config",
+    permission_action="configure",
+    permission_resource="announcement_category",
+))
+register(NavEntry(
+    label="Audience Groups",
+    href="/admin/config/audience-groups",
+    icon="users",
+    group="Config",
+    permission_action="configure",
+    permission_resource="audience_group",
 ))

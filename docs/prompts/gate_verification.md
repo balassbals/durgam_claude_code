@@ -484,11 +484,13 @@ Running bare `pytest` (no path argument) triggers alphabetical discovery:
 `e2e/ → integration/ → property/ → unit/`. The `seeded_db_engine` session fixture
 is initialized when integration tests run, populating `durgam_test` with seed data.
 Unit tests that run after (e.g., `test_leave_sanction_rule.py`) assert a clean DB and
-fail on the pre-existing seed rows. Running `pytest tests/unit/ tests/integration/`
+fail on the pre-existing seed rows. Running `pytest tests/ --ignore=tests/e2e/`
 avoids the cross-contamination. See TD-034.
 
-**Lesson**: always invoke as `uv run pytest tests/unit/ tests/integration/ -q --no-cov`
+**Lesson**: always invoke as `uv run pytest tests/ --ignore=tests/e2e/ -q --no-cov`
 for the gate-passing run. Never rely on bare `pytest` output as gate evidence.
+
+**Coverage**: this command runs unit, property, and integration tests. As of M9 Phase 2.1, 22 pre-existing unit test failures are documented in TD-044 (see `docs/tech_debt.md`). They are known and tracked — they do not block the gate, but the failure count must not increase. Compare each run's failure list against TD-044's enumeration; any new failure is a regression.
 
 ### 2. Detached-HEAD risk on fresh-clone gate ritual
 
@@ -574,3 +576,53 @@ Across M8.1, the manual walkthrough caught real defects that green test suites d
 - Phase 8.3: UI permitted impossible state transitions for elapsed-window approved leaves
 
 The pattern from M5b/M6a/M7/M8/M8.1 is consistent: green pytest is necessary but not sufficient. The walkthrough is the ground-truth quality gate for integrated behavior.
+
+---
+
+## M9 Gate Lessons
+
+### Baseline discipline — 3-run determinism requirement (TD-063)
+
+The "61 failed, 1317 passed" baseline was observed consistently across multiple runs from Phase 7 onward. The ordering-sensitive failures (seeded_db_engine contamination of db_session tests) are pre-existing and stable. Any new failure that appears in some runs but not others is a flake, not a baseline failure — investigate before adding it to the failure allowlist.
+
+**Protocol (Phase 8b.2)**: run `pytest tests/ -q --no-cov --ignore=tests/e2e/` three consecutive times. If pass/fail counts vary, identify the varying tests before proceeding.
+
+### Raw output mandate (TD-058)
+
+Multiple M9 phase reports paraphrased test suite totals rather than pasting verbatim `pytest` output. The correct gate verification command:
+
+```bash
+uv run pytest tests/ -q --no-cov --ignore=tests/e2e/ 2>&1 | tail -3
+```
+
+Paste the raw output line (e.g., `61 failed, 1317 passed, 72 warnings in 181.42s`). Do not paraphrase or compute from memory. Bala runs this himself at gate time; CC reports serve as the first-pass signal, not the ground truth.
+
+### Decorator action ↔ seeded permission must match (TD-053 / Phase 8b.1)
+
+Every `@require_role(action="X", resource="Y", scope="Z")` must have a matching `(Y, X, Z)` triple in `scripts/seed.py`. The meta-test `test_announcement_decorator_actions.py` checks existence. Run it in isolation before claiming a phase is complete:
+
+```bash
+uv run pytest tests/integration/test_announcement_decorator_actions.py -v
+```
+
+Also verify that `can()` resolves to `True` for the canonical scoped user for each `scope="own"` or `scope="*"` decorator — data presence ≠ runtime resolution (TD-053).
+
+### Seed re-run after permission changes (Phase 8b.1 / M8.1 Phase 8)
+
+After any commit that adds new permission triples to `scripts/seed.py`, run:
+
+```bash
+uv run python scripts/seed.py
+```
+
+before the next manual walkthrough. Missing this step causes `PermissionDenied` for every user for the new resource, even with syntactically correct code and seed content.
+
+### `can()` bypass semantics for non-structural scope types
+
+`scope_type="*"` and `scope_type="own"` are **not** structural role-scopes. When a handler is decorated with either, the caller's `UserRole.scope_type` is not used to filter out the role — only the permission grant is checked. This is encoded in `durgam/auth/permissions.py` line 67:
+
+```python
+if user_role.scope_type is not None and scope_type is not None and scope_type not in ("*", "own"):
+```
+
+Scoped roles (DIRECTOR with scope_type="campus", HOD with scope_type="department") CAN satisfy a `scope="*"` or `scope="own"` permission check. The handler body must separately enforce ownership (for "own") or global applicability (for "*"). This invariant must be preserved when modifying `can()` in future milestones.

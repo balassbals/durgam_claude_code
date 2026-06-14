@@ -267,3 +267,109 @@ Faculty can withdraw their own approved leave from `/leave` while `today ≤ end
 ### Known limitation — TD-034
 
 Full-suite `pytest` invocations (bare or `tests/unit/ tests/integration/`) produce 56 false failures in `tests/integration/test_m5b_purchase_rules.py` due to `seeded_session`/`db_session` fixture-pool interaction. This is pre-existing since M8. Gate ritual uses scoped invocations only. See `docs/prompts/gate_verification.md` → M8.1 lessons for the workaround.
+
+---
+
+## Announcements (M9)
+
+### Configure a category's withdraw window
+
+Sys_admin only. UI: `/admin/config/announcement-categories` → edit a category → set **Withdraw Window (seconds)**. Range 0–86400 (max 24 hours). 0 = instant publish, no pending window.
+
+Auto-announcements (source_type = "auto") always publish immediately and cannot be withdrawn regardless of the category setting.
+
+Direct SQL alternative (dev/ops only):
+
+```sql
+UPDATE announcement_categories
+SET publish_delay_seconds = 1800
+WHERE code = 'NOTIFICATION';
+```
+
+---
+
+### Enable auto-announce on an approval process
+
+Sys_admin only. No UI in M9 — SQL-only configuration:
+
+```sql
+UPDATE approval_processes
+SET auto_announce_on_approve = true,
+    auto_announce_target_json = '{
+      "category_code": "NOTIFICATION",
+      "audience_group_codes": ["ALL"],
+      "title_template": "Approved: {process_title}",
+      "message_template": "Request {request_id} approved by {approver_username}."
+    }'::jsonb
+WHERE code = 'LEAVE_APPROVAL';
+```
+
+The hook fires when `ApprovalRequestService._run_post_approval()` runs on terminal approval. Hook failures are logged and do NOT fail the approval. Audit row is written by `create_auto_announcement` directly. composer_role_code is set to `"SYSTEM"` (TD-054).
+
+---
+
+### Withdraw mechanics
+
+- **Composer-only**: `Announcement.composer_user_id` must equal the actor's user ID.
+- **Pending window only**: withdraw is allowed only when `scheduled_at > NOW()`. After the publish time passes, the announcement is visible to recipients and cannot be withdrawn.
+- **Auto-announcements cannot be withdrawn** at all (`source_type = "auto"` raises `AnnouncementWithdrawalNotAllowedError`).
+- **Withdrawn state**: `is_deleted = True` (TD-045 notes this conflates "withdrawn" with "admin-deleted" — future refinement pending).
+- Audit row action = `"withdraw"` is written by the service regardless of the `is_deleted` field name.
+
+Key SQL to find pending announcements:
+
+```sql
+SELECT id, title, scheduled_at, composer_user_id
+FROM announcements
+WHERE is_deleted = false
+  AND scheduled_at > NOW()
+ORDER BY scheduled_at;
+```
+
+---
+
+### Storage locations for attachments
+
+| Environment | Location |
+|------------|----------|
+| Development (`ENVIRONMENT != "production"`) | Local filesystem at `<project_root>/uploaded_files/<storage_key>` |
+| Production | MinIO bucket per `MINIO_*` env vars in `durgam/config.py` |
+
+File storage keys are flat UUID-hex strings (e.g., `a261095caa4d41cdb7acad033b10ca17`). Original filenames are stored in `file_assets.original_name`. The download endpoint is `/api/files/{file_id}`.
+
+There is no audience-gate on attachment downloads in M9 (TD-056): any authenticated user with `file_asset:read` permission can download any attachment if they know the file_id. This is acceptable for M9's all-visible announcement content but must be hardened before any confidential announcement feature is shipped.
+
+---
+
+### Key SQL for ops
+
+```sql
+-- List all active announcements visible right now
+SELECT a.id, a.title, a.importance, a.scheduled_at, a.composer_role_code,
+       a.category_code, a.audience_group_codes
+FROM announcements a
+WHERE a.is_deleted = false
+  AND a.scheduled_at <= NOW()
+ORDER BY a.importance DESC, a.scheduled_at DESC;
+
+-- Find all pending announcements (in withdraw window)
+SELECT id, title, scheduled_at, composer_user_id,
+       (scheduled_at - NOW()) AS time_until_publish
+FROM announcements
+WHERE is_deleted = false AND scheduled_at > NOW()
+ORDER BY scheduled_at;
+
+-- Check category withdraw window settings
+SELECT code, name, publish_delay_seconds,
+       (publish_delay_seconds / 60) AS delay_minutes
+FROM announcement_categories
+WHERE is_deleted = false
+ORDER BY display_order;
+
+-- List auto-announcements from the last 30 days
+SELECT a.id, a.title, a.source_ref_id, a.created_at
+FROM announcements a
+WHERE a.source_type = 'auto'
+  AND a.created_at >= NOW() - INTERVAL '30 days'
+ORDER BY a.created_at DESC;
+```

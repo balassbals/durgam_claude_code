@@ -4,7 +4,8 @@
 **Spec**: `docs/durgam_rfp_v3.pdf` — all section references (§8, §12, etc.) point to this file.
 **Python**: 3.13 (pinned via `.python-version`).
 **Theme**: Puttaparthi Saffron–Indigo–Ivory (§15.1). Single committed theme; no alternatives in v3.
-**Current milestone**: M8.1 closed. Merged to main as c8962fd on 2026-06-11; tag: m8.1-close. M8.1 covered E-016 (legacy balance import), E-017 (withdraw approved leave), E-022 (admin balance/request edit), TD-036 (CL annual credit), TD-037 (notification enqueue silent no-op). The next milestone has not been selected yet; candidates listed in docs/milestones/.
+**Current milestone**: M9 in progress (branch: m9-announcements). Scope: Announcement Module per RFP §9.3 + §9.6 + §10.1, with composer roster, categories, and audience groups via three-tier governance (SYS_ADMIN / REGISTRAR-tier). All 18 design decisions frozen (2026-06-12) in docs/milestones/M9.md. Phase 1 ready to begin.
+**Previous milestone**: M8.1 closed 2026-06-11, merged as c8962fd, tag m8.1-close.
 
 ## Authority files (binding, in priority order)
 
@@ -1571,10 +1572,67 @@ rx.vstack(
 
 Discovered at M8.1 Phase 9.2 on `/admin/leave/credit-policy`.
 
-## Current milestone
-**M8.1 closed. Merged to main as c8962fd on 2026-06-11; tag: m8.1-close.**
+## Patterns established at M9
 
-M8.1 closed. Merged to main as c8962fd on 2026-06-11; tag: m8.1-close. M8.1 covered E-016 (legacy balance import), E-017 (withdraw approved leave), E-022 (admin balance/request edit), TD-036 (CL annual credit), TD-037 (notification enqueue silent no-op). The next milestone has not been selected yet; candidates listed in docs/milestones/.
+### Decorator action must match seeded Permission row exactly (TD-053 / Phase 8b.1)
+
+Every `@require_role(action="X", resource="Y", scope="Z")` decorator must have a
+corresponding `(Y, X, Z)` triple in `scripts/seed.py`. The CI meta-test
+`tests/integration/test_announcement_decorator_actions.py` enforces this for M9
+state classes. New modules must extend the meta-test or add a module-specific equivalent.
+
+**Common failure mode**: `action="write"` on the decorator when the seeded triple uses
+`action="soft_delete"`. The seeded action vocabulary is the canonical source — always
+grep `scripts/seed.py` for the resource before choosing the decorator action.
+
+### `can()` bypass semantics for non-structural scope types (TD-052 / Phase 7.1 + 8b.2)
+
+Two scope values bypass the `UserRole.scope_type` filter in `durgam/auth/permissions.py`:
+
+- **`scope_type="*"`** — caller requests any-scope access; a scoped UserRole (e.g., campus-scoped DIRECTOR) can satisfy this.
+- **`scope_type="own"`** — per-instance ownership; the UserRole's structural scope is irrelevant. The handler body enforces ownership at runtime via `ann.composer_user_id == actor_id`.
+
+The invariant in `can()` at line 67:
+```python
+if user_role.scope_type is not None and scope_type is not None and scope_type not in ("*", "own"):
+```
+
+**Do not revert or weaken this condition.** Adding new non-structural scope semantics requires updating both the condition AND the docstring's item list.
+
+**Regression tests** (must stay green):
+- `test_can_scope_wildcard_request_accepts_scoped_user_role` (Phase 7.1)
+- `test_can_scope_own_request_accepts_scoped_user_role` (Phase 8b.2)
+
+### Service-layer direct audit for methods called outside page-state handlers
+
+Announcement service methods (`create_announcement`, `withdraw_announcement`, `attach_file_to_announcement`, `create_auto_announcement`) emit audit via `write_audit_row` directly — not via the `@audit_action` state decorator. This follows the M7 approval-engine pattern.
+
+**Why**: These methods are called from both page-state handlers (which have `@audit_action`) AND from background hooks (`_run_post_approval`). If audit were delegated to the decorator, the background-hook call path would silently produce no audit row. The service-level call is the only path guaranteed to run in all invocation contexts.
+
+**Pattern**: emit `write_audit_row` inside the `with open_session()` block, AFTER the DB write succeeds, with `before_snap` captured before the write and `after_snap = audit_snapshot(entity)` called while the entity is still attached.
+
+### Publish-delay window semantics (Phase 8c)
+
+`AnnouncementCategory.publish_delay_seconds` (0–86400) controls a pending window:
+- **`scheduled_at`** is set to `now + timedelta(seconds=category.publish_delay_seconds)` by `create_announcement`.
+- During the window (`scheduled_at > now`): announcement invisible to recipients, withdrawable by composer.
+- After the window (`scheduled_at ≤ now`): visible to recipients, withdraw blocked.
+- **Auto-announcements bypass the delay**: `create_auto_announcement` always sets `scheduled_at = now`.
+
+This is NOT a cron-based scheduler. The "publish" boundary is enforced lazily at query time by the `scheduled_at ≤ now` filter in `AnnouncementRepository.list_visible_to_user`. No background job is needed.
+
+### Seed re-run after adding new permission triples
+
+After any commit that adds new `(resource, action, scope)` triples to `scripts/seed.py`,
+run `uv run python scripts/seed.py` against the dev DB BEFORE the next manual walkthrough.
+Skipping this step causes `PermissionDenied` for every user for the new resource even when
+the code and seed content are syntactically correct. This is the third occurrence of this
+bug class: M3 (course:delete:*), M8.1 Phase 8 (leave_request_admin:write:*), and M9 Phase 5 (announcement permissions).
+
+## Current milestone
+**M9 in progress (branch: m9-announcements). Scope: Announcement Module per RFP §9.3 + §9.6 + §10.1, with composer roster, categories, and audience groups via three-tier governance (SYS_ADMIN / REGISTRAR-tier). All 18 design decisions frozen (2026-06-12) in docs/milestones/M9.md. Phase 1 ready to begin.**
+
+**Previous milestone:** M8.1 closed 2026-06-11, merged as c8962fd, tag m8.1-close.
 
 This line is the source of truth for "where are we." Before opening a milestone-completing PR, Claude Code MUST:
 1. Grep this file for "Current milestone" and update both occurrences (the top status line and this section).
