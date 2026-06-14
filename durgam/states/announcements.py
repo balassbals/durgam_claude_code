@@ -11,7 +11,7 @@ is done via rx.redirect("/announcements"), which triggers on_load → BrowseStat
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date as date_type, datetime
 from typing import Any
 from uuid import UUID
 
@@ -85,8 +85,6 @@ class AnnouncementBrowseState(BaseState):
         )
         from durgam.services.announcement import AnnouncementService
 
-        from datetime import date as date_type
-
         imp_filter = None if self.importance_filter == "all" else self.importance_filter
         d_from: date_type | None = None
         d_to: date_type | None = None
@@ -117,8 +115,10 @@ class AnnouncementBrowseState(BaseState):
                 date_from=d_from,
                 date_to=d_to,
             )
+            now = datetime.now(UTC)
             rows = []
             for a in page:
+                is_pending = a.scheduled_at > now
                 rows.append({
                     "id": str(a.id),
                     "title": a.title,
@@ -127,6 +127,8 @@ class AnnouncementBrowseState(BaseState):
                     "scheduled_at": _format_dt(a.scheduled_at),
                     "composer_role_code": a.composer_role_code,
                     "is_withdrawn": a.is_deleted,
+                    "is_pending": is_pending,
+                    "can_withdraw": is_pending and not a.is_deleted,
                     "snippet": (
                         a.message_text[:120] + "…"
                         if len(a.message_text) > 120
@@ -458,6 +460,8 @@ class AnnouncementDetailState(BaseState):
                     announcement_id=UUID(announcement_id),
                     viewer_user_id=user_id,
                 )
+                now_dt = datetime.now(UTC)
+                is_pending = ann.scheduled_at > now_dt
                 detail = {
                     "id": str(ann.id),
                     "title": ann.title,
@@ -468,6 +472,8 @@ class AnnouncementDetailState(BaseState):
                     "composer_role_code": ann.composer_role_code,
                     "composer_user_id": str(ann.composer_user_id),
                     "is_withdrawn": ann.is_deleted,
+                    "is_pending": is_pending,
+                    "can_withdraw": is_pending and not ann.is_deleted,
                     "audience_group_codes": ann.audience_group_codes,
                     "is_own": str(ann.composer_user_id) == self.current_user_id,
                 }

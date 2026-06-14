@@ -331,10 +331,13 @@ class TestAnnouncementWithdraw:
         _audience_group(session, "ALL_W")
 
         now = _now()
+        # Use a future scheduled_at so the announcement is in the pending window
+        # (not yet published); withdraw is only allowed before scheduled_at.
+        pending_at = now + timedelta(minutes=30)
         ann = Announcement(
             title="Test",
             message_text="Body",
-            scheduled_at=now,
+            scheduled_at=pending_at,
             importance="normal",
             category_code="NOTICE",
             audience_group_codes=["ALL_W"],

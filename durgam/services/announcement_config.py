@@ -88,6 +88,14 @@ class AnnouncementCategoryService:
     def list_all(self) -> list[AnnouncementCategory]:
         return self._repo.list_all()
 
+    @staticmethod
+    def _validate_delay(seconds: int) -> int:
+        if seconds < 0 or seconds > 86400:
+            raise AnnouncementConfigError(
+                "Publish delay must be between 0 and 86400 seconds (24 hours)."
+            )
+        return seconds
+
     def create(
         self,
         *,
@@ -95,6 +103,7 @@ class AnnouncementCategoryService:
         name: str,
         display_order: int,
         is_active: bool,
+        publish_delay_seconds: int = 0,
         notes: str | None,
         actor_id: UUID,
     ) -> AnnouncementCategory:
@@ -106,12 +115,14 @@ class AnnouncementCategoryService:
             raise AnnouncementConfigError("Category name is required.")
         if self._repo.get_by_code(code) is not None:
             raise AnnouncementConfigError(f"Category code '{code}' is already in use.")
+        self._validate_delay(publish_delay_seconds)
         now = datetime.now(UTC)
         category = AnnouncementCategory(
             code=code,
             name=name,
             display_order=display_order,
             is_active=is_active,
+            publish_delay_seconds=publish_delay_seconds,
             notes=notes or None,
             created_by=actor_id,
             updated_by=actor_id,
@@ -131,6 +142,8 @@ class AnnouncementCategoryService:
             if not name:
                 raise AnnouncementConfigError("Category name is required.")
             fields["name"] = name
+        if "publish_delay_seconds" in fields:
+            self._validate_delay(fields["publish_delay_seconds"])
         fields["updated_by"] = actor_id
         category = self._repo.update(id_, **fields)
         log.info("announcement_category_updated", category_id=str(id_), actor=str(actor_id))

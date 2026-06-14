@@ -31,6 +31,7 @@ class AnnouncementCategoryConfigState(BaseState):
     form_name: str = ""
     form_display_order: int = 0
     form_is_active: bool = True
+    form_publish_delay_seconds: int = 0
     form_notes: str = ""
 
     confirm_open: bool = False
@@ -58,6 +59,7 @@ class AnnouncementCategoryConfigState(BaseState):
                     "notes": c.notes or "",
                     # raw for edit
                     "raw_is_active": "1" if c.is_active else "0",
+                    "raw_publish_delay_seconds": str(c.publish_delay_seconds),
                     "raw_notes": c.notes or "",
                 })
 
@@ -79,6 +81,12 @@ class AnnouncementCategoryConfigState(BaseState):
     def set_form_is_active(self, v: bool) -> None:
         self.form_is_active = v
 
+    def set_form_publish_delay_seconds(self, v: str) -> None:
+        try:
+            self.form_publish_delay_seconds = max(0, min(86400, int(v)))
+        except (ValueError, TypeError):
+            self.form_publish_delay_seconds = 0
+
     def set_form_notes(self, v: str) -> None:
         self.form_notes = v
 
@@ -90,6 +98,7 @@ class AnnouncementCategoryConfigState(BaseState):
         self.form_name = ""
         self.form_display_order = 0
         self.form_is_active = True
+        self.form_publish_delay_seconds = 0
         self.form_notes = ""
         self.show_form = True
 
@@ -100,6 +109,7 @@ class AnnouncementCategoryConfigState(BaseState):
         name: str,
         display_order: str,
         is_active: str,
+        publish_delay_seconds: str,
         notes: str,
     ) -> None:
         self.flash = ""
@@ -112,6 +122,10 @@ class AnnouncementCategoryConfigState(BaseState):
         except (ValueError, TypeError):
             self.form_display_order = 0
         self.form_is_active = is_active == "1"
+        try:
+            self.form_publish_delay_seconds = max(0, min(86400, int(publish_delay_seconds)))
+        except (ValueError, TypeError):
+            self.form_publish_delay_seconds = 0
         self.form_notes = notes
         self.show_form = True
 
@@ -137,6 +151,8 @@ class AnnouncementCategoryConfigState(BaseState):
         is_active = self.form_is_active
         notes = self.form_notes.strip() or None
 
+        publish_delay_seconds = self.form_publish_delay_seconds
+
         try:
             with open_session() as session:
                 svc = _svc(session)
@@ -147,6 +163,7 @@ class AnnouncementCategoryConfigState(BaseState):
                         name=name,
                         display_order=display_order,
                         is_active=is_active,
+                        publish_delay_seconds=publish_delay_seconds,
                         notes=notes,
                         actor_id=actor_id,
                     )
@@ -162,6 +179,7 @@ class AnnouncementCategoryConfigState(BaseState):
                             "name": name,
                             "display_order": display_order,
                             "is_active": is_active,
+                            "publish_delay_seconds": publish_delay_seconds,
                             "notes": notes,
                         },
                         actor_id,

@@ -40,11 +40,15 @@ def _importance_badge(row: rx.Var) -> rx.Component:
     )
 
 
-def _withdrawn_badge(row: rx.Var) -> rx.Component:
+def _status_badges(row: rx.Var) -> rx.Component:
     return rx.cond(
         row["is_withdrawn"],
         rx.badge("Withdrawn", color_scheme="gray", variant="outline"),
-        rx.fragment(),
+        rx.cond(
+            row["is_pending"],
+            rx.badge("Pending", color_scheme="amber", variant="soft"),
+            rx.fragment(),
+        ),
     )
 
 
@@ -54,7 +58,7 @@ def _row_card(row: rx.Var) -> rx.Component:
             rx.hstack(
                 _importance_badge(row),
                 rx.badge(row["category_code"], color_scheme="indigo", variant="soft"),
-                _withdrawn_badge(row),
+                _status_badges(row),
                 rx.spacer(),
                 rx.text(
                     row["scheduled_at"],
@@ -408,7 +412,11 @@ def _detail_panel() -> rx.Component:
                 rx.cond(
                     AnnouncementDetailState.detail["is_withdrawn"],
                     rx.badge("Withdrawn", color_scheme="gray", variant="outline"),
-                    rx.fragment(),
+                    rx.cond(
+                        AnnouncementDetailState.detail["is_pending"],
+                        rx.badge("Pending", color_scheme="amber", variant="soft"),
+                        rx.fragment(),
+                    ),
                 ),
                 flex_wrap="wrap",
                 gap="0.5rem",
@@ -463,10 +471,10 @@ def _detail_panel() -> rx.Component:
                 ),
                 rx.fragment(),
             ),
-            # Withdraw button — only own, non-withdrawn announcements
+            # Withdraw button — only own, pending (not yet published) announcements
             rx.cond(
                 AnnouncementDetailState.detail["is_own"]
-                & ~AnnouncementDetailState.detail["is_withdrawn"],
+                & AnnouncementDetailState.detail["can_withdraw"],
                 destructive_btn(
                     rx.icon("trash-2", size=13),
                     " Withdraw",

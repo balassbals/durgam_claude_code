@@ -133,14 +133,17 @@ class AnnouncementService:
                 f"importance must be one of: {', '.join(sorted(_VALID_IMPORTANCE))}."
             )
 
-        self._validate_category_and_audience(category_code, audience_group_codes)
+        category = self._validate_category_and_audience(category_code, audience_group_codes)
 
         # Composer eligibility: user must have ≥1 active UserRole whose
         # Role.code appears in announcement_composer_configs with enabled=True.
         self._check_composer_eligible(composer_user_id)
 
         now = datetime.now(UTC)
-        scheduled_at = scheduled_at or now
+        # Apply per-category publish delay so the announcement remains in the
+        # pending window (invisible to recipients, withdrawable) until scheduled_at.
+        delay = timedelta(seconds=category.publish_delay_seconds)
+        scheduled_at = (scheduled_at or now) + delay
 
         # Compute important_until for very_important announcements
         important_until: datetime | None = None
@@ -224,6 +227,11 @@ class AnnouncementService:
         if row.composer_user_id != actor_id:
             raise AnnouncementWithdrawalNotAllowedError(
                 "Only the composer can withdraw their own announcement."
+            )
+        # Published announcements (scheduled_at in the past) cannot be withdrawn.
+        if row.scheduled_at <= datetime.now(UTC):
+            raise AnnouncementWithdrawalNotAllowedError(
+                "Announcement is already published and can no longer be withdrawn."
             )
 
         before_snap = audit_snapshot(row)
@@ -528,10 +536,12 @@ class AnnouncementService:
 
     # ── Private helpers ───────────────────────────────────────────────────────
 
-    def _validate_category_and_audience(
-        self, category_code: str, audience_group_codes: list[str]
-    ) -> None:
-        """Raise AnnouncementError if category or any audience group is unknown/inactive."""
+    def _validate_category_and_audience(self, category_code: str, audience_group_codes: list[str]):  # type: ignore[return]
+        """Raise AnnouncementError if category or any audience group is unknown/inactive.
+
+        Returns the category object so callers can read category-level settings
+        (e.g., publish_delay_seconds) without a second DB round-trip.
+        """
         category = self._category_repo.get_by_code(category_code)
         if category is None or not category.is_active:
             raise AnnouncementError(f"Unknown category: '{category_code}'.")
@@ -541,6 +551,7 @@ class AnnouncementService:
                 raise AnnouncementError(
                     f"Unknown or inactive audience group: '{ag_code}'."
                 )
+        return category
 
     def _check_composer_eligible(self, user_id: UUID) -> None:
         """Raise AnnouncementComposerNotEligibleError if the user holds no

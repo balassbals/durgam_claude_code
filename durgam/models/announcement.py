@@ -108,6 +108,7 @@ class AnnouncementCategory(TimestampedSoftDelete, table=True):
     name: str = Field(max_length=100, nullable=False)
     display_order: int = Field(default=0, nullable=False)
     is_active: bool = Field(default=True, nullable=False)
+    publish_delay_seconds: int = Field(default=0, nullable=False)
     notes: str | None = Field(default=None, sa_type=sa.Text())
 
 

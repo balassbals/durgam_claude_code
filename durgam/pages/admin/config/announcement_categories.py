@@ -34,7 +34,8 @@ def _kebab(row: dict) -> rx.Component:
                 "Edit",
                 on_click=AnnouncementCategoryConfigState.open_edit(  # type: ignore[call-arg, func-returns-value]
                     row["id"], row["code"], row["name"],
-                    row["display_order"], row["raw_is_active"], row["raw_notes"],
+                    row["display_order"], row["raw_is_active"],
+                    row["raw_publish_delay_seconds"], row["raw_notes"],
                 ),
             ),
             rx.menu.item(
@@ -133,6 +134,24 @@ def _inline_form() -> rx.Component:
                             color="var(--color-muted)",
                         ),
                         align="start", gap="0.25rem", margin_y="0.25rem", width="100%",
+                    ),
+                    rx.vstack(
+                        rx.text("Withdraw Window (seconds)", font_size="0.85rem", color="var(--color-muted)"),
+                        rx.input(
+                            type="number",
+                            min="0",
+                            max="86400",
+                            value=AnnouncementCategoryConfigState.form_publish_delay_seconds.to(str),
+                            on_change=AnnouncementCategoryConfigState.set_form_publish_delay_seconds,
+                            width="150px",
+                        ),
+                        rx.text(
+                            "Seconds after composing during which the announcement is pending "
+                            "(invisible to recipients but withdrawable). 0 = publish immediately.",
+                            font_size="0.72rem",
+                            color="var(--color-muted)",
+                        ),
+                        align="start", gap="0.2rem", width="100%",
                     ),
                     rx.vstack(
                         rx.text("Notes", font_size="0.85rem", color="var(--color-muted)"),
