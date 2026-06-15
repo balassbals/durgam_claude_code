@@ -1235,7 +1235,7 @@ The replacement function body is staged in the Phase 3B prompt drafted by Claude
 
 **Impact if not fixed before Phase 5:** FacultyRequest approval flows route to wrong approvers across the institute.
 
-**Resolution (M10 Phase 3B, <SHA>):** Resolver rewritten per the resolution path. Uses `Faculty.department_id` + `Faculty.campus_id` to identify requestor's specific dept and campus. HoD -> AhoD -> [] fallback. Unit-tested in `tests/unit/test_approval_resolvers_unit.py`. Integration-level testing deferred to Phase 5 wiring -- see TD-072.
+**Resolution (M10 Phase 3B, aa6f52a58a542c16f07fa9fba43d1b653e686de5):** Resolver rewritten per the resolution path. Uses `Faculty.department_id` + `Faculty.campus_id` to identify requestor's specific dept and campus. HoD -> AhoD -> [] fallback. Unit-tested in `tests/unit/test_approval_resolvers_unit.py`. Integration-level testing deferred to Phase 5 wiring -- see TD-072.
 
 ### TD-072 — `_resolve_dept_head_at_requestor_campus` lacks integration-level test
 
