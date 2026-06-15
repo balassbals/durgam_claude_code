@@ -74,6 +74,7 @@ from .faculty import (
     FacultyExpertise,
     FacultyWorkload,
 )
+from .faculty_request import FacultyRequest
 
 __all__ = [
     # Base
@@ -146,6 +147,7 @@ __all__ = [
     "FacultyExperience",
     "FacultyExpertise",
     "FacultyWorkload",
+    "FacultyRequest",
     # M9 Announcements
     "Announcement",
     "AnnouncementCategory",
