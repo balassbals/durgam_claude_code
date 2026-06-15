@@ -141,6 +141,11 @@ class ApprovalRequest(TimestampedSoftDelete, table=True):
     resolved_channel_json: list[dict[str, Any]] | None = Field(
         default=None, sa_column=Column(JSONB, nullable=True)
     )
+    # M10 Phase 5B: requestor's stage-option picks (keyed by stage_index as string).
+    # {"1": "<option_uuid>", ...} — only set when a stage uses pick_mode="requestor".
+    picked_option_ids_json: dict[str, str] | None = Field(
+        default=None, sa_column=Column(JSONB, nullable=True)
+    )
 
 
 class ApprovalStep(SQLModel, table=True):
