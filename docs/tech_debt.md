@@ -1235,28 +1235,3 @@ The replacement function body is staged in the Phase 3B prompt drafted by Claude
 
 **Impact if not fixed before Phase 5:** FacultyRequest approval flows route to wrong approvers across the institute.
 
-
-### TD-071 — Resolver `_resolve_dept_head_at_requestor_campus` has wrong semantic
-
-**Phase:** M10 Phase 3A. **Status:** Open. **Priority:** HIGH (blocks Phase 3B real-process wiring).
-
-**Location:** `durgam/services/approval_resolvers.py` — `_resolve_dept_head_at_requestor_campus`.
-
-**What it is:** The Q4a freeze specifies a HoD → AhoD → [] fallback chain that finds the head of the requestor's *specific department* (filtered to their campus). The current implementation returns the union of HoDs across *every department at the requestor's campus(es)* and has no AhoD fallback. Self-consistent with its 6 tests; semantically wrong against Q4a.
-
-**Concrete bugs:**
-1. Uses `UserRole.scope_type='department'` to derive requestor's dept, instead of `Faculty.department_id` (Phase 1A Faculty model). May pick up multiple depts if requestor holds multiple dept-scoped roles.
-2. Collects HoDs of *every* dept on the campus, not just the requestor's specific dept.
-3. No AhoD fallback when HoD is vacant.
-4. No `Faculty.campus_id` filter on the HoD candidates (the HoD's physical campus is not checked).
-
-**Resolution path (Phase 3B prompt):** Rewrite to:
-1. Look up requestor's `Faculty` row by `user_id`; extract `department_id` + `campus_id`.
-2. Query `User` joined to `UserRole` + `Faculty` for `Role.code='HOD'` scoped to that `department_id`, filtered by `Faculty.campus_id` matching requestor's campus.
-3. If empty, repeat with `Role.code='AHOD'`.
-4. Return `[user]` or `[]`.
-
-The replacement function body is staged in the Phase 3B prompt drafted by Claude (see chat). Tests in `tests/integration/test_approval_resolve_stage_candidates.py` must be rewritten to assert against ground-truth Q4a semantic (HoD vs AhoD vs neither) using seeded faculty rows.
-
-**Impact if not fixed before Phase 5:** FacultyRequest approval flows route to wrong approvers across the institute.
-
