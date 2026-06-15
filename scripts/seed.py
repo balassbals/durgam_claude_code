@@ -392,6 +392,28 @@ def seed(session: Session) -> dict[str, int]:
         {"resource": "announcement_category",        "action": "configure", "scope": "*"},
         {"resource": "audience_group",               "action": "read",      "scope": "*"},
         {"resource": "audience_group",               "action": "configure", "scope": "*"},
+        # ── M10 Faculty Module permissions ────────────────────────────────────
+        # Faculty profile — all authenticated can read directory; own/admin write split
+        {"resource": "faculty",           "action": "read",        "scope": "*"},
+        {"resource": "faculty",           "action": "write",       "scope": "own"},
+        {"resource": "faculty",           "action": "write",       "scope": "*"},   # admin-tier (Registrar/HR_HEAD)
+        # Sensitive PII fields — Registrar + IQAC family only (RFP §9.7)
+        {"resource": "faculty_sensitive", "action": "read",        "scope": "*"},
+        # Faculty-uploaded documents — Registrar + IQAC family only
+        {"resource": "faculty_document",  "action": "read",        "scope": "*"},
+        # Faculty requests — own create/read; * read for Registrar audit
+        {"resource": "faculty_request",   "action": "create",      "scope": "own"},
+        {"resource": "faculty_request",   "action": "read",        "scope": "own"},
+        {"resource": "faculty_request",   "action": "read",        "scope": "*"},
+        # Faculty workload — all read (for admin); own write (self-entry)
+        {"resource": "faculty_workload",  "action": "read",        "scope": "*"},
+        {"resource": "faculty_workload",  "action": "write",       "scope": "own"},
+        # Faculty bulk import — Registrar + HR_HEAD
+        {"resource": "faculty",           "action": "bulk_import", "scope": "*"},
+        # Designation configure — SYSTEM_ADMIN only (vocabulary-level change)
+        {"resource": "designation",       "action": "configure",   "scope": "*"},
+        # ApprovalProcess configure — SYSTEM_ADMIN only (extended for OR-set channels at M10)
+        {"resource": "approval_process",  "action": "configure",   "scope": "*"},
     ]
     perm_inserted = 0
     for p in perms_data:
@@ -674,26 +696,53 @@ def seed(session: Session) -> dict[str, int]:
         ("announcement_composer_config", "configure", "*"),
     ]
 
+    # M10 — Faculty Module (D-011)
+    # Base set for all regular-teaching employees: directory read + self-edit + own requests.
+    _FACULTY_OWN = [
+        ("faculty",          "read",        "*"),    # all authenticated can see faculty directory
+        ("faculty",          "write",       "own"),  # self-edit own profile
+        ("faculty_request",  "create",      "own"),  # raise faculty requests
+        ("faculty_request",  "read",        "own"),  # track own requests
+        ("faculty_workload", "write",       "own"),  # enter own workload
+        ("faculty_workload", "read",        "*"),    # view workload (own included in *)
+    ]
+
+    # Admin-tier write: Registrar/HR_HEAD can edit any faculty record + bulk import + audit
+    _FACULTY_ADMIN = [
+        ("faculty",          "write",       "*"),    # admin-level write any faculty record
+        ("faculty_request",  "read",        "*"),    # audit: view all faculty requests
+        ("faculty",          "bulk_import", "*"),    # bulk import
+    ]
+
+    # Sensitive PII read: Registrar + IQAC family only (RFP §9.7)
+    _FACULTY_SENSITIVE_READ = [
+        ("faculty_sensitive", "read",       "*"),    # PAN/Aadhaar/sensitive fields
+        ("faculty_document",  "read",       "*"),    # uploaded faculty documents
+    ]
+
     role_perm_map: dict[str, list[tuple[str, str, str]]] = {
-        "REGISTRAR":            _PUBLIC_READ + _LEAVE_REQUESTOR + _REGISTRAR_SPECIFIC + _CL_CREDIT_POLICY_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN + _ANNOUNCEMENT_COMPOSER + _ANNOUNCEMENT_REGISTRAR_CONFIG + [
+        "REGISTRAR":            _PUBLIC_READ + _LEAVE_REQUESTOR + _REGISTRAR_SPECIFIC + _CL_CREDIT_POLICY_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN + _ANNOUNCEMENT_COMPOSER + _ANNOUNCEMENT_REGISTRAR_CONFIG + _FACULTY_OWN + _FACULTY_ADMIN + _FACULTY_SENSITIVE_READ + [
             ("approval_request",           "approve",   "*"),
         ],
-        "DEPUTY_REGISTRAR":     _PUBLIC_READ + _LEAVE_REQUESTOR + _REGISTRAR_SPECIFIC + _CL_CREDIT_POLICY_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN + [
+        "DEPUTY_REGISTRAR":     _PUBLIC_READ + _LEAVE_REQUESTOR + _REGISTRAR_SPECIFIC + _CL_CREDIT_POLICY_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN + _FACULTY_OWN + _FACULTY_ADMIN + _FACULTY_SENSITIVE_READ + [
             ("approval_request",           "approve",   "*"),
         ],
-        "REGISTRAR_OFFICE":     _PUBLIC_READ + _LEAVE_REQUESTOR + _REGISTRAR_SPECIFIC + _CL_CREDIT_POLICY_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN + _ANNOUNCEMENT_COMPOSER + _ANNOUNCEMENT_REGISTRAR_CONFIG,
-        "DIRECTOR":             _PUBLIC_READ + _LEAVE_REQUESTOR + _DIRECTOR_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN + _ANNOUNCEMENT_COMPOSER,
-        "DEPUTY_DIRECTOR":      _PUBLIC_READ + _LEAVE_REQUESTOR + _DIRECTOR_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN,
-        "DIRECTOR_OFFICE":      _PUBLIC_READ + _LEAVE_REQUESTOR + _DIRECTOR_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN + _ANNOUNCEMENT_COMPOSER,
-        "IQAC_COORDINATOR":     _PUBLIC_READ + _LEAVE_REQUESTOR + _IQAC_SPECIFIC + _ANNOUNCEMENT_COMPOSER,
-        "DEAN":                 _PUBLIC_READ + _LEAVE_REQUESTOR + _DEAN_SPECIFIC + _ANNOUNCEMENT_COMPOSER + [
+        "REGISTRAR_OFFICE":     _PUBLIC_READ + _LEAVE_REQUESTOR + _REGISTRAR_SPECIFIC + _CL_CREDIT_POLICY_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN + _ANNOUNCEMENT_COMPOSER + _ANNOUNCEMENT_REGISTRAR_CONFIG + _FACULTY_OWN + _FACULTY_ADMIN + _FACULTY_SENSITIVE_READ,
+        "DIRECTOR":             _PUBLIC_READ + _LEAVE_REQUESTOR + _DIRECTOR_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN + _ANNOUNCEMENT_COMPOSER + _FACULTY_OWN,
+        "DEPUTY_DIRECTOR":      _PUBLIC_READ + _LEAVE_REQUESTOR + _DIRECTOR_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN + _FACULTY_OWN,
+        "DIRECTOR_OFFICE":      _PUBLIC_READ + _LEAVE_REQUESTOR + _DIRECTOR_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN + _ANNOUNCEMENT_COMPOSER + _FACULTY_OWN,
+        "IQAC_COORDINATOR":     _PUBLIC_READ + _LEAVE_REQUESTOR + _IQAC_SPECIFIC + _ANNOUNCEMENT_COMPOSER + _FACULTY_OWN + _FACULTY_SENSITIVE_READ,
+        # M10 — IQAC_OFFICE mirrors IQAC_COORDINATOR exactly (Q-P2.1 authority 2026-06-14)
+        "IQAC_OFFICE":          _PUBLIC_READ + _LEAVE_REQUESTOR + _IQAC_SPECIFIC + _ANNOUNCEMENT_COMPOSER + _FACULTY_OWN + _FACULTY_SENSITIVE_READ,
+        "DEAN":                 _PUBLIC_READ + _LEAVE_REQUESTOR + _DEAN_SPECIFIC + _ANNOUNCEMENT_COMPOSER + _FACULTY_OWN + [
             ("approval_request",           "approve",   "*"),
         ],
-        "DEAN_STUDENT_WELFARE": _PUBLIC_READ + _LEAVE_REQUESTOR + _DEAN_SW_SPECIFIC + _ANNOUNCEMENT_COMPOSER,
-        "DEAN_STUDENT_WELFARE_OFFICE": _PUBLIC_READ + _LEAVE_REQUESTOR + _DEAN_SW_SPECIFIC + _ANNOUNCEMENT_COMPOSER,
-        "DEAN_ACADEMIC_AFFAIRS": _PUBLIC_READ + _LEAVE_REQUESTOR + _DEAN_AA_SPECIFIC + _ANNOUNCEMENT_COMPOSER,
-        "DEAN_ACADEMIC_AFFAIRS_OFFICE": _PUBLIC_READ + _LEAVE_REQUESTOR + _DEAN_AA_SPECIFIC + _ANNOUNCEMENT_COMPOSER,
-        "HOD":                  _PUBLIC_READ + _LEAVE_REQUESTOR + _HOD_SPECIFIC + _ANNOUNCEMENT_COMPOSER + [
+        "DEAN_STUDENT_WELFARE": _PUBLIC_READ + _LEAVE_REQUESTOR + _DEAN_SW_SPECIFIC + _ANNOUNCEMENT_COMPOSER + _FACULTY_OWN,
+        "DEAN_STUDENT_WELFARE_OFFICE": _PUBLIC_READ + _LEAVE_REQUESTOR + _DEAN_SW_SPECIFIC + _ANNOUNCEMENT_COMPOSER + _FACULTY_OWN,
+        "DEAN_ACADEMIC_AFFAIRS": _PUBLIC_READ + _LEAVE_REQUESTOR + _DEAN_AA_SPECIFIC + _ANNOUNCEMENT_COMPOSER + _FACULTY_OWN,
+        "DEAN_ACADEMIC_AFFAIRS_OFFICE": _PUBLIC_READ + _LEAVE_REQUESTOR + _DEAN_AA_SPECIFIC + _ANNOUNCEMENT_COMPOSER + _FACULTY_OWN,
+        "HOD":                  _PUBLIC_READ + _LEAVE_REQUESTOR + _HOD_SPECIFIC + _ANNOUNCEMENT_COMPOSER + _FACULTY_OWN + [
+            ("faculty_request",            "read",      "*"),  # dept scope enforced at handler body (M3 pattern)
             ("class_teacher_assignment",   "read",      "*"),
             ("class_teacher_assignment",   "write",     "*"),
             ("class_teacher_assignment",   "delete",    "*"),
@@ -701,7 +750,8 @@ def seed(session: Session) -> dict[str, int]:
             ("class_coordinator_assignment", "write",   "*"),
             ("class_coordinator_assignment", "delete",  "*"),
         ],
-        "AHOD":                 _PUBLIC_READ + _LEAVE_REQUESTOR + _HOD_SPECIFIC + [
+        "AHOD":                 _PUBLIC_READ + _LEAVE_REQUESTOR + _HOD_SPECIFIC + _FACULTY_OWN + [
+            ("faculty_request",            "read",      "*"),  # dept scope enforced at handler body (M3 pattern)
             ("class_teacher_assignment",   "read",      "*"),
             ("class_teacher_assignment",   "write",     "*"),
             ("class_teacher_assignment",   "delete",    "*"),
@@ -721,28 +771,31 @@ def seed(session: Session) -> dict[str, int]:
             ("department_vision_mission",  "write",     "department"),
             # M5b-R3 V2 — HoD Office can bulk-import courses
             ("course_import",              "write",     "*"),
+            # M10 — faculty directory read (no self-edit: HOD_OFFICE is admin staff)
+            ("faculty",                    "read",      "*"),
         ],
         # M5b/M7 — approver/channel roles
-        "VC":                   _PUBLIC_READ + _LEAVE_REQUESTOR + _ANNOUNCEMENT_COMPOSER + [
+        "VC":                   _PUBLIC_READ + _LEAVE_REQUESTOR + _ANNOUNCEMENT_COMPOSER + _FACULTY_OWN + [
             ("approval_request",           "approve",   "*"),
         ],
-        "VC_OFFICE":            _PUBLIC_READ + _LEAVE_REQUESTOR + _ANNOUNCEMENT_COMPOSER,
-        "FINANCE_OFFICER":      _PUBLIC_READ + _LEAVE_REQUESTOR + _FINANCE_SPECIFIC + _ANNOUNCEMENT_COMPOSER,
+        "VC_OFFICE":            _PUBLIC_READ + _LEAVE_REQUESTOR + _ANNOUNCEMENT_COMPOSER + _FACULTY_OWN,
+        "FINANCE_OFFICER":      _PUBLIC_READ + _LEAVE_REQUESTOR + _FINANCE_SPECIFIC + _ANNOUNCEMENT_COMPOSER + _FACULTY_OWN,
         "CPC_CHAIRPERSON":      _PUBLIC_READ + _LEAVE_REQUESTOR + [
             ("approval_request",           "approve",   "*"),
+            ("faculty",                    "read",      "*"),
         ],
         # M8 — new roles
-        "CONTROLLER_OF_EXAMINATIONS": _PUBLIC_READ + _LEAVE_REQUESTOR + _CONTROLLER_OF_EXAMINATIONS_SPECIFIC + _ANNOUNCEMENT_COMPOSER,
-        "HR_HEAD":              _PUBLIC_READ + _LEAVE_REQUESTOR + _HR_HEAD_SPECIFIC + _ANNOUNCEMENT_COMPOSER,
-        "HR_OFFICE":            _PUBLIC_READ + _LEAVE_REQUESTOR + _HR_OFFICE_SPECIFIC,
-        # Faculty designation roles (M8 — inherit PUBLIC_READ + LEAVE_REQUESTOR)
-        "PROFESSOR":            _PUBLIC_READ + _LEAVE_REQUESTOR + [("approval_request", "approve", "*")],
-        "ASSOC_PROFESSOR":      _PUBLIC_READ + _LEAVE_REQUESTOR + [("approval_request", "approve", "*")],
-        "FACULTY":              _PUBLIC_READ + _LEAVE_REQUESTOR,
-        "LIBRARIAN":            _PUBLIC_READ + _LEAVE_REQUESTOR,
-        "PLACEMENT_OFFICER":    _PUBLIC_READ + _LEAVE_REQUESTOR + _ANNOUNCEMENT_COMPOSER,
-        "CESRC_COORDINATOR":    _PUBLIC_READ + _LEAVE_REQUESTOR + _ANNOUNCEMENT_COMPOSER,
-        "CENTRE_COORDINATOR":   _PUBLIC_READ + _LEAVE_REQUESTOR + _ANNOUNCEMENT_COMPOSER,
+        "CONTROLLER_OF_EXAMINATIONS": _PUBLIC_READ + _LEAVE_REQUESTOR + _CONTROLLER_OF_EXAMINATIONS_SPECIFIC + _ANNOUNCEMENT_COMPOSER + _FACULTY_OWN,
+        "HR_HEAD":              _PUBLIC_READ + _LEAVE_REQUESTOR + _HR_HEAD_SPECIFIC + _ANNOUNCEMENT_COMPOSER + _FACULTY_OWN + _FACULTY_ADMIN + _FACULTY_SENSITIVE_READ,
+        "HR_OFFICE":            _PUBLIC_READ + _LEAVE_REQUESTOR + _HR_OFFICE_SPECIFIC + _FACULTY_OWN + _FACULTY_ADMIN + _FACULTY_SENSITIVE_READ,
+        # Faculty designation roles (M8 — inherit PUBLIC_READ + LEAVE_REQUESTOR; M10 adds faculty perms)
+        "PROFESSOR":            _PUBLIC_READ + _LEAVE_REQUESTOR + _FACULTY_OWN + [("approval_request", "approve", "*")],
+        "ASSOC_PROFESSOR":      _PUBLIC_READ + _LEAVE_REQUESTOR + _FACULTY_OWN + [("approval_request", "approve", "*")],
+        "FACULTY":              _PUBLIC_READ + _LEAVE_REQUESTOR + _FACULTY_OWN,
+        "LIBRARIAN":            _PUBLIC_READ + _LEAVE_REQUESTOR + _FACULTY_OWN,
+        "PLACEMENT_OFFICER":    _PUBLIC_READ + _LEAVE_REQUESTOR + _ANNOUNCEMENT_COMPOSER + _FACULTY_OWN,
+        "CESRC_COORDINATOR":    _PUBLIC_READ + _LEAVE_REQUESTOR + _ANNOUNCEMENT_COMPOSER + _FACULTY_OWN,
+        "CENTRE_COORDINATOR":   _PUBLIC_READ + _LEAVE_REQUESTOR + _ANNOUNCEMENT_COMPOSER + _FACULTY_OWN,
         "STUDENT":              _PUBLIC_READ,
         "BASIC_USER":           _PUBLIC_READ,
     }

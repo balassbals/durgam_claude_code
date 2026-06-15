@@ -1194,3 +1194,19 @@ The underlying E-022 feature (admin manual edit of leave records) may be partial
 **Resolution path:** Either (a) name the FK in the model `fk_nrf_approval_request_id` + add `ondelete='SET NULL'` to the FK declaration, or (b) drop and recreate the DB constraint to match the model's unnamed default. Option (a) is the cleaner forward path.
 
 **Priority:** Low. Address opportunistically — likely target is M10 Phase 9 (NonRegularFaculty contract-term expansion) which will touch this model anyway.
+
+---
+
+### TD-070 — Migration test isolation: seeded-DB contamination from downgrade cycles
+
+**Phase:** M10 Phase 1B (filed at Phase 2). **Status:** Open.
+
+**Location:** `tests/integration/test_migrations.py` — `test_m10_phase1b_designation_expansion`.
+
+**What it is:** Migration tests that run a downgrade/upgrade cycle on the test DB risk contaminating the seeded fixture shared by the rest of the integration suite. `_reset_test_db()` drops all SQLModel tables + alembic_version and re-migrates — but it does NOT re-seed, so subsequent `seeded_session` tests in the same pytest session see an empty DB and fail in cascading fashion. The Phase 1B migration test works around this by (a) NOT calling `_reset_test_db()`, (b) using `stamp head` + targeted downgrade/upgrade instead, and (c) cleaning up the manually-inserted legacy rows in a `finally` block. The trade-off: the reverse (downgrade-from-head) direction is verified only structurally (the downgrade SQL runs as part of the targeted cycle), not with full before/after assertions.
+
+**Impact:** Medium. Downgrade-direction tests are weaker than ideal. A future data migration test that requires `_reset_test_db()` for correctness will need to run in isolation (separate pytest session or separate test DB) or re-seed after the reset.
+
+**Resolution path:** Long-term: give migration tests their own dedicated DB (`settings.migration_test_database_url`) independent of the integration seeded DB, so `_reset_test_db()` can be called freely without contaminating `seeded_db_engine`. Short-term: document the constraint at the top of `test_migrations.py` and enforce it in code review.
+
+**Priority:** Medium. Address before any milestone that introduces a data migration requiring full round-trip assertions (both forward and reverse with data-state verification).
