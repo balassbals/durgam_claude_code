@@ -62,6 +62,7 @@ from durgam.models.program import (
     ProgramSpecialisation,
 )
 from durgam.models.school import School
+from durgam.models.faculty import Faculty
 from durgam.models.vision_mission import (
     DepartmentMission,
     DepartmentVisionMission,
@@ -2106,12 +2107,18 @@ def seed(session: Session) -> dict[str, int]:
     # M5b Session 7: Purchase Policy & Approval Config (E-007)
     # ─────────────────────────────────────────────────────────────────────────
 
-    # ── Designation vocabulary (§8.3 — extensible, editable via admin UI) ────
+    # ── Designation vocabulary (§8.3 — M10 Phase 1B expanded taxonomy) ─────────
+    # Legacy codes (senior_professor, professor, associate_professor,
+    # assistant_professor) are soft-deleted by migration cb2de963f0b8.
+    # This seed inserts only the 7 new codes (idempotent via ON CONFLICT DO NOTHING).
     designations_raw = [
-        ("senior_professor",    "Senior Professor",    1),
-        ("professor",           "Professor",           2),
-        ("associate_professor", "Associate Professor", 3),
-        ("assistant_professor", "Assistant Professor", 4),
+        ("sr_prof",       "Senior Professor",                        1),
+        ("prof",          "Professor",                               2),
+        ("assoc_prof",    "Associate Professor",                     3),
+        ("asst_prof_l10", "Assistant Professor (Academic Level 10)", 4),
+        ("asst_prof_l11", "Assistant Professor (Academic Level 11)", 5),
+        ("asst_prof_l12", "Assistant Professor (Academic Level 12)", 6),
+        ("instructor",    "Instructor",                              7),
     ]
     desig_inserted = 0
     for code, name, rank in designations_raw:
@@ -2253,7 +2260,7 @@ def seed(session: Session) -> dict[str, int]:
         .values(
             committee_type="campus_purchase_committee",
             eligible_designations=[
-                "senior_professor", "professor", "associate_professor",
+                "sr_prof", "prof", "assoc_prof",
             ],
             faculty_member_count=3,
             members_from_different_departments=True,
@@ -2279,7 +2286,7 @@ def seed(session: Session) -> dict[str, int]:
         .values(
             committee_type="central_purchase_committee",
             eligible_designations=[
-                "senior_professor", "professor", "associate_professor",
+                "sr_prof", "prof", "assoc_prof",
             ],
             faculty_member_count=3,
             members_from_different_departments=True,
@@ -2600,8 +2607,90 @@ def seed(session: Session) -> dict[str, int]:
     )
     counts["leave_credit_policies"] = _exec_insert(session, cl_policy_stmt)
 
+    # ── Faculty seed backfill (M10 Phase 1B) ─────────────────────────────────
+    counts["faculty_backfill"] = _seed_faculty_backfill(session)
+
     session.commit()
     return counts
+
+
+def _seed_faculty_backfill(session: Session) -> int:
+    """Create Faculty rows for the 7 regular_teaching seeded users.
+
+    Idempotent: upsert on uq_faculties_employee_id (ON CONFLICT DO NOTHING).
+    If any referenced user/dept/campus/designation is absent, raises KeyError
+    to surface the gap rather than silently skipping rows.
+
+    Mapping frozen in M10 Phase 1B prompt (2026-06-14, Bala authority).
+    """
+    from datetime import date as _date
+
+    # Resolve FK UUIDs from already-seeded rows.
+    dmacs = session.exec(
+        select(Department).where(Department.code == "DMACS", Department.is_deleted == False)  # noqa: E712
+    ).first()
+    if dmacs is None:
+        raise KeyError("Dept DMACS not found in seed — cannot backfill Faculty rows")
+
+    psn = session.exec(
+        select(Campus).where(Campus.code == "PSN", Campus.is_deleted == False)  # noqa: E712
+    ).first()
+    if psn is None:
+        raise KeyError("Campus PSN not found in seed — cannot backfill Faculty rows")
+
+    # Designation lookup: code -> Designation row (active only)
+    desig_rows = session.exec(
+        select(Designation).where(Designation.is_deleted == False)  # noqa: E712
+    ).all()
+    desig_map = {d.code: d for d in desig_rows}
+
+    # Backfill spec: (username, employee_id, desig_code, first_name, last_name,
+    #                  phone, ec_name, ec_relation, ec_phone, is_phd, joining_date)
+    backfill = [
+        ("vc_user",             "DEV-FAC-0001", "sr_prof",      "Vc",      "DevUser",  "9000000001", "Test Contact 1", "Spouse", "9000000101", True,  _date(2010, 6, 1)),
+        ("dean_sci",            "DEV-FAC-0002", "prof",         "Dean",    "DevSci",   "9000000002", "Test Contact 2", "Spouse", "9000000102", True,  _date(2012, 6, 1)),
+        ("director_psn",        "DEV-FAC-0003", "prof",         "Director","DevPsn",   "9000000003", "Test Contact 3", "Spouse", "9000000103", True,  _date(2013, 6, 1)),
+        ("hod_dmacs",           "DEV-FAC-0004", "prof",         "Hod",     "DevDmacs", "9000000004", "Test Contact 4", "Spouse", "9000000104", True,  _date(2014, 6, 1)),
+        ("ahod_dmacs",          "DEV-FAC-0005", "assoc_prof",   "Ahod",    "DevDmacs", "9000000005", "Test Contact 5", "Spouse", "9000000105", True,  _date(2016, 6, 1)),
+        ("deputy_director_psn", "DEV-FAC-0006", "assoc_prof",   "Deputy",  "DevPsn",   "9000000006", "Test Contact 6", "Spouse", "9000000106", True,  _date(2017, 6, 1)),
+        ("faculty_user",        "DEV-FAC-0007", "asst_prof_l10","Faculty", "DevUser",  "9000000007", "Test Contact 7", "Spouse", "9000000107", False, _date(2022, 6, 1)),
+    ]
+
+    inserted = 0
+    for username, emp_id, desig_code, first_name, last_name, phone, ec_name, ec_rel, ec_phone, is_phd, joining_date in backfill:
+        user = session.exec(
+            select(User).where(User.username == username, User.is_deleted == False)  # noqa: E712
+        ).first()
+        if user is None:
+            raise KeyError(f"User {username!r} not found — cannot backfill Faculty row")
+
+        desig = desig_map.get(desig_code)
+        if desig is None:
+            raise KeyError(f"Designation {desig_code!r} not found — cannot backfill Faculty row for {username!r}")
+
+        title = "Dr." if is_phd else "Mr."
+        inserted += _exec_insert(
+            session,
+            pg_insert(Faculty).values(
+                user_id=user.id,
+                employee_id=emp_id,
+                title=title,
+                first_name=first_name,
+                last_name=last_name,
+                designation_id=desig.id,
+                department_id=dmacs.id,
+                campus_id=psn.id,
+                joining_date=joining_date,
+                is_vacation_employee=True,
+                phone=phone,
+                emergency_contact_name=ec_name,
+                emergency_contact_relation=ec_rel,
+                emergency_contact_phone=ec_phone,
+                is_phd=is_phd,
+            ).on_conflict_do_nothing(constraint="uq_faculties_employee_id"),
+        )
+
+    return inserted
 
 
 def main() -> None:

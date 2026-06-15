@@ -1178,3 +1178,19 @@ The underlying E-022 feature (admin manual edit of leave records) may be partial
 3. Add regression test that seeds twice on fresh DB and asserts user count unchanged after second run.
 
 **Priority:** Address at the start of M10 (Faculty Module) since faculty seed is likely a touchpoint.
+
+---
+
+### TD-069 — non_regular_faculty FK metadata skew
+
+**Phase:** M10 Phase 1A (filed at Phase 1B). **Status:** Open.
+
+**Location:** `durgam/models/config_anchors.py` — `NonRegularFaculty.approval_request_id` FK; existing DB constraint `fk_nrf_approval_request_id` with `ondelete='SET NULL'`.
+
+**What it is:** Alembic autogenerate at Phase 1A detected a name + ondelete mismatch between the DB constraint (named `fk_nrf_approval_request_id` with `ondelete='SET NULL'`) and the model definition (unnamed constraint, no ondelete). This is pre-existing metadata skew from M5b/M7 and was excluded from the Phase 1A migration to keep scope tight.
+
+**Impact:** None functionally — DB behaviour is correct (SET NULL on referenced row delete). Purely declarative skew that surfaces as autogen noise on future migrations involving NonRegularFaculty.
+
+**Resolution path:** Either (a) name the FK in the model `fk_nrf_approval_request_id` + add `ondelete='SET NULL'` to the FK declaration, or (b) drop and recreate the DB constraint to match the model's unnamed default. Option (a) is the cleaner forward path.
+
+**Priority:** Low. Address opportunistically — likely target is M10 Phase 9 (NonRegularFaculty contract-term expansion) which will touch this model anyway.
