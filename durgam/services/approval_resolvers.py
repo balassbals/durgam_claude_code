@@ -16,7 +16,6 @@ from uuid import UUID
 
 from sqlmodel import Session, select
 
-from durgam.models.department import Department
 from durgam.models.identity import Role, User, UserRole
 
 
@@ -41,72 +40,61 @@ ResolverFn = Callable[[ResolverContext, Session], list[User]]
 def _resolve_dept_head_at_requestor_campus(
     ctx: ResolverContext, session: Session
 ) -> list[User]:
-    """Return active HODs whose department belongs to the requestor's campus.
+    """Q4a fallback chain: HoD → AhoD → [] for the requestor's specific dept+campus.
 
-    Walk the requestor's department-scoped roles to find their campus,
-    then collect all HOD UserRole rows scoped to departments on that campus.
+    Uses Faculty.department_id and Faculty.campus_id (Phase 1A Faculty model) to
+    identify the requestor's specific dept and campus. Returns at most ONE user:
+    the HoD scoped to that dept whose Faculty.campus_id matches the requestor's;
+    if no such HoD, the AhoD with the same filter; if neither, empty list.
+
+    Note: UserRole has no is_deleted column (plain SQLModel junction, no
+    TimestampedSoftDelete). There is no soft-delete filter on UserRole rows.
     """
-    # Find the requestor's campus via their department-scoped roles.
-    requestor_roles = session.exec(
-        select(UserRole).where(
-            UserRole.user_id == ctx.requestor_user_id,
-            UserRole.scope_type == "department",
+    from durgam.models.faculty import Faculty
+
+    # 1. Look up requestor's Faculty row for their specific dept + campus.
+    faculty = session.exec(
+        select(Faculty).where(
+            Faculty.user_id == ctx.requestor_user_id,
+            Faculty.is_deleted == False,  # noqa: E712
         )
-    ).all()
-
-    campus_ids: set[UUID] = set()
-    for ur in requestor_roles:
-        if ur.scope_id is not None:
-            dept = session.get(Department, ur.scope_id)
-            if dept is not None and not dept.is_deleted:
-                campus_ids.add(dept.main_campus_id)
-
-    if not campus_ids:
-        return []
-
-    # Collect all departments on those campuses.
-    dept_stmt = select(Department).where(
-        Department.is_deleted == False,  # noqa: E712
-        Department.main_campus_id.in_(campus_ids),  # type: ignore[attr-defined]
-    )
-    depts = session.exec(dept_stmt).all()
-    dept_ids = {d.id for d in depts}
-    if not dept_ids:
-        return []
-
-    # Find HOD role.
-    hod_role = session.exec(
-        select(Role).where(Role.code == "HOD", Role.is_deleted == False)  # noqa: E712
     ).first()
-    if hod_role is None:
+
+    if faculty is None or faculty.department_id is None or faculty.campus_id is None:
         return []
 
-    # Find HOD UserRoles scoped to those departments.
-    hod_urs = session.exec(
-        select(UserRole).where(
-            UserRole.role_id == hod_role.id,
-            UserRole.scope_type == "department",
-            UserRole.scope_id.in_(dept_ids),  # type: ignore[attr-defined]
-        )
-    ).all()
+    dept_id = faculty.department_id
+    campus_id = faculty.campus_id
 
-    users: list[User] = []
-    seen: set[UUID] = set()
-    for ur in hod_urs:
-        if ur.user_id in seen:
-            continue
-        user = session.exec(
-            select(User).where(
-                User.id == ur.user_id,
-                User.is_deleted == False,  # noqa: E712
-                User.is_active == True,  # noqa: E712
+    # 2. Try HoD first, then AhoD.  Candidate must hold the role scoped to the
+    #    requestor's exact dept AND have a Faculty record at the requestor's campus.
+    for role_code in ("HOD", "AHOD"):
+        role = session.exec(
+            select(Role).where(
+                Role.code == role_code,
+                Role.is_deleted == False,  # noqa: E712
             )
         ).first()
-        if user is not None:
-            users.append(user)
-            seen.add(ur.user_id)
+        if role is None:
+            continue
 
-    return users
+        stmt = (
+            select(User)
+            .join(UserRole, UserRole.user_id == User.id)
+            .join(Faculty, Faculty.user_id == User.id)
+            .where(UserRole.role_id == role.id)
+            .where(UserRole.scope_type == "department")
+            .where(UserRole.scope_id == dept_id)
+            .where(User.is_deleted == False)  # noqa: E712
+            .where(User.is_active == True)  # noqa: E712
+            .where(Faculty.campus_id == campus_id)
+            .where(Faculty.is_deleted == False)  # noqa: E712
+        )
+        result = session.exec(stmt).first()
+        if result:
+            return [result]
+
+    return []
 
 
 RESOLVERS: dict[str, ResolverFn] = {

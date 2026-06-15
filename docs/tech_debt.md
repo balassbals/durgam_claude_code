@@ -1213,7 +1213,7 @@ The underlying E-022 feature (admin manual edit of leave records) may be partial
 
 ### TD-071 — Resolver `_resolve_dept_head_at_requestor_campus` has wrong semantic
 
-**Phase:** M10 Phase 3A. **Status:** Open. **Priority:** HIGH (blocks Phase 3B real-process wiring).
+**Phase:** M10 Phase 3A. **Status:** Resolved. **Priority:** HIGH (blocks Phase 3B real-process wiring).
 
 **Location:** `durgam/services/approval_resolvers.py` — `_resolve_dept_head_at_requestor_campus`.
 
@@ -1234,4 +1234,22 @@ The underlying E-022 feature (admin manual edit of leave records) may be partial
 The replacement function body is staged in the Phase 3B prompt drafted by Claude (see chat). Tests in `tests/integration/test_approval_resolve_stage_candidates.py` must be rewritten to assert against ground-truth Q4a semantic (HoD vs AhoD vs neither) using seeded faculty rows.
 
 **Impact if not fixed before Phase 5:** FacultyRequest approval flows route to wrong approvers across the institute.
+
+**Resolution (M10 Phase 3B, <SHA>):** Resolver rewritten per the resolution path. Uses `Faculty.department_id` + `Faculty.campus_id` to identify requestor's specific dept and campus. HoD -> AhoD -> [] fallback. Unit-tested in `tests/unit/test_approval_resolvers_unit.py`. Integration-level testing deferred to Phase 5 wiring -- see TD-072.
+
+### TD-072 — `_resolve_dept_head_at_requestor_campus` lacks integration-level test
+
+**Phase:** M10 Phase 3B (filed during recovery). **Status:** Open. **Priority:** Medium.
+
+**Location:** `tests/integration/test_approval_resolve_stage_candidates.py` and seeded data.
+
+**What it is:** The resolver is unit-tested in `tests/unit/test_approval_resolvers_unit.py` with mocked sessions, verifying semantic logic (HoD found, AhoD fallback, no Faculty, etc.). No integration test exercises the resolver against real seeded data.
+
+The Phase 3B prompt originally specified 4 ground-truth integration tests using `seeded_session` with `session.delete()` + `flush()` to set up the AhoD-fallback scenario. Those tests caused 28+ cascading failures because `seeded_session`'s rollback doesn't reliably revert mutations against the session-scoped `seeded_db_engine`'s pooled connections. The tests were dropped during Phase 3B recovery (2026-06-15).
+
+**Resolution path:** When Phase 5 wires FacultyRequest to use OR-set with this resolver, end-to-end integration tests will exercise the resolver against real seeded data naturally. Alternatively, write dedicated integration tests using `db_session` (function-scoped, fresh schema) that create synthetic Campus + Department + Roles + Users + Faculty from scratch — significant boilerplate but proper isolation.
+
+**Impact if not fixed:** Resolver logic is covered by unit tests with mocks but not by integration tests with real DB queries. Schema-level bugs (FK constraint mismatches, column name typos in joins) would not be caught until Phase 5 wiring exercises this path.
+
+**Priority:** Medium. Phase 5 will surface this naturally; explicit remediation not required before then.
 

@@ -126,27 +126,25 @@ class TestDeptHeadAtRequestorCampus:
         assert result == []
 
     def test_returns_hod_user_for_matching_campus(self):
-        """Requestor in dept at campus X → returns HOD of a dept at campus X."""
-        campus_id = uuid4()
+        """Requestor's Faculty row exists → returns HoD of requestor's dept+campus."""
         dept_id = uuid4()
+        campus_id = uuid4()
         hod_role_id = uuid4()
         hod_user_id = uuid4()
 
-        dept = _make_dept(dept_id, campus_id)
-        ur_requestor = _make_ur(scope_type="department", scope_id=dept_id)
-        ur_hod = _make_ur(scope_type="department", scope_id=dept_id,
-                          role_id=hod_role_id, user_id=hod_user_id)
+        faculty = MagicMock()
+        faculty.department_id = dept_id
+        faculty.campus_id = campus_id
+        faculty.is_deleted = False
+
         hod_role = _make_role(role_id=hod_role_id)
         hod_user = _make_user(user_id=hod_user_id)
 
         session = _seq_session(
-            ([ur_requestor], None),     # 0: user_roles
-            ([dept], None),             # 1: departments at campus
-            ([], hod_role),             # 2: HOD role
-            ([ur_hod], None),           # 3: HOD UserRoles
-            ([], hod_user),             # 4: User lookup for hod_user_id
+            ([], faculty),      # 0: Faculty lookup → .first() = faculty
+            ([], hod_role),     # 1: HOD Role lookup → .first() = hod_role
+            ([], hod_user),     # 2: User join query → .first() = hod_user
         )
-        session.get.side_effect = lambda model, pk: dept if pk == dept_id else None
 
         result = _resolve_dept_head_at_requestor_campus(_ctx(), session)
 
