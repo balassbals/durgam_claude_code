@@ -107,6 +107,11 @@ class ApprovalProcess(TimestampedSoftDelete, table=True):
     auto_announce_target_json: dict[str, Any] | None = Field(
         default=None, sa_column=Column(JSONB, nullable=True)
     )
+    # M10 Phase 3A: per-stage pick_mode for OR-set stages.
+    # Dict: {"1": "approver", "2": "requestor"}. NULL = all legacy single-role stages.
+    stage_pick_modes_json: dict[str, str] | None = Field(
+        default=None, sa_column=Column(JSONB, nullable=True)
+    )
 
 
 class ApprovalRequest(TimestampedSoftDelete, table=True):
@@ -153,3 +158,40 @@ class ApprovalStep(SQLModel, table=True):
     decided_at: datetime | None = Field(
         default=None, sa_type=_TIMESTAMPTZ, nullable=True
     )
+
+
+class ApprovalStageOption(TimestampedSoftDelete, table=True):
+    """OR-set option for a specific stage of an approval process (M10 Phase 3A).
+
+    Each row names one resolver that can satisfy stage_index for the given process.
+    When a stage has ≥1 active ApprovalStageOption row, the engine uses the OR-set
+    path instead of the legacy single-role-code path.
+    """
+
+    __tablename__ = "approval_stage_options"
+    __table_args__ = (
+        sa.Index(
+            "ix_approval_stage_options_process_stage",
+            "approval_process_id",
+            "stage_index",
+            postgresql_where=sa.text("is_deleted = false"),
+        ),
+        sa.Index(
+            "uq_approval_stage_options_process_stage_resolver",
+            "approval_process_id",
+            "stage_index",
+            "resolver_name",
+            unique=True,
+            postgresql_where=sa.text("is_deleted = false"),
+        ),
+    )
+
+    approval_process_id: UUID = Field(
+        foreign_key="approval_processes.id",
+        nullable=False,
+    )
+    # 1-based integer matching ApprovalRequest.current_stage / channel_role_codes index.
+    stage_index: int = Field(nullable=False)
+    resolver_name: str = Field(max_length=200, nullable=False)
+    label: str = Field(max_length=200, nullable=False)
+    sort_order: int = Field(default=0, nullable=False)

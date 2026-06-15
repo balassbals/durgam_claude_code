@@ -33,6 +33,7 @@ from .course import Course
 from .crosscutting import (
     ApprovalProcess,
     ApprovalRequest,
+    ApprovalStageOption,
     ApprovalStep,
     AuditLog,
     FileAsset,
@@ -90,6 +91,7 @@ __all__ = [
     "ApprovalProcess",
     "ApprovalRequest",
     "ApprovalStep",
+    "ApprovalStageOption",
     # Config anchors (pre-M3)
     "AcademicYear",
     "Holiday",
