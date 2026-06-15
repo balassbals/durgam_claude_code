@@ -1253,3 +1253,31 @@ The Phase 3B prompt originally specified 4 ground-truth integration tests using 
 
 **Priority:** Medium. Phase 5 will surface this naturally; explicit remediation not required before then.
 
+---
+
+### TD-073 — `_resolve_or_set_approvers` double-queries `ApprovalStageOption`
+
+**Phase:** M10 Phase 5C1. **Status:** Open. **Priority:** Low.
+
+**Location:** `durgam/services/approval_request.py` — `_resolve_or_set_approvers()`.
+
+**What it is:** `_resolve_or_set_approvers()` calls `ApprovalStageOptionRepository.list_by_process_stage()` to check whether OR-set options exist, then delegates to `resolve_stage_authority()` which calls the same repository method a second time. Two DB round-trips for the same rows per approval action.
+
+**Why not fixed now:** Avoiding a signature change to `resolve_stage_authority()` (adding a pre-fetched `options` parameter) to keep the engine API stable mid-milestone. The double-query is within the same transaction, adds negligible latency at M10 scale, and does not affect correctness.
+
+**Resolution path:** Add an `options: list[ApprovalStageOption] | None = None` parameter to `resolve_stage_authority()` so the caller can pass pre-fetched rows. When provided and non-None, the function skips the repo query. Re-evaluate at M11 or when OR-set is used at high load.
+
+---
+
+### TD-074 — `FacultyRequestService.approve_request()` violates service→service layering
+
+**Phase:** M10 Phase 5C1. **Status:** Open. **Priority:** Low.
+
+**Location:** `durgam/services/faculty_request.py` — `FacultyRequestService.approve_request()`.
+
+**What it is:** `FacultyRequestService.approve_request()` instantiates `ApprovalRequestService` (a deferred import inside the method body) — a cross-service call that violates the CLAUDE.md rule "No import from another service inside a service."
+
+**Why not fixed now:** The approval engine (`ApprovalRequestService.approve()`) is the only production path for advancing approval steps atomically (state change + audit + notifications). Lifting the call into the page-state layer would expose approval-request internals (process lookup, stage resolution) to the UI layer, which is a worse violation. A thin bridge module was considered but deferred: at Phase 5C1 scope it adds indirection without adding logic.
+
+**Resolution path:** Introduce a `durgam/services/faculty_approval_bridge.py` (or similar cross-cutting coordinator) that owns the "advance a FacultyRequest approval step" action, importing both services. This mirrors how `auth` and `notifications` are cross-cutting. Re-evaluate at M10 Phase 7 when full approval CRUD is wired to page states.
+

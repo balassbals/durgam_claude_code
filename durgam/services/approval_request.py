@@ -685,11 +685,68 @@ class ApprovalRequestService:
             return channel
         return process.channel_role_codes or []
 
+    def _resolve_or_set_approvers(
+        self, request: ApprovalRequest
+    ) -> list[User] | None:
+        """Return OR-set approver pool for the current stage, or None to fall through.
+
+        Queries ApprovalStageOption rows for the stage. An empty list (including the
+        result of list()-ing a MagicMock in unit tests, which yields []) causes an
+        immediate None return so existing tests are unaffected.
+
+        TD-073: queries options twice (here + inside resolve_stage_authority).
+        """
+        from durgam.repositories.approval_stage_option import ApprovalStageOptionRepository
+        from durgam.services.approval_engine import MisconfiguredStageError, resolve_stage_authority
+        from durgam.services.approval_resolvers import ResolverContext
+
+        repo = ApprovalStageOptionRepository(self._session)
+        options = repo.list_by_process_stage(request.process_id, request.current_stage)
+        if not options:
+            return None  # No OR-set options for this stage → use legacy path
+
+        picked_str = (request.picked_option_ids_json or {}).get(str(request.current_stage))
+        picked_id = UUID(picked_str) if picked_str else None
+
+        ctx = ResolverContext(
+            requestor_user_id=request.requestor_user_id,
+            process_id=request.process_id,
+            stage_index=request.current_stage,
+            payload=request.payload_json or {},
+        )
+
+        try:
+            status, users = resolve_stage_authority(
+                session=self._session,
+                process_id=request.process_id,
+                stage_index=request.current_stage,
+                ctx=ctx,
+                requestor_picked_option_id=picked_id,
+            )
+        except MisconfiguredStageError:
+            log.warning(
+                "or_set_stage_misconfigured",
+                process_id=str(request.process_id),
+                stage=request.current_stage,
+            )
+            return None
+
+        if status in ("approver_pool", "requestor_pick"):
+            return users
+        if status == "pending_pick":
+            return []  # No pick made → empty pool → eligibility check fails
+        return None  # "legacy" (shouldn't occur after non-empty options check)
+
     def _resolve_approvers(
         self,
         request: ApprovalRequest,
         process: ApprovalProcess,
     ) -> list[User]:
+        # M10 Phase 5C1: OR-set override — stages with ApprovalStageOption rows
+        or_set_users = self._resolve_or_set_approvers(request)
+        if or_set_users is not None:
+            return or_set_users
+
         channel = self._get_channel_for_stage(request, process)
         stage_idx = request.current_stage - 1
         if stage_idx < 0 or stage_idx >= len(channel):

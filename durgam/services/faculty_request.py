@@ -15,6 +15,7 @@ from sqlmodel import Session
 from durgam.models.crosscutting import ApprovalRequest
 from durgam.models.faculty_request import (
     FACULTY_REQUEST_TYPES,
+    STATUS_APPROVED,
     STATUS_DRAFT,
     STATUS_SUBMITTED,
     FacultyRequest,
@@ -43,6 +44,14 @@ class FacultyRequestNotFoundError(ValueError):
 
 class EmptyApproverPoolError(ValueError):
     """Stage 1 resolver returned no approvers for this faculty's dept+campus."""
+
+
+class StageAlreadyAdvancedError(ValueError):
+    """expected_stage_index doesn't match current_stage — another approver acted first."""
+
+
+class UnauthorizedActorError(PermissionError):
+    """Actor is not in the approver pool for the current stage."""
 
 
 class FacultyRequestService:
@@ -201,3 +210,67 @@ class FacultyRequestService:
             {"approval_request_id": approval_req_id, "status": STATUS_SUBMITTED},
             actor_id,
         )
+
+    def approve_request(
+        self,
+        request_id: UUID,
+        actor_id: UUID,
+        expected_stage_index: int | None = None,
+    ) -> FacultyRequest:
+        """Advance the linked ApprovalRequest by one stage as actor_id.
+
+        Syncs FacultyRequest.status to STATUS_APPROVED when the approval chain
+        reaches a terminal approved state.
+
+        Raises:
+        - FacultyRequestNotFoundError if request_id not found or not linked to an
+          approval request
+        - StageAlreadyAdvancedError if expected_stage_index is provided but doesn't
+          match the current stage (concurrent approval guard)
+        - UnauthorizedActorError if actor_id is not in the current-stage approver pool
+        - ApprovalRequestError (re-raised from engine) for other engine failures
+          (terminal state, process not found, etc.)
+
+        TD-074: imports ApprovalRequestService from another service — intentional
+        deviation documented in tech_debt.md.
+        """
+        from durgam.services.approval_request import (  # noqa: PLC0415
+            ApprovalRequestError,
+            ApprovalRequestService,
+        )
+
+        row = self._repo.get(request_id)
+        if row is None:
+            raise FacultyRequestNotFoundError(f"FacultyRequest {request_id} not found")
+        if row.approval_request_id is None:
+            raise FacultyRequestNotFoundError(
+                f"FacultyRequest {request_id} is not linked to an approval request"
+            )
+
+        approval_req = self._session.get(ApprovalRequest, row.approval_request_id)
+        if approval_req is None:
+            raise FacultyRequestNotFoundError(
+                f"ApprovalRequest {row.approval_request_id} not found"
+            )
+
+        if expected_stage_index is not None and approval_req.current_stage != expected_stage_index:
+            raise StageAlreadyAdvancedError(
+                f"Expected stage {expected_stage_index} but request is at stage "
+                f"{approval_req.current_stage}. Another approver may have acted concurrently."
+            )
+
+        svc = ApprovalRequestService(self._session)
+        try:
+            updated = svc.approve(request_id=row.approval_request_id, approver_user_id=actor_id)
+        except ApprovalRequestError as exc:
+            if "not an approver" in str(exc):
+                raise UnauthorizedActorError(
+                    f"User {actor_id} is not in the approver pool for stage "
+                    f"{approval_req.current_stage}."
+                ) from exc
+            raise
+
+        if updated.state == "approved":
+            return self._repo.update(request_id, {"status": STATUS_APPROVED}, actor_id)
+
+        return row
