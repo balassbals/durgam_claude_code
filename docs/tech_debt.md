@@ -1281,3 +1281,36 @@ The Phase 3B prompt originally specified 4 ground-truth integration tests using 
 
 **Resolution path:** Introduce a `durgam/services/faculty_approval_bridge.py` (or similar cross-cutting coordinator) that owns the "advance a FacultyRequest approval step" action, importing both services. This mirrors how `auth` and `notifications` are cross-cutting. Re-evaluate at M10 Phase 7 when full approval CRUD is wired to page states.
 
+---
+
+### TD-075 — `seeded_session.flush()` in idempotency test
+
+**Phase:** M10 Phase 5B (filed in 5C2). **Status:** Open. **Priority:** Medium.
+
+**Location:** `tests/integration/test_faculty_noc_seed.py:59` (inside `test_faculty_noc_seed_idempotent`).
+
+**What it is:** Test calls `seeded_session.flush()` to verify the seed function is idempotent. The seed function's idempotency means no pending writes exist at flush time, so this is benign in practice (verified across 3 deterministic test runs at Phase 5B close — 1479 passed × 3 identical). However, this violates the hard rule established in Phase 3B recovery: `seeded_session` must be read-only because rollback against the session-scoped `seeded_db_engine` is unreliable for mutations.
+
+**Risk:** Future seed function changes that introduce non-idempotent paths could cascade into 28+ collateral failures (as seen in Phase 3B with `seeded_session.delete()`, which is the source of TD-072's gap before resolution).
+
+**Resolution path:** Refactor `test_faculty_noc_seed_idempotent` to use `db_session` with explicit migration setup + manual seed re-invocation, mirroring the synthetic-fixture pattern in `tests/integration/test_faculty_request_submit.py`. Estimated effort: 30 minutes.
+
+**Filed:** M10 Phase 5C2, 2026-06-15.
+
+---
+
+### TD-076 — OR-set stage approval semantics in engine — RESOLVED
+
+**Phase:** M10 Phase 5C1. **Status:** RESOLVED at commit `4d2a578` (Phase 5C1 substantive).
+
+**Original problem:** Phase 5B's NOC process introduced ApprovalStageOption rows with `pick_mode='approver'`, creating a pool of multiple eligible users at Stage 1 (HoD + AhoD via dept_head_at_requestor_campus resolver). The existing M5b/M7 stage-advancement engine expected a single `approver_user_id` to mark a stage as approved.
+
+**Resolution:** Phase 5C1 extended `ApprovalRequestService._resolve_approvers` (durgam/services/approval_request.py) with a new `_resolve_or_set_approvers` helper that:
+1. Queries `ApprovalStageOption` for the current stage
+2. If options exist, delegates to `resolve_stage_authority` (Phase 4) and returns the resolved pool
+3. If no options, returns `None` so the legacy M7/M8 paths execute unchanged
+
+First-action-wins semantics per Q-P5C.1 freeze: any user in the resolved pool can approve; first action advances the stage. Verified by `test_approve_or_set_hod_eligible`, `test_approve_or_set_ahod_eligible`, `test_approve_or_set_non_pool_actor_raises_unauthorized`, `test_approve_rejects_already_advanced_stage`, `test_existing_legacy_process_eligibility_unchanged` in `tests/integration/test_faculty_request_approve.py`.
+
+**Filed for traceability:** M10 Phase 5C2, 2026-06-15.
+

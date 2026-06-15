@@ -17,7 +17,9 @@ from durgam.models.faculty_request import (
     FACULTY_REQUEST_TYPES,
     STATUS_APPROVED,
     STATUS_DRAFT,
+    STATUS_REJECTED,
     STATUS_SUBMITTED,
+    STATUS_WITHDRAWN,
     FacultyRequest,
 )
 from durgam.repositories.approval_process import ApprovalProcessRepository
@@ -52,6 +54,14 @@ class StageAlreadyAdvancedError(ValueError):
 
 class UnauthorizedActorError(PermissionError):
     """Actor is not in the approver pool for the current stage."""
+
+
+class InvalidRejectReasonError(ValueError):
+    """Reject reason is empty, whitespace-only, or exceeds 1000 chars."""
+
+
+class UnauthorizedWithdrawError(PermissionError):
+    """Actor is not the originating faculty for this FacultyRequest."""
 
 
 class FacultyRequestService:
@@ -274,3 +284,128 @@ class FacultyRequestService:
             return self._repo.update(request_id, {"status": STATUS_APPROVED}, actor_id)
 
         return row
+
+    def reject_request(
+        self,
+        request_id: UUID,
+        actor_id: UUID,
+        reason: str,
+        expected_stage_index: int | None = None,
+    ) -> FacultyRequest:
+        """Reject a submitted FacultyRequest at the current stage.
+
+        Eligibility: actor must be in the current-stage approver pool (same as approve).
+        For OR-set stages, any pool member can reject; first action wins.
+        The `reason` parameter is passed as `comment` to the engine's reject method.
+
+        Raises:
+        - InvalidRejectReasonError if reason is empty, whitespace-only, or > 1000 chars
+        - FacultyRequestNotFoundError if request_id not found or not linked
+        - InvalidRequestStatusTransitionError if FacultyRequest is not SUBMITTED
+        - StageAlreadyAdvancedError if expected_stage_index doesn't match
+        - UnauthorizedActorError if actor_id is not in the current-stage pool
+        - ApprovalRequestError (re-raised from engine) for other engine failures
+
+        TD-074: imports ApprovalRequestService from another service — intentional.
+        """
+        if not reason or not reason.strip():
+            raise InvalidRejectReasonError("Reject reason must be non-empty.")
+        if len(reason) > 1000:
+            raise InvalidRejectReasonError("Reject reason exceeds 1000 characters.")
+
+        from durgam.services.approval_request import (  # noqa: PLC0415
+            ApprovalRequestError,
+            ApprovalRequestService,
+        )
+
+        row = self._repo.get(request_id)
+        if row is None:
+            raise FacultyRequestNotFoundError(f"FacultyRequest {request_id} not found")
+        if row.status != STATUS_SUBMITTED:
+            raise InvalidRequestStatusTransitionError(
+                f"Cannot reject: status is '{row.status}'. Only submitted requests may be rejected."
+            )
+        if row.approval_request_id is None:
+            raise FacultyRequestNotFoundError(
+                f"FacultyRequest {request_id} is not linked to an approval request"
+            )
+
+        approval_req = self._session.get(ApprovalRequest, row.approval_request_id)
+        if approval_req is None:
+            raise FacultyRequestNotFoundError(
+                f"ApprovalRequest {row.approval_request_id} not found"
+            )
+
+        if expected_stage_index is not None and approval_req.current_stage != expected_stage_index:
+            raise StageAlreadyAdvancedError(
+                f"Expected stage {expected_stage_index} but request is at stage "
+                f"{approval_req.current_stage}."
+            )
+
+        svc = ApprovalRequestService(self._session)
+        try:
+            svc.reject(
+                request_id=row.approval_request_id,
+                approver_user_id=actor_id,
+                comment=reason,
+            )
+        except ApprovalRequestError as exc:
+            if "not an approver" in str(exc):
+                raise UnauthorizedActorError(
+                    f"User {actor_id} is not in the approver pool for stage "
+                    f"{approval_req.current_stage}."
+                ) from exc
+            raise
+
+        return self._repo.update(request_id, {"status": STATUS_REJECTED}, actor_id)
+
+    def withdraw_request(
+        self,
+        request_id: UUID,
+        actor_id: UUID,
+    ) -> FacultyRequest:
+        """Withdraw a submitted FacultyRequest. Only the originating faculty may withdraw.
+
+        Delegates to the engine's withdraw() method which also marks the ApprovalRequest
+        as 'withdrawn' and notifies approvers.
+
+        Raises:
+        - FacultyRequestNotFoundError if request_id not found or not linked
+        - InvalidRequestStatusTransitionError if FacultyRequest is not SUBMITTED
+        - UnauthorizedWithdrawError if actor_id != faculty.user_id
+
+        TD-074: imports ApprovalRequestService from another service — intentional.
+        """
+        from durgam.services.approval_request import (  # noqa: PLC0415
+            ApprovalRequestError,
+            ApprovalRequestService,
+        )
+
+        row = self._repo.get(request_id)
+        if row is None:
+            raise FacultyRequestNotFoundError(f"FacultyRequest {request_id} not found")
+        if row.status != STATUS_SUBMITTED:
+            raise InvalidRequestStatusTransitionError(
+                f"Cannot withdraw: status is '{row.status}'. Only submitted requests may be withdrawn."
+            )
+        if row.approval_request_id is None:
+            raise FacultyRequestNotFoundError(
+                f"FacultyRequest {request_id} is not linked to an approval request"
+            )
+
+        faculty = self._faculty_repo.get(row.faculty_id)
+        if faculty is None:
+            raise FacultyRequestNotFoundError(f"Faculty {row.faculty_id} not found")
+        if faculty.user_id != actor_id:
+            raise UnauthorizedWithdrawError(
+                f"User {actor_id} cannot withdraw FacultyRequest {request_id}: "
+                f"only the originating faculty ({faculty.user_id}) may withdraw."
+            )
+
+        svc = ApprovalRequestService(self._session)
+        svc.withdraw(
+            request_id=row.approval_request_id,
+            requestor_user_id=faculty.user_id,
+        )
+
+        return self._repo.update(request_id, {"status": STATUS_WITHDRAWN}, actor_id)
