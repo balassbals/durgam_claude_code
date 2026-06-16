@@ -254,6 +254,8 @@ class FacultyRequestService:
         request_id: UUID,
         actor_id: UUID,
         expected_stage_index: int | None = None,
+        is_visible_to_requestor: bool = True,
+        visible_to_lower_user_ids: list[UUID] | None = None,
     ) -> FacultyRequest:
         """Advance the linked ApprovalRequest by one stage as actor_id.
 
@@ -299,7 +301,12 @@ class FacultyRequestService:
 
         svc = ApprovalRequestService(self._session)
         try:
-            updated = svc.approve(request_id=row.approval_request_id, approver_user_id=actor_id)
+            updated = svc.approve(
+                request_id=row.approval_request_id,
+                approver_user_id=actor_id,
+                is_visible_to_requestor=is_visible_to_requestor,
+                visible_to_lower_user_ids=visible_to_lower_user_ids,
+            )
         except ApprovalRequestError as exc:
             if "not an approver" in str(exc):
                 raise UnauthorizedActorError(
@@ -319,6 +326,8 @@ class FacultyRequestService:
         actor_id: UUID,
         reason: str,
         expected_stage_index: int | None = None,
+        is_visible_to_requestor: bool = True,
+        visible_to_lower_user_ids: list[UUID] | None = None,
     ) -> FacultyRequest:
         """Reject a submitted FacultyRequest at the current stage.
 
@@ -376,6 +385,8 @@ class FacultyRequestService:
                 request_id=row.approval_request_id,
                 approver_user_id=actor_id,
                 comment=reason,
+                is_visible_to_requestor=is_visible_to_requestor,
+                visible_to_lower_user_ids=visible_to_lower_user_ids,
             )
         except ApprovalRequestError as exc:
             if "not an approver" in str(exc):
@@ -590,3 +601,52 @@ class FacultyRequestService:
             )
 
         file_repo.soft_delete(asset, actor_id)
+
+    # ── Phase 7A — ApprovalAction visibility pass-throughs ─────────────────────
+
+    def list_actions_for_requestor(self, request_id: UUID) -> list:
+        """Return approval actions visible to the requestor for the given FacultyRequest.
+
+        Delegates to ApprovalRequestService.list_actions_for_requestor() after resolving
+        the linked approval_request_id.
+
+        TD-074: deferred import of ApprovalRequestService — intentional.
+        """
+        from durgam.services.approval_request import ApprovalRequestService  # noqa: PLC0415
+
+        row = self._repo.get(request_id)
+        if row is None:
+            raise FacultyRequestNotFoundError(f"FacultyRequest {request_id} not found")
+        if row.approval_request_id is None:
+            return []
+
+        svc = ApprovalRequestService(self._session)
+        return svc.list_actions_for_requestor(row.approval_request_id)
+
+    def list_actions_for_approver(
+        self,
+        request_id: UUID,
+        approver_user_id: UUID,
+        approver_stage: int,
+    ) -> list:
+        """Return approval actions visible to an approver for the given FacultyRequest.
+
+        Delegates to ApprovalRequestService.list_actions_for_approver() after resolving
+        the linked approval_request_id.
+
+        TD-074: deferred import of ApprovalRequestService — intentional.
+        """
+        from durgam.services.approval_request import ApprovalRequestService  # noqa: PLC0415
+
+        row = self._repo.get(request_id)
+        if row is None:
+            raise FacultyRequestNotFoundError(f"FacultyRequest {request_id} not found")
+        if row.approval_request_id is None:
+            return []
+
+        svc = ApprovalRequestService(self._session)
+        return svc.list_actions_for_approver(
+            approval_request_id=row.approval_request_id,
+            approver_user_id=approver_user_id,
+            approver_stage=approver_stage,
+        )

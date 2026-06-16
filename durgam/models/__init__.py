@@ -31,6 +31,7 @@ from .config_anchors import (
 )
 from .course import Course
 from .crosscutting import (
+    ApprovalAction,
     ApprovalProcess,
     ApprovalRequest,
     ApprovalStageOption,
@@ -93,6 +94,7 @@ __all__ = [
     "ApprovalRequest",
     "ApprovalStep",
     "ApprovalStageOption",
+    "ApprovalAction",
     # Config anchors (pre-M3)
     "AcademicYear",
     "Holiday",

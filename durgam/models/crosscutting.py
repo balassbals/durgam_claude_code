@@ -204,3 +204,48 @@ class ApprovalStageOption(TimestampedSoftDelete, table=True):
     resolver_name: str = Field(max_length=200, nullable=False)
     label: str = Field(max_length=200, nullable=False)
     sort_order: int = Field(default=0, nullable=False)
+
+
+class ApprovalAction(TimestampedSoftDelete, table=True):
+    """Visibility-controlled per-decision action record (M10 Phase 7A).
+
+    One row is written per approve/reject decision alongside the existing ApprovalStep row.
+    Unlike ApprovalStep (internal engine bookkeeping), ApprovalAction rows are surfaced to
+    users through visibility rules (is_visible_to_requestor, visible_to_lower_user_ids_json).
+
+    Visibility semantics:
+    - Requestor sees this action iff is_visible_to_requestor=True.
+    - An approver at stage N sees actions from stages ≤ N always; actions from stages > N
+      only if their user_id appears in visible_to_lower_user_ids_json.
+    - An approver always sees their own action regardless of flags (TD-081).
+    """
+
+    __tablename__ = "approval_actions"
+    __table_args__ = (
+        sa.Index("ix_approval_actions_request_id", "approval_request_id"),
+        sa.CheckConstraint(
+            "action_type IN ('approve', 'reject')",
+            name="ck_approval_actions_action_type",
+        ),
+    )
+
+    approval_request_id: UUID = Field(
+        foreign_key="approval_requests.id",
+        nullable=False,
+    )
+    stage_index: int = Field(nullable=False)
+    actor_user_id: UUID = Field(
+        foreign_key="users.id",
+        nullable=False,
+    )
+    action_type: str = Field(max_length=20, nullable=False)  # 'approve' | 'reject'
+    comment: str | None = Field(default=None)
+    downward_attachment_file_ids_json: list[str] | None = Field(
+        default=None,
+        sa_column=Column(JSONB, nullable=True),
+    )
+    is_visible_to_requestor: bool = Field(default=True, nullable=False)
+    visible_to_lower_user_ids_json: list[str] | None = Field(
+        default=None,
+        sa_column=Column(JSONB, nullable=True),
+    )

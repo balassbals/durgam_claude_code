@@ -1359,3 +1359,21 @@ First-action-wins semantics per Q-P5C.1 freeze: any user in the resolved pool ca
 **Resolution path:** Phase 7's admin UI for FacultyRequest must include an "Approval Process Settings" form (or equivalent) gated to ADMIN/REGISTRAR roles, exposing max_attachment_mb, max_upward_attachments, and a multi-select MIME picker. Estimated effort: 1-2 days within Phase 7 scope.
 
 **Filed:** M10 Phase 6, 2026-06-16.
+
+---
+
+### TD-081 — ApprovalAction visibility model defers DB-level RLS to application layer
+
+**Phase:** M10 Phase 7A. **Status:** Open. **Priority:** Low.
+
+**Location:** `durgam/services/approval_request.py` — `list_actions_for_requestor()` and `list_actions_for_approver()` filter in Python after fetching all actions for a request.
+
+**What it is:** The Phase 7A visibility model (`is_visible_to_requestor`, `visible_to_lower_user_ids_json`) is enforced in the application service layer rather than as PostgreSQL Row-Level Security (RLS) policies. The repository returns all non-deleted `approval_actions` rows for a request; the service filters to the caller's visibility slice.
+
+**Why this is acceptable now:** Per-request action counts are tiny (one per stage per decision — typically 2–5 rows). Python filtering at that scale is negligible. RLS would require a dedicated DB role-switching pattern not yet established in DURGAM. The tradeoff is acceptable at Phase 7A.
+
+**Risk:** If visibility filtering logic diverges between two call paths (e.g., a future REST endpoint calling the repo directly), the app-layer filter could be bypassed. The repository currently exposes `list_by_request_id()` which returns all rows.
+
+**Resolution path:** When per-request action counts exceed ~50 rows OR when a REST/GraphQL layer is introduced that bypasses the service, migrate visibility filtering to a PostgreSQL view or RLS policy. Tag with "before REST layer introduction." Estimated effort: 1 day.
+
+**Filed:** M10 Phase 7A, 2026-06-16.

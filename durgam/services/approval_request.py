@@ -16,6 +16,7 @@ from sqlmodel import Session, select
 from durgam.audit.log import write_audit_row
 from durgam.auth.permissions import can
 from durgam.models.crosscutting import (
+    ApprovalAction,
     ApprovalProcess,
     ApprovalRequest,
     ApprovalStep,
@@ -23,6 +24,7 @@ from durgam.models.crosscutting import (
     Notification,
 )
 from durgam.models.identity import Role, User, UserRole
+from durgam.repositories.approval_action import ApprovalActionRepository
 from durgam.repositories.approval_process import ApprovalProcessRepository
 from durgam.repositories.approval_request import ApprovalRequestRepository
 from durgam.repositories.approval_step import ApprovalStepRepository
@@ -47,6 +49,7 @@ class ApprovalRequestService:
         self._req_repo = ApprovalRequestRepository(session)
         self._step_repo = ApprovalStepRepository(session)
         self._proc_repo = ApprovalProcessRepository(session)
+        self._action_repo = ApprovalActionRepository(session)
 
     def submit(
         self,
@@ -204,6 +207,8 @@ class ApprovalRequestService:
         approver_user_id: UUID,
         comment: str | None = None,
         downward_attachment_file_ids: list[UUID] | None = None,
+        is_visible_to_requestor: bool = True,
+        visible_to_lower_user_ids: list[UUID] | None = None,
     ) -> ApprovalRequest:
         request = self._req_repo.get_by_id(request_id)
         if request is None:
@@ -247,6 +252,17 @@ class ApprovalRequestService:
             decided_at=now,
         )
         self._step_repo.create(step)
+
+        self._record_action(
+            request=request,
+            stage_index=request.current_stage,
+            actor_user_id=approver_user_id,
+            action_type="approve",
+            comment=comment,
+            downward_attachment_file_ids=downward_attachment_file_ids or [],
+            is_visible_to_requestor=is_visible_to_requestor,
+            visible_to_lower_user_ids=visible_to_lower_user_ids,
+        )
 
         self._link_attachments(
             downward_attachment_file_ids or [],
@@ -382,6 +398,8 @@ class ApprovalRequestService:
         request_id: UUID,
         approver_user_id: UUID,
         comment: str,
+        is_visible_to_requestor: bool = True,
+        visible_to_lower_user_ids: list[UUID] | None = None,
     ) -> ApprovalRequest:
         if not comment or not comment.strip():
             raise ApprovalRequestError("A comment is required when rejecting.")
@@ -425,6 +443,17 @@ class ApprovalRequestService:
             decided_at=now,
         )
         self._step_repo.create(step)
+
+        self._record_action(
+            request=request,
+            stage_index=request.current_stage,
+            actor_user_id=approver_user_id,
+            action_type="reject",
+            comment=comment.strip(),
+            downward_attachment_file_ids=[],
+            is_visible_to_requestor=is_visible_to_requestor,
+            visible_to_lower_user_ids=visible_to_lower_user_ids,
+        )
 
         old_state = request.state
         self._req_repo.update_state(request, "rejected", decided_at=now)
@@ -1161,3 +1190,74 @@ class ApprovalRequestService:
                 )
                 self._session.add(notif)
         self._session.flush()
+
+    # ── Phase 7A — ApprovalAction visibility-controlled records ─────────────────
+
+    def _record_action(
+        self,
+        *,
+        request: ApprovalRequest,
+        stage_index: int,
+        actor_user_id: UUID,
+        action_type: str,
+        comment: str | None,
+        downward_attachment_file_ids: list[UUID],
+        is_visible_to_requestor: bool,
+        visible_to_lower_user_ids: list[UUID] | None,
+    ) -> ApprovalAction:
+        """Write one ApprovalAction row for an approve or reject decision."""
+        now = datetime.now(UTC)
+        file_ids_json = [str(fid) for fid in downward_attachment_file_ids] or None
+        lower_ids_json = (
+            [str(uid) for uid in visible_to_lower_user_ids]
+            if visible_to_lower_user_ids
+            else None
+        )
+        action = ApprovalAction(
+            approval_request_id=request.id,
+            stage_index=stage_index,
+            actor_user_id=actor_user_id,
+            action_type=action_type,
+            comment=comment,
+            downward_attachment_file_ids_json=file_ids_json,
+            is_visible_to_requestor=is_visible_to_requestor,
+            visible_to_lower_user_ids_json=lower_ids_json,
+            created_by=actor_user_id,
+            updated_by=actor_user_id,
+            created_at=now,
+            updated_at=now,
+        )
+        return self._action_repo.create(action)
+
+    def list_actions_for_requestor(self, approval_request_id: UUID) -> list[ApprovalAction]:
+        """Return actions visible to the requestor (is_visible_to_requestor=True)."""
+        all_actions = self._action_repo.list_by_request_id(approval_request_id)
+        return [a for a in all_actions if a.is_visible_to_requestor]
+
+    def list_actions_for_approver(
+        self,
+        approval_request_id: UUID,
+        approver_user_id: UUID,
+        approver_stage: int,
+    ) -> list[ApprovalAction]:
+        """Return actions visible to an approver at the given stage.
+
+        Visibility rules:
+        - Own actions (actor_user_id == approver_user_id): always visible.
+        - Actions at stages ≤ approver_stage: visible (higher hierarchy sees lower).
+        - Actions at stages > approver_stage: visible only if approver_user_id appears
+          in visible_to_lower_user_ids_json.
+        """
+        all_actions = self._action_repo.list_by_request_id(approval_request_id)
+        result: list[ApprovalAction] = []
+        for action in all_actions:
+            if action.actor_user_id == approver_user_id:
+                result.append(action)
+                continue
+            if action.stage_index <= approver_stage:
+                result.append(action)
+                continue
+            # stage_index > approver_stage: check explicit grant
+            if action.visible_to_lower_user_ids_json and str(approver_user_id) in action.visible_to_lower_user_ids_json:
+                result.append(action)
+        return result
