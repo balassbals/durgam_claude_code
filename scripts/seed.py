@@ -2784,6 +2784,13 @@ def _seed_faculty_noc_process(session: Session) -> int:
     ).first()
 
     if process is not None:
+        # Phase 6: idempotently upgrade attachment config from defaults.
+        # Only update when values are still at defaults (preserves manual sys admin edits).
+        if process.max_upward_attachments == 0 and process.allowed_attachment_mime_types_json is None:
+            process.max_upward_attachments = 3
+            process.allowed_attachment_mime_types_json = ["application/pdf"]
+            session.add(process)
+            session.flush()
         existing_option = session.exec(
             select(ApprovalStageOption).where(
                 ApprovalStageOption.approval_process_id == process.id,

@@ -23,6 +23,17 @@ class FileAssetRepository(BaseRepository[FileAsset]):
         )
         return self._session.exec(stmt).first()
 
+    def list_by_faculty_request_id(self, faculty_request_id: UUID) -> list[FileAsset]:
+        """Return non-deleted FileAssets linked to a FacultyRequest via metadata_json."""
+        stmt = select(FileAsset).where(
+            FileAsset.is_deleted == False,  # noqa: E712
+            FileAsset.purpose == "faculty_request_attachment",
+            FileAsset.metadata_json.op("@>")(  # type: ignore[union-attr]
+                sa.cast({"faculty_request_id": str(faculty_request_id)}, JSONB)
+            ),
+        )
+        return list(self._session.exec(stmt).all())
+
     def list_by_announcement_id(self, announcement_id: UUID) -> list[FileAsset]:
         """Return non-deleted FileAssets linked to an announcement via metadata_json."""
         stmt = select(FileAsset).where(

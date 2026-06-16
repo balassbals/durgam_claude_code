@@ -99,6 +99,10 @@ class ApprovalProcess(TimestampedSoftDelete, table=True):
     max_upward_attachments: int = Field(default=0)
     max_downward_attachments: int = Field(default=0)
     max_attachment_mb: int = Field(default=5)
+    allowed_attachment_mime_types_json: list[str] | None = Field(
+        default=None,
+        sa_column=Column(JSONB, nullable=True),
+    )
     is_finance: bool = Field(default=False)
     informational_cc_role_codes: list[str] | None = Field(
         default=None, sa_column=Column(JSONB, nullable=True)

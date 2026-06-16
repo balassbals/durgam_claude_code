@@ -7,12 +7,13 @@ No audit emissions in Phase 5A/5B — wired at state-handler boundary in Phase 7
 
 from __future__ import annotations
 
+import hashlib
 from datetime import UTC, datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlmodel import Session
 
-from durgam.models.crosscutting import ApprovalRequest
+from durgam.models.crosscutting import ApprovalRequest, FileAsset
 from durgam.models.faculty_request import (
     FACULTY_REQUEST_TYPES,
     STATUS_APPROVED,
@@ -25,11 +26,13 @@ from durgam.models.faculty_request import (
 from durgam.repositories.approval_process import ApprovalProcessRepository
 from durgam.repositories.faculty import FacultyRepository
 from durgam.repositories.faculty_request import FacultyRequestRepository
+from durgam.repositories.file_asset import FileAssetRepository
 from durgam.services.approval_engine import (
     StageOptionMismatchError,
     resolve_stage_authority,
 )
 from durgam.services.approval_resolvers import ResolverContext
+from durgam.storage.backend import StorageBackend
 
 
 class UnknownRequestTypeError(ValueError):
@@ -64,11 +67,36 @@ class UnauthorizedWithdrawError(PermissionError):
     """Actor is not the originating faculty for this FacultyRequest."""
 
 
+class AttachmentNotConfiguredError(ValueError):
+    """ApprovalProcess does not allow attachments for this request type."""
+
+
+class DisallowedMimeTypeError(ValueError):
+    """MIME type not in the process's allowed list."""
+
+
+class AttachmentTooLargeError(ValueError):
+    """File exceeds max_attachment_mb."""
+
+
+class AttachmentLimitExceededError(ValueError):
+    """Request has reached max_attachment_count (max_upward_attachments)."""
+
+
+class UnauthorizedAttachmentError(PermissionError):
+    """Actor cannot manage attachments for this FacultyRequest."""
+
+
+class AttachmentNotFoundError(ValueError):
+    """No attachment (FileAsset) with that ID linked to this request."""
+
+
 class FacultyRequestService:
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: Session, storage_backend: StorageBackend | None = None) -> None:
         self._session = session
         self._repo = FacultyRequestRepository(session)
         self._faculty_repo = FacultyRepository(session)
+        self._storage_backend = storage_backend
 
     def create_request(
         self,
@@ -409,3 +437,156 @@ class FacultyRequestService:
         )
 
         return self._repo.update(request_id, {"status": STATUS_WITHDRAWN}, actor_id)
+
+    # ── Attachment methods (Phase 6) ──────────────────────────────────────────
+
+    def add_attachment(
+        self,
+        request_id: UUID,
+        file_bytes: bytes,
+        filename: str,
+        mime_type: str,
+        actor_id: UUID,
+    ) -> FileAsset:
+        """Attach a file to a FacultyRequest. Validates MIME, size, and count limits
+        against the linked ApprovalProcess configuration (DB-driven; no hardcoded values).
+
+        Only allowed when FacultyRequest.status == DRAFT.
+        Only the originating faculty (faculty.user_id == actor_id) may attach.
+
+        Raises:
+        - FacultyRequestNotFoundError if request_id not found
+        - InvalidRequestStatusTransitionError if status != DRAFT
+        - UnauthorizedAttachmentError if actor_id != faculty.user_id
+        - AttachmentNotConfiguredError if process.allowed_attachment_mime_types_json is None
+        - DisallowedMimeTypeError if mime_type not in allowed list
+        - AttachmentTooLargeError if size > max_attachment_mb * 1024 * 1024
+        - AttachmentLimitExceededError if existing count >= max_upward_attachments
+        """
+        row = self._repo.get(request_id)
+        if row is None:
+            raise FacultyRequestNotFoundError(f"FacultyRequest {request_id} not found")
+        if row.status != STATUS_DRAFT:
+            raise InvalidRequestStatusTransitionError(
+                f"Cannot attach file: status is '{row.status}'. "
+                "Attachments are only allowed on draft requests."
+            )
+
+        faculty = self._faculty_repo.get(row.faculty_id)
+        if faculty is None:
+            raise FacultyRequestNotFoundError(f"Faculty {row.faculty_id} not found")
+        if faculty.user_id != actor_id:
+            raise UnauthorizedAttachmentError(
+                f"User {actor_id} cannot manage attachments for FacultyRequest {request_id}."
+            )
+
+        process_code = f"faculty_{row.request_type}"
+        process_repo = ApprovalProcessRepository(self._session)
+        process = process_repo.get_by_code(process_code)
+        if process is None or process.allowed_attachment_mime_types_json is None:
+            raise AttachmentNotConfiguredError(
+                f"Process '{process_code}' does not allow attachments."
+            )
+
+        allowed_mimes: list[str] = process.allowed_attachment_mime_types_json
+        if mime_type not in allowed_mimes:
+            raise DisallowedMimeTypeError(
+                f"MIME type '{mime_type}' is not allowed for process '{process_code}'. "
+                f"Allowed: {', '.join(sorted(allowed_mimes))}"
+            )
+
+        max_bytes = process.max_attachment_mb * 1024 * 1024
+        if len(file_bytes) > max_bytes:
+            raise AttachmentTooLargeError(
+                f"File exceeds the {process.max_attachment_mb} MB size limit "
+                f"({len(file_bytes)} bytes > {max_bytes} bytes)."
+            )
+
+        file_repo = FileAssetRepository(self._session)
+        existing = file_repo.list_by_faculty_request_id(request_id)
+        if len(existing) >= process.max_upward_attachments:
+            raise AttachmentLimitExceededError(
+                f"Request already has {len(existing)} attachment(s); "
+                f"maximum is {process.max_upward_attachments}."
+            )
+
+        backend = self._storage_backend
+        if backend is None:
+            from durgam.storage import get_storage_backend  # noqa: PLC0415
+            backend = get_storage_backend()
+
+        sha256 = hashlib.sha256(file_bytes).hexdigest()
+        storage_key = uuid4().hex
+        backend.put(storage_key, file_bytes, mime_type)
+
+        now = datetime.now(UTC)
+        asset = FileAsset(
+            storage_key=storage_key,
+            original_name=filename,
+            mime_type=mime_type,
+            size_bytes=len(file_bytes),
+            sha256=sha256,
+            owner_user_id=actor_id,
+            purpose="faculty_request_attachment",
+            metadata_json={"faculty_request_id": str(request_id)},
+            created_by=actor_id,
+            updated_by=actor_id,
+            created_at=now,
+            updated_at=now,
+        )
+        return file_repo.save(asset)
+
+    def list_attachments(self, request_id: UUID) -> list[FileAsset]:
+        """List non-deleted attachments for a FacultyRequest. No status restriction."""
+        file_repo = FileAssetRepository(self._session)
+        return file_repo.list_by_faculty_request_id(request_id)
+
+    def remove_attachment(
+        self,
+        attachment_id: UUID,
+        actor_id: UUID,
+    ) -> None:
+        """Soft-delete a FacultyRequest attachment. MinIO object is retained for audit.
+
+        Only allowed when FacultyRequest.status == DRAFT.
+        Only the originating faculty may remove attachments.
+
+        Raises:
+        - AttachmentNotFoundError if attachment_id not found or not a faculty_request_attachment
+        - FacultyRequestNotFoundError if linked FacultyRequest absent
+        - InvalidRequestStatusTransitionError if status != DRAFT
+        - UnauthorizedAttachmentError if actor_id != faculty.user_id
+        """
+        file_repo = FileAssetRepository(self._session)
+        asset = file_repo.get_by_id(attachment_id)
+        if asset is None or asset.purpose != "faculty_request_attachment":
+            raise AttachmentNotFoundError(
+                f"Attachment {attachment_id} not found."
+            )
+
+        fr_id_str = (asset.metadata_json or {}).get("faculty_request_id")
+        if fr_id_str is None:
+            raise AttachmentNotFoundError(
+                f"Attachment {attachment_id} has no linked FacultyRequest."
+            )
+
+        row = self._repo.get(UUID(fr_id_str))
+        if row is None:
+            raise FacultyRequestNotFoundError(
+                f"FacultyRequest {fr_id_str} not found."
+            )
+        if row.status != STATUS_DRAFT:
+            raise InvalidRequestStatusTransitionError(
+                f"Cannot remove attachment: FacultyRequest status is '{row.status}'. "
+                "Attachments can only be removed from draft requests."
+            )
+
+        faculty = self._faculty_repo.get(row.faculty_id)
+        if faculty is None:
+            raise FacultyRequestNotFoundError(f"Faculty {row.faculty_id} not found")
+        if faculty.user_id != actor_id:
+            raise UnauthorizedAttachmentError(
+                f"User {actor_id} cannot remove attachments from FacultyRequest {row.id}."
+            )
+
+        file_repo.soft_delete(asset, actor_id)

@@ -1314,3 +1314,48 @@ First-action-wins semantics per Q-P5C.1 freeze: any user in the resolved pool ca
 
 **Filed for traceability:** M10 Phase 5C2, 2026-06-15.
 
+---
+
+### TD-078 — Isolation-skip pattern in `test_faculty_request_reject_withdraw.py`
+
+**Phase:** M10 Phase 5C2 (filed in Phase 6). **Status:** Open. **Priority:** Low.
+
+**Location:** `tests/integration/test_faculty_request_reject_withdraw.py` (uses `_get_seeded_noc_process` which calls `pytest.skip` when faculty_noc isn't seeded).
+
+**What it is:** 11 of 15 tests in this file depend on the seeded NOC process being in the DB; in isolation (smoke-check invocation), they pytest.skip. This means the test file cannot be smoke-tested standalone. The pattern works in full-suite runs because conftest's seeded_db_engine seeds before these tests execute (verified by 3-determinism passing 1505 × 3 at Phase 5C2 close).
+
+**Risk:** Future contributors may run this file in isolation expecting full coverage and miss regressions. Also inconsistent with Phase 5C1's test_faculty_request_approve.py which used synthetic fixtures + monkeypatched resolvers (no seed dependency).
+
+**Resolution path:** Refactor the 11 seed-dependent tests to set up ApprovalProcess + ApprovalStageOption synthetically via db_session, mirroring Phase 5C1's pattern. Estimated effort: 1-2 hours.
+
+**Filed:** M10 Phase 6, 2026-06-16.
+
+---
+
+### TD-079 — M9 announcement attachment MIME/size limits are hardcoded in state handler
+
+**Phase:** M9 (filed in M10 Phase 6). **Status:** Open. **Priority:** Medium.
+
+**Location:** `durgam/states/announcements.py:362-370` — `UploadService` constructed with `allowed_mimes=frozenset({"application/pdf", "image/png", "image/jpeg"})` and `max_size_mb=2` hardcoded in the state handler body.
+
+**What it is:** M9 announcement attachment size/MIME limits are hardcoded constants in the state handler. Sys admin cannot reconfigure without a code deploy. This is inconsistent with the M7/M10 DB-backed approach (`ApprovalProcess.max_attachment_mb`, `allowed_attachment_mime_types_json`).
+
+**Resolution path:** Add `allowed_attachment_mime_types_json JSONB` + `max_attachment_mb INT` columns to `AnnouncementCategory`. Migrate hardcoded values into DB defaults via Alembic. Read those values in `attach_upload` state handler and pass to `UploadService` constructor. Sys admin UI in Phase 7+ Admin section. Estimated effort: 4-6 hours.
+
+**Filed:** M10 Phase 6, 2026-06-16.
+
+---
+
+### TD-080 — Sys admin UI for ApprovalProcess attachment configuration
+
+**Phase:** M10 Phase 6 (filed for Phase 7). **Status:** Open. **Priority:** Medium.
+
+**Location:** No code yet — to be built in Phase 7's admin UI surface.
+
+**What it is:** Phase 6 ships DB-backed attachment configuration on ApprovalProcess (max_attachment_mb, max_upward_attachments, allowed_attachment_mime_types_json). Sys admin can change these values, but only via direct DB UPDATE or seed re-run. There is no UI for sys admin to self-service edit attachment policy per process.
+
+**Risk:** Operational friction — institutional users (e.g., Registrar) cannot adjust attachment limits without developer assistance.
+
+**Resolution path:** Phase 7's admin UI for FacultyRequest must include an "Approval Process Settings" form (or equivalent) gated to ADMIN/REGISTRAR roles, exposing max_attachment_mb, max_upward_attachments, and a multi-select MIME picker. Estimated effort: 1-2 days within Phase 7 scope.
+
+**Filed:** M10 Phase 6, 2026-06-16.
