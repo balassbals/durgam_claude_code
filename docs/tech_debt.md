@@ -1377,3 +1377,15 @@ First-action-wins semantics per Q-P5C.1 freeze: any user in the resolved pool ca
 **Resolution path:** When per-request action counts exceed ~50 rows OR when a REST/GraphQL layer is introduced that bypasses the service, migrate visibility filtering to a PostgreSQL view or RLS policy. Tag with "before REST layer introduction." Estimated effort: 1 day.
 
 **Filed:** M10 Phase 7A, 2026-06-16.
+
+---
+
+### TD-082 — ApprovalAction visibility model implementation marker — RESOLVED
+
+**Phase:** M10 Phase 7A. **Status:** RESOLVED at commit `d97ddfe` (Phase 7A substantive).
+
+**What it is:** Phase 7A implemented `ApprovalAction` (schema, model, repository, service filtering methods). The visibility model (`is_visible_to_requestor`, `visible_to_lower_user_ids_json`) is fully operational. The application-layer enforcement tradeoff is separately tracked under TD-081.
+
+**Resolution:** All five Phase 7A deliverables shipped: migration `c4d7e9f2a831`, `ApprovalAction` model, `ApprovalActionRepository`, engine extension (`approve()`/`reject()` visibility kwargs, `_record_action()`), and `FacultyRequestService` pass-throughs. 18 integration tests, 0 skips.
+
+**Filed:** M10 Phase 7B, 2026-06-16.

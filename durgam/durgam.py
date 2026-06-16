@@ -325,3 +325,21 @@ app.add_page(
         AnnouncementDetailState.close_detail,
     ],
 )
+
+# ── M10 Faculty Requests (Phase 7B) ───────────────────────────────────────────
+from durgam.pages.faculty_requests import __init__ as _faculty_requests_nav_register  # noqa: F401
+from durgam.pages.faculty_requests.list import faculty_requests_list_page
+from durgam.pages.faculty_requests.new import faculty_requests_new_page
+from durgam.pages.faculty_requests.detail import faculty_request_detail_page
+from durgam.states.faculty_requests import (
+    FacultyRequestsState,
+    NewFacultyRequestState,
+    FacultyRequestDetailState,
+)
+
+app.add_page(faculty_requests_list_page, route="/faculty/requests",
+             on_load=FacultyRequestsState.load_my_requests)
+app.add_page(faculty_requests_new_page, route="/faculty/requests/new",
+             on_load=NewFacultyRequestState.init_new_request)
+app.add_page(faculty_request_detail_page, route="/faculty/requests/[faculty_request_id]",
+             on_load=FacultyRequestDetailState.load_detail)
