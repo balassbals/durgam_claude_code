@@ -100,7 +100,7 @@ def approver_inbox_page() -> rx.Component:
                             ApproverInboxState.inbox_items.length() == 0,
                             rx.center(
                                 rx.vstack(
-                                    rx.icon("check-circle", size=40, color="var(--color-muted)"),
+                                    rx.icon("circle_check", size=40, color="var(--color-muted)"),
                                     rx.text(
                                         "No pending faculty requests.",
                                         color="var(--color-muted)",

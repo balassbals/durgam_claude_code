@@ -34,7 +34,7 @@ def _mime_checkbox(label: str, value: str) -> rx.Component:
     return rx.hstack(
         rx.checkbox(
             checked=ApprovalProcessConfigState.form_allowed_mimes.contains(value),  # type: ignore[attr-defined]
-            on_change=lambda _: ApprovalProcessConfigState.toggle_allowed_mime(value),
+            on_change=ApprovalProcessConfigState.toggle_allowed_mime(value),
         ),
         rx.text(label, font_size="0.82rem"),
         align="center",
