@@ -1346,19 +1346,23 @@ First-action-wins semantics per Q-P5C.1 freeze: any user in the resolved pool ca
 
 ---
 
-### TD-080 — Sys admin UI for ApprovalProcess attachment configuration
+### TD-080 — Sys admin UI for ApprovalProcess attachment configuration — RESOLVED
 
-**Phase:** M10 Phase 6 (filed for Phase 7). **Status:** Open. **Priority:** Medium.
+**Phase:** M10 Phase 6 (filed for Phase 7). **Status:** RESOLVED in Phase 7D, 2026-06-17. **Priority:** —.
 
-**Location:** No code yet — to be built in Phase 7's admin UI surface.
+**Location:** `durgam/pages/admin/config/approval_processes.py`, `durgam/states/config_approval_process.py`, `durgam/services/approval_process.py`.
 
-**What it is:** Phase 6 ships DB-backed attachment configuration on ApprovalProcess (max_attachment_mb, max_upward_attachments, allowed_attachment_mime_types_json). Sys admin can change these values, but only via direct DB UPDATE or seed re-run. There is no UI for sys admin to self-service edit attachment policy per process.
+**What it was:** Phase 6 shipped DB-backed attachment configuration on ApprovalProcess (max_attachment_mb, max_upward_attachments, allowed_attachment_mime_types_json). Sys admin could only change these values via direct DB UPDATE or seed re-run; no admin UI existed.
 
-**Risk:** Operational friction — institutional users (e.g., Registrar) cannot adjust attachment limits without developer assistance.
+**Resolution (Phase 7D):** Extended the existing `/admin/config/approval-processes` page (which already had CRUD for approval process templates):
+- `ApprovalProcessService.create()` extended with `allowed_attachment_mime_types_json: list[str]|None=None` kwarg (backward-compatible)
+- `ApprovalProcessConfigState` extended: `form_max_attachment_mb`, `form_allowed_mimes` state vars; `set_form_max_attachment_mb`, `toggle_allowed_mime` setters; all lifecycle methods (`open_create`, `open_edit`, `cancel_form`, `save_process`) updated
+- Edit form extended with: number input for `max_attachment_mb` (1–100 MB), 9-option MIME type checkbox picker (PDF, JPEG, PNG, DOCX, DOC, XLSX, XLS, plain text, CSV — empty = any)
+- Data table shows `max_attachment_mb` ("Max MB" column) and `allowed_mimes` ("Allowed Types" column)
+- 16 integration tests in `tests/integration/test_approval_process_config.py`
+- Permission triple: `approval_process:write:*` (existing, SYSTEM_ADMIN only via all-perms sweep)
 
-**Resolution path:** Phase 7's admin UI for FacultyRequest must include an "Approval Process Settings" form (or equivalent) gated to ADMIN/REGISTRAR roles, exposing max_attachment_mb, max_upward_attachments, and a multi-select MIME picker. Estimated effort: 1-2 days within Phase 7 scope.
-
-**Filed:** M10 Phase 6, 2026-06-16.
+**Filed:** M10 Phase 6, 2026-06-16. **Resolved:** Phase 7D, 2026-06-17.
 
 ---
 

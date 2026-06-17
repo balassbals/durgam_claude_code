@@ -322,11 +322,7 @@ class ApproverRequestDetailState(BaseState):
     @require_role(action="approve", resource="approval_request", scope="*")
     @audit_action(action="approve", resource="faculty_request")
     async def approve(self) -> None:
-        """Approve the current faculty request at the current stage.
-
-        Note (TD-083): comment-on-approve deferred to Phase 7D (approve_request lacks comment param).
-        Downward attachments deferred to Phase 7D.
-        """
+        """Approve the current faculty request at the current stage."""
         self.action_error = ""
         self.action_in_progress = True
 

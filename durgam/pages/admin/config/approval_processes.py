@@ -17,6 +17,30 @@ from durgam.pages.shared.confirmation_dialog import confirmation_dialog
 from durgam.pages.shared.data_table import TableColumn, data_table
 from durgam.states.config_approval_process import ApprovalProcessConfigState
 
+_COMMON_MIMES: list[tuple[str, str]] = [
+    ("PDF",          "application/pdf"),
+    ("JPEG image",   "image/jpeg"),
+    ("PNG image",    "image/png"),
+    ("Word (DOCX)",  "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+    ("Word (DOC)",   "application/msword"),
+    ("Excel (XLSX)", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+    ("Excel (XLS)",  "application/vnd.ms-excel"),
+    ("Plain text",   "text/plain"),
+    ("CSV",          "text/csv"),
+]
+
+
+def _mime_checkbox(label: str, value: str) -> rx.Component:
+    return rx.hstack(
+        rx.checkbox(
+            checked=ApprovalProcessConfigState.form_allowed_mimes.contains(value),  # type: ignore[attr-defined]
+            on_change=lambda _: ApprovalProcessConfigState.toggle_allowed_mime(value),
+        ),
+        rx.text(label, font_size="0.82rem"),
+        align="center",
+        gap="0.4rem",
+    )
+
 
 def _kebab(row: dict) -> rx.Component:
     return rx.menu.root(
@@ -40,6 +64,7 @@ def _kebab(row: dict) -> rx.Component:
                     row["raw_finance"], row["raw_cc"],
                     row["raw_requires_upward"], row["raw_max_upward"],
                     row["raw_requires_downward"], row["raw_max_downward"],
+                    row["raw_max_attachment_mb"], row["raw_allowed_mimes"],
                 ),
             ),
             rx.menu.item(
@@ -162,6 +187,24 @@ def _inline_form() -> rx.Component:
                             ),
                             align="start", gap="0.15rem",
                         ),
+                        rx.vstack(
+                            rx.text("Max file size per attachment (MB)",
+                                    font_size="0.8rem", color="var(--color-muted)"),
+                            rx.input(
+                                type="number",
+                                min="1", max="100",
+                                value=ApprovalProcessConfigState.form_max_attachment_mb.to(str),
+                                on_change=ApprovalProcessConfigState.set_form_max_attachment_mb,
+                                width="100px",
+                            ),
+                            align="start", gap="0.15rem",
+                        ),
+                        rx.vstack(
+                            rx.text("Allowed file types (leave all unchecked = any type)",
+                                    font_size="0.8rem", color="var(--color-muted)"),
+                            *[_mime_checkbox(label, value) for label, value in _COMMON_MIMES],
+                            align="start", gap="0.2rem", width="100%",
+                        ),
                         align="start", gap="0.5rem", width="100%",
                     ),
                     rx.checkbox(
@@ -218,6 +261,8 @@ def admin_config_approval_processes() -> rx.Component:
                             TableColumn(key="requestors", label="Requestors"),
                             TableColumn(key="channel", label="Channel"),
                             TableColumn(key="cc", label="CC"),
+                            TableColumn(key="max_attachment_mb", label="Max MB"),
+                            TableColumn(key="allowed_mimes", label="Allowed Types"),
                         ],
                         card_primary_key="code",
                         is_mobile=False,
