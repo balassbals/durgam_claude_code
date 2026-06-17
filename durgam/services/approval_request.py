@@ -276,6 +276,7 @@ class ApprovalRequestService:
         if is_terminal:
             self._req_repo.update_state(request, "approved", decided_at=now)
             self._run_post_approval(request, process, approver_user_id)
+            self._sync_faculty_request_status(request.id, "approved", approver_user_id)
 
             requestor = self._session.get(User, request.requestor_user_id)
             recipients = [requestor] if requestor else []
@@ -332,6 +333,7 @@ class ApprovalRequestService:
                     break
 
             if became_terminal:
+                self._sync_faculty_request_status(request.id, "approved", approver_user_id)
                 requestor = self._session.get(User, request.requestor_user_id)
                 recipients = [requestor] if requestor else []
                 cc_users = self._get_cc_users(process)
@@ -500,6 +502,7 @@ class ApprovalRequestService:
         )
 
         self._run_post_rejection(request, process, approver_user_id)  # E6
+        self._sync_faculty_request_status(request.id, "rejected", approver_user_id)
 
         log.info(
             "approval_request_rejected",
@@ -1219,6 +1222,42 @@ class ApprovalRequestService:
                 )
                 self._session.add(notif)
         self._session.flush()
+
+    # ── Phase 7F — FacultyRequest status sync ────────────────────────────────────
+
+    def _sync_faculty_request_status(
+        self,
+        approval_request_id: UUID,
+        new_status: str,
+        actor_user_id: UUID,
+    ) -> None:
+        """Sync FacultyRequest.status when the linked ApprovalRequest reaches a terminal state.
+
+        Called after terminal approve or reject. Wraps in try/except so a missing or
+        unexpected FacultyRequest row never fails the approval transaction.
+        """
+        try:
+            from durgam.models.faculty_request import FacultyRequest  # noqa: PLC0415
+            from durgam.repositories.faculty_request import FacultyRequestRepository  # noqa: PLC0415
+            fr_repo = FacultyRequestRepository(self._session)
+            fr = fr_repo.get_by_approval_request_id(approval_request_id)
+            if fr is None:
+                return
+            if fr.status in ("approved", "rejected", "withdrawn", "cancelled"):
+                return
+            fr_repo.update(fr.id, {"status": new_status}, actor_user_id)
+            log.info(
+                "faculty_request.status_synced",
+                faculty_request_id=str(fr.id),
+                approval_request_id=str(approval_request_id),
+                new_status=new_status,
+            )
+        except Exception as e:
+            log.warning(
+                "faculty_request.status_sync_failed",
+                approval_request_id=str(approval_request_id),
+                error=str(e),
+            )
 
     # ── Phase 7A — ApprovalAction visibility-controlled records ─────────────────
 

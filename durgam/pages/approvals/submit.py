@@ -222,6 +222,70 @@ def _nrf_fields_section() -> rx.Component:
     )
 
 
+def _noc_fields_section() -> rx.Component:
+    return rx.cond(
+        SubmitRequestState.selected_process_code == "faculty_noc",
+        rx.vstack(
+            rx.text(
+                "NOC Details",
+                font_weight="600",
+                font_size="0.9rem",
+                font_family="var(--font-sans)",
+            ),
+            rx.vstack(
+                rx.text("Purpose *", font_size="0.85rem", color="var(--color-muted)"),
+                rx.text_area(
+                    placeholder="State the purpose for which the NOC is required",
+                    value=SubmitRequestState.noc_purpose,
+                    on_change=SubmitRequestState.set_noc_purpose,
+                    width="100%",
+                    rows="3",
+                ),
+                align="start", gap="0.25rem", width="100%",
+            ),
+            rx.vstack(
+                rx.text("To Whom *", font_size="0.85rem", color="var(--color-muted)"),
+                rx.input(
+                    placeholder="e.g. Passport Authority, Embassy",
+                    value=SubmitRequestState.noc_to_whom,
+                    on_change=SubmitRequestState.set_noc_to_whom,
+                    width="100%",
+                ),
+                align="start", gap="0.25rem", width="100%",
+            ),
+            rx.vstack(
+                rx.text("Date Required By", font_size="0.85rem", color="var(--color-muted)"),
+                rx.input(
+                    type="date",
+                    value=SubmitRequestState.noc_date_required_by,
+                    on_change=SubmitRequestState.set_noc_date_required_by,
+                    width="100%",
+                ),
+                align="start", gap="0.25rem", width="100%",
+            ),
+            rx.vstack(
+                rx.text("Additional Notes", font_size="0.85rem", color="var(--color-muted)"),
+                rx.text_area(
+                    placeholder="Any additional information (optional)",
+                    value=SubmitRequestState.noc_additional_notes,
+                    on_change=SubmitRequestState.set_noc_additional_notes,
+                    width="100%",
+                    rows="2",
+                ),
+                align="start", gap="0.25rem", width="100%",
+            ),
+            align="start",
+            gap="0.75rem",
+            width="100%",
+            padding="1rem",
+            background="var(--color-background, #f5f0eb)",
+            border="1px solid var(--color-rule)",
+            border_radius="6px",
+        ),
+        rx.fragment(),
+    )
+
+
 def submit_page() -> rx.Component:
     content = rx.vstack(
         nav_shell(),
@@ -230,12 +294,6 @@ def submit_page() -> rx.Component:
                 "New Approval Request",
                 size="5",
                 font_family="var(--font-sans)",
-                margin_bottom="1rem",
-            ),
-            rx.callout(
-                "For NOC and other faculty-specific requests, use My Requests instead.",
-                icon="info",
-                color="blue",
                 margin_bottom="1rem",
             ),
             # Error banner
@@ -312,6 +370,8 @@ def submit_page() -> rx.Component:
                     gap="0.25rem",
                     width="100%",
                 ),
+                # NOC-specific fields (conditional)
+                _noc_fields_section(),
                 # NRF-specific fields (conditional)
                 _nrf_fields_section(),
                 # Attachments

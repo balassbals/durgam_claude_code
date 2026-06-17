@@ -13,15 +13,7 @@ import reflex as rx
 import structlog
 
 from durgam.db import open_session
-from durgam.models.faculty_request import FACULTY_REQUEST_TYPES
 from durgam.states.base import BaseState
-
-# Process codes that belong to the structured faculty-request flow at /faculty/requests.
-# Excluded from the generic submit dropdown so users aren't routed to the wrong form.
-# Auto-expands when new request types are added to FACULTY_REQUEST_TYPES.
-_FACULTY_PROCESS_CODES: frozenset[str] = frozenset(
-    f"faculty_{rt}" for rt in FACULTY_REQUEST_TYPES
-)
 
 log = structlog.get_logger(__name__)
 
@@ -257,6 +249,24 @@ class SubmitRequestState(BaseState):
     def set_nrf_type(self, v: str) -> None:
         self.nrf_type = v
 
+    # NOC-specific fields (conditionally shown when process is faculty_noc)
+    noc_purpose: str = ""
+    noc_to_whom: str = ""
+    noc_date_required_by: str = ""
+    noc_additional_notes: str = ""
+
+    def set_noc_purpose(self, v: str) -> None:
+        self.noc_purpose = v
+
+    def set_noc_to_whom(self, v: str) -> None:
+        self.noc_to_whom = v
+
+    def set_noc_date_required_by(self, v: str) -> None:
+        self.noc_date_required_by = v
+
+    def set_noc_additional_notes(self, v: str) -> None:
+        self.noc_additional_notes = v
+
     @rx.var
     def selected_process(self) -> dict[str, Any]:
         for p in self.process_options:
@@ -297,6 +307,9 @@ class SubmitRequestState(BaseState):
             if self.nrf_available_from and self.nrf_available_to:
                 if self.nrf_available_to < self.nrf_available_from:
                     return True
+        if self.selected_process_code == "faculty_noc":
+            if not self.noc_purpose.strip() or not self.noc_to_whom.strip():
+                return True
         return self.submitting
 
     @rx.var
@@ -327,6 +340,10 @@ class SubmitRequestState(BaseState):
         self.nrf_available_from = ""
         self.nrf_available_to = ""
         self.nrf_type = "visiting"
+        self.noc_purpose = ""
+        self.noc_to_whom = ""
+        self.noc_date_required_by = ""
+        self.noc_additional_notes = ""
 
         from durgam.repositories.approval_process import ApprovalProcessRepository
         from durgam.repositories.user_role import UserRoleRepository
@@ -342,8 +359,6 @@ class SubmitRequestState(BaseState):
             all_procs = proc_repo.list_all_active()
             eligible: list[dict[str, Any]] = []
             for proc in all_procs:
-                if proc.code in _FACULTY_PROCESS_CODES:
-                    continue  # faculty types have a dedicated UI at /faculty/requests
                 if proc.requestor_role_codes:
                     if not user_role_codes & set(proc.requestor_role_codes):
                         continue
@@ -369,6 +384,10 @@ class SubmitRequestState(BaseState):
         self.nrf_available_from = ""
         self.nrf_available_to = ""
         self.nrf_type = "visiting"
+        self.noc_purpose = ""
+        self.noc_to_whom = ""
+        self.noc_date_required_by = ""
+        self.noc_additional_notes = ""
 
     def set_title(self, value: str) -> None:
         self.title = value
@@ -432,6 +451,11 @@ class SubmitRequestState(BaseState):
                     self.submitting = False
                     return
 
+        # NOC and other faculty-typed processes route through FacultyRequestService
+        if self.selected_process_code.startswith("faculty_"):
+            await self._submit_faculty_request()
+            return
+
         from durgam.services.approval_request import (
             ApprovalRequestError,
             ApprovalRequestService,
@@ -487,6 +511,81 @@ class SubmitRequestState(BaseState):
             self.error = "An unexpected error occurred. Please try again."
             self.submitting = False
 
+    async def _submit_faculty_request(self) -> None:
+        """Handle submit for faculty_* process codes (NOC, bonafide_cert, address_change).
+
+        Creates a FacultyRequest draft, updates payload, and submits for approval.
+        Redirects to the ApprovalRequest detail page on success.
+        """
+        from durgam.repositories.faculty import FacultyRepository
+        from durgam.services.faculty_request import (
+            EmptyApproverPoolError,
+            FacultyRequestService,
+            InvalidRequestStatusTransitionError,
+            UnknownRequestTypeError,
+        )
+
+        user_id = UUID(self.current_user_id)
+
+        # Derive request_type from process code: "faculty_noc" → "noc"
+        process_code = self.selected_process_code
+        request_type = process_code[len("faculty_"):]
+
+        # Build payload from NOC fields (only NOC is wired in Phase 7F)
+        payload: dict[str, Any] = {}
+        if request_type == "noc":
+            if not self.noc_purpose.strip():
+                self.error = "Purpose is required."
+                self.submitting = False
+                return
+            if not self.noc_to_whom.strip():
+                self.error = "To Whom is required."
+                self.submitting = False
+                return
+            payload = {"purpose": self.noc_purpose.strip(), "to_whom": self.noc_to_whom.strip()}
+            if self.noc_date_required_by:
+                payload["date_required_by"] = self.noc_date_required_by
+            if self.noc_additional_notes.strip():
+                payload["additional_notes"] = self.noc_additional_notes.strip()
+
+        try:
+            with open_session() as session:
+                fac_repo = FacultyRepository(session)
+                faculty = fac_repo.get_by_user_id(user_id)
+                if faculty is None:
+                    self.error = "No faculty profile found for your account."
+                    self.submitting = False
+                    return
+
+                svc = FacultyRequestService(session)
+                draft = svc.create_request(
+                    faculty_id=faculty.id,
+                    request_type=request_type,
+                    payload=payload,
+                    actor_id=user_id,
+                )
+                updated = svc.submit_for_approval(draft.id, user_id)
+                approval_request_id = str(updated.approval_request_id)
+                session.commit()
+
+            self.submitting = False
+            return rx.redirect(f"/approvals/request/{approval_request_id}")
+        except (
+            InvalidRequestStatusTransitionError,
+            UnknownRequestTypeError,
+            EmptyApproverPoolError,
+        ) as e:
+            self.error = str(e)
+            self.submitting = False
+        except Exception as e:
+            log.error(
+                "faculty_submit_request_failed",
+                exc_info=True,
+                error_type=type(e).__name__,
+            )
+            self.error = "An unexpected error occurred. Please try again."
+            self.submitting = False
+
 
 # ── Request Detail (read-only for Phase 2) ─────────────────────────────
 
@@ -512,6 +611,16 @@ class RequestDetailState(BaseState):
     current_stage_role_code: str = ""
     approve_dialog_open: bool = False
     reject_dialog_open: bool = False
+
+    # Phase 7F — confidentiality controls (approver-side; passed to approve/reject)
+    decision_hide_from_requestor: bool = False
+    decision_share_with_user_ids: list[str] = []
+    prior_action_actors: list[dict[str, Any]] = []
+
+    # Phase 7F — linked FacultyRequest for faculty_* processes
+    linked_faculty_request_id: str = ""
+    linked_faculty_request_status: str = ""
+    noc_payload: dict[str, Any] = {}
     decision_comment: str = ""
     decision_downward_file_ids: list[str] = []
     decision_submitting: bool = False
@@ -545,6 +654,17 @@ class RequestDetailState(BaseState):
     def set_sanctioned_days_input(self, value: str) -> None:
         self.sanctioned_days_input = value
 
+    def set_decision_hide_from_requestor(self, value: bool) -> None:
+        self.decision_hide_from_requestor = value
+
+    def toggle_decision_share_with(self, user_id: str) -> None:
+        if user_id in self.decision_share_with_user_ids:
+            self.decision_share_with_user_ids = [
+                uid for uid in self.decision_share_with_user_ids if uid != user_id
+            ]
+        else:
+            self.decision_share_with_user_ids = [*self.decision_share_with_user_ids, user_id]
+
     async def load_detail(self) -> None:
         redirect = _resolve_or_redirect(self)
         if redirect is not None:
@@ -575,6 +695,13 @@ class RequestDetailState(BaseState):
         self.process_allows_downward = False
         self.process_requires_downward = False
         self.process_max_downward = 0
+        # Phase 7F confidentiality + linked faculty request reset
+        self.decision_hide_from_requestor = False
+        self.decision_share_with_user_ids = []
+        self.prior_action_actors = []
+        self.linked_faculty_request_id = ""
+        self.linked_faculty_request_status = ""
+        self.noc_payload = {}
         # M8 leave-specific reset
         self.is_leave_request = False
         self.leave_type = ""
@@ -715,20 +842,56 @@ class RequestDetailState(BaseState):
                 "title": proc.title if proc else "",
             }
 
+            # Keep raw_steps for downward-attachment uploader attribution only
             raw_steps = step_repo.list_for_request(request_id)
+
+            # Phase 7F: switch history to visibility-filtered ApprovalActions
+            apr_svc = ApprovalRequestService(session)
+            if self.viewer_is_requestor:
+                visible_actions = apr_svc.list_actions_for_requestor(request_id)
+            else:
+                visible_actions = apr_svc.list_actions_for_approver(
+                    approval_request_id=request_id,
+                    approver_user_id=viewer_id,
+                    approver_stage=req.current_stage,
+                )
             step_dicts: list[dict[str, Any]] = []
-            for s in raw_steps:
-                approver = session.get(User, s.approver_user_id) if s.approver_user_id else None
-                approver_display = (approver.full_name or approver.username) if approver else "—"
+            prior_actors_seen: dict[str, str] = {}
+            for act in visible_actions:
+                actor = session.get(User, act.actor_user_id)
+                actor_display = (actor.full_name or actor.username) if actor else "—"
                 step_dicts.append({
-                    "stage": s.stage,
-                    "approver_role_code": s.approver_role_code,
-                    "approver_display": approver_display,
-                    "decision": s.decision or "—",
-                    "comment": s.comment or "",
-                    "decided_at": _format_dt(s.decided_at),
+                    "stage": act.stage_index,
+                    "approver_role_code": "—",
+                    "approver_display": actor_display,
+                    "decision": act.action_type.capitalize(),
+                    "comment": act.comment or "",
+                    "decided_at": _format_dt(act.created_at),
                 })
+                if act.stage_index < req.current_stage and str(act.actor_user_id) not in prior_actors_seen:
+                    prior_actors_seen[str(act.actor_user_id)] = actor_display
             self.steps = step_dicts
+            self.prior_action_actors = [
+                {"id": uid, "display": display}
+                for uid, display in prior_actors_seen.items()
+            ]
+
+            # Phase 7F: load linked FacultyRequest for faculty_* processes
+            if proc and proc.code.startswith("faculty_"):
+                from durgam.repositories.faculty_request import FacultyRequestRepository
+                fr_repo = FacultyRequestRepository(session)
+                fr = fr_repo.get_by_approval_request_id(request_id)
+                if fr is not None:
+                    self.linked_faculty_request_id = str(fr.id)
+                    self.linked_faculty_request_status = fr.status
+                    if proc.code == "faculty_noc":
+                        raw_payload = fr.payload_json or {}
+                        self.noc_payload = {
+                            "purpose": raw_payload.get("purpose", "—"),
+                            "to_whom": raw_payload.get("to_whom", "—"),
+                            "date_required_by": raw_payload.get("date_required_by", ""),
+                            "additional_notes": raw_payload.get("additional_notes", ""),
+                        }
 
             up_stmt = (
                 select(FileAsset)
@@ -928,12 +1091,31 @@ class RequestDetailState(BaseState):
 
         try:
             with open_session() as session:
-                svc = ApprovalRequestService(session)
-                svc.withdraw(
-                    request_id=UUID(request_id_str),
-                    requestor_user_id=UUID(self.current_user_id),
-                )
-                session.commit()
+                # Phase 7F: if a FacultyRequest is linked, delegate to FacultyRequestService
+                # so the FacultyRequest.status is also synced to "withdrawn".
+                if self.linked_faculty_request_id:
+                    from durgam.services.faculty_request import (
+                        FacultyRequestService,
+                        InvalidRequestStatusTransitionError,
+                        UnauthorizedWithdrawError,
+                    )
+                    try:
+                        fr_svc = FacultyRequestService(session)
+                        fr_svc.withdraw_request(
+                            UUID(self.linked_faculty_request_id),
+                            UUID(self.current_user_id),
+                        )
+                        session.commit()
+                    except (InvalidRequestStatusTransitionError, UnauthorizedWithdrawError) as e:
+                        self.error = str(e)
+                        return
+                else:
+                    svc = ApprovalRequestService(session)
+                    svc.withdraw(
+                        request_id=UUID(request_id_str),
+                        requestor_user_id=UUID(self.current_user_id),
+                    )
+                    session.commit()
         except ApprovalRequestError as e:
             self.error = str(e)
             return
@@ -1079,6 +1261,12 @@ class RequestDetailState(BaseState):
                         if self.decision_downward_file_ids
                         else None
                     ),
+                    is_visible_to_requestor=not self.decision_hide_from_requestor,
+                    visible_to_lower_user_ids=(
+                        [UUID(uid) for uid in self.decision_share_with_user_ids]
+                        if self.decision_share_with_user_ids
+                        else None
+                    ),
                 )
                 session.commit()
         except ApprovalRequestError as e:
@@ -1176,6 +1364,12 @@ class RequestDetailState(BaseState):
                     request_id=UUID(request_id_str),
                     approver_user_id=UUID(self.current_user_id),
                     comment=self.decision_comment.strip(),
+                    is_visible_to_requestor=not self.decision_hide_from_requestor,
+                    visible_to_lower_user_ids=(
+                        [UUID(uid) for uid in self.decision_share_with_user_ids]
+                        if self.decision_share_with_user_ids
+                        else None
+                    ),
                 )
                 session.commit()
         except ApprovalRequestError as e:

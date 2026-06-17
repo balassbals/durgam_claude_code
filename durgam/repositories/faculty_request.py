@@ -101,6 +101,14 @@ class FacultyRequestRepository:
         self._session.refresh(row)
         return row
 
+    def get_by_approval_request_id(self, approval_request_id: UUID) -> "FacultyRequest | None":
+        """Return the non-deleted FacultyRequest linked to the given ApprovalRequest, or None."""
+        stmt = select(FacultyRequest).where(
+            FacultyRequest.approval_request_id == approval_request_id,
+            FacultyRequest.is_deleted == False,  # noqa: E712
+        )
+        return self._session.exec(stmt).first()
+
     def soft_delete(self, request_id: UUID, actor_id: UUID) -> None:
         row = self._session.get(FacultyRequest, request_id)
         if row is None or row.is_deleted:

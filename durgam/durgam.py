@@ -326,31 +326,3 @@ app.add_page(
     ],
 )
 
-# ── M10 Faculty Requests (Phase 7B) ───────────────────────────────────────────
-from durgam.pages.faculty_requests import __init__ as _faculty_requests_nav_register  # noqa: F401
-from durgam.pages.faculty_requests.list import faculty_requests_list_page
-from durgam.pages.faculty_requests.new import faculty_requests_new_page
-from durgam.pages.faculty_requests.detail import faculty_request_detail_page
-from durgam.states.faculty_requests import (
-    FacultyRequestsState,
-    NewFacultyRequestState,
-    FacultyRequestDetailState,
-)
-
-app.add_page(faculty_requests_list_page, route="/faculty/requests",
-             on_load=FacultyRequestsState.load_my_requests)
-app.add_page(faculty_requests_new_page, route="/faculty/requests/new",
-             on_load=NewFacultyRequestState.init_new_request)
-app.add_page(faculty_request_detail_page, route="/faculty/requests/[faculty_request_id]",
-             on_load=FacultyRequestDetailState.load_detail)
-
-# ── Approver-side faculty request pages (Phase 7C) ────────────────────────────
-from durgam.pages.approver_requests import __init__ as _approver_requests_nav_register  # noqa: F401, E402
-from durgam.pages.approver_requests.inbox import approver_inbox_page  # noqa: E402
-from durgam.pages.approver_requests.detail import approver_request_detail_page  # noqa: E402
-from durgam.states.approver_requests import ApproverInboxState, ApproverRequestDetailState  # noqa: E402
-
-app.add_page(approver_inbox_page, route="/approver/inbox",
-             on_load=ApproverInboxState.load_inbox)
-app.add_page(approver_request_detail_page, route="/approver/requests/[faculty_request_id]",
-             on_load=ApproverRequestDetailState.load_detail)

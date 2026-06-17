@@ -35,7 +35,7 @@ def is_channel_approver(user_id: UUID, session: Session) -> bool:
 
 
 register(NavEntry(
-    label="Other Requests",
+    label="My Requests",
     href="/approvals/my-requests",
     icon="file-check",
     group="Approvals",
@@ -43,7 +43,7 @@ register(NavEntry(
 ))
 
 register(NavEntry(
-    label="Other Approvals",
+    label="Approvals",
     href="/approvals/inbox",
     icon="inbox",
     group="Approvals",
