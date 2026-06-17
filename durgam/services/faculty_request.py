@@ -650,3 +650,59 @@ class FacultyRequestService:
             approver_user_id=approver_user_id,
             approver_stage=approver_stage,
         )
+
+    # ── Approver inbox (Phase 7C) ─────────────────────────────────────────────
+
+    def list_inbox_for_user(self, user_id: UUID) -> list[dict]:
+        """FacultyRequests where user_id is eligible to act at the current stage.
+
+        Uses the full OR-set-aware resolver via ApprovalRequestService.is_user_eligible_for_current_stage.
+        Returns dicts ordered by submitted_at ASC (oldest first — needs action soonest).
+        No mutation.
+        """
+        from durgam.models.config_anchors import Designation  # noqa: PLC0415
+        from durgam.services.approval_request import ApprovalRequestService  # noqa: PLC0415
+
+        pending = self._repo.list_by_status(STATUS_SUBMITTED)
+        apr_svc = ApprovalRequestService(self._session)
+        result: list[dict] = []
+
+        for req in pending:
+            if req.approval_request_id is None:
+                continue
+            if not apr_svc.is_user_eligible_for_current_stage(req.approval_request_id, user_id):
+                continue
+
+            faculty = self._faculty_repo.get(req.faculty_id)
+            if faculty is None:
+                continue
+
+            approval_req = self._session.get(ApprovalRequest, req.approval_request_id)
+            if approval_req is None:
+                continue
+
+            from durgam.models.crosscutting import ApprovalProcess as _AP  # noqa: PLC0415
+            process = self._session.get(_AP, approval_req.process_id)
+            if process is None:
+                continue
+
+            designation_name = ""
+            if faculty.designation_id:
+                desig = self._session.get(Designation, faculty.designation_id)
+                designation_name = desig.name if desig else ""
+
+            total_stages = len(process.channel_role_codes) if process.channel_role_codes else 1
+
+            result.append({
+                "id": str(req.id),
+                "request_type": req.request_type,
+                "requestor_name": f"{faculty.first_name} {faculty.last_name}".strip(),
+                "requestor_designation": designation_name,
+                "current_stage": approval_req.current_stage,
+                "total_stages": total_stages,
+                "created_at": req.created_at.isoformat() if req.created_at else "",
+                "submitted_at": req.updated_at.isoformat() if req.updated_at else "",
+            })
+
+        result.sort(key=lambda d: d["submitted_at"])
+        return result

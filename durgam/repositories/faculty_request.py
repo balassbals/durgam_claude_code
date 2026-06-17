@@ -20,6 +20,15 @@ class FacultyRequestRepository:
             return None
         return row
 
+    def list_by_status(self, status: str) -> list[FacultyRequest]:
+        """All non-deleted FacultyRequests with the given status, oldest-updated first."""
+        stmt = (
+            select(FacultyRequest)
+            .where(FacultyRequest.status == status, FacultyRequest.is_deleted == False)  # noqa: E712
+            .order_by(FacultyRequest.updated_at.asc())
+        )
+        return list(self._session.exec(stmt).all())
+
     def list_by_faculty(
         self,
         faculty_id: UUID,

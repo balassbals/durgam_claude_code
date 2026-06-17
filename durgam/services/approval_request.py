@@ -697,6 +697,26 @@ class ApprovalRequestService:
         if file_ids:
             self._session.flush()
 
+    def is_user_eligible_for_current_stage(
+        self,
+        approval_request_id: UUID,
+        user_id: UUID,
+    ) -> bool:
+        """Return True if user_id is in the current-stage approver pool.
+
+        Used by FacultyRequestService.list_inbox_for_user to build the approver inbox
+        via the full OR-set-aware resolver chain (not the legacy-only path).
+        Returns False for terminal or non-existent requests.
+        """
+        request = self._req_repo.get_by_id(approval_request_id)
+        if request is None or request.state not in ("submitted", "in_review"):
+            return False
+        process = self._proc_repo.get_by_id(request.process_id)
+        if process is None:
+            return False
+        approvers = self._resolve_approvers(request, process)
+        return any(u.id == user_id for u in approvers)
+
     def _get_channel_for_stage(
         self, request: ApprovalRequest, process: ApprovalProcess
     ) -> list:

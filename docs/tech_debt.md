@@ -1389,3 +1389,29 @@ First-action-wins semantics per Q-P5C.1 freeze: any user in the resolved pool ca
 **Resolution:** All five Phase 7A deliverables shipped: migration `c4d7e9f2a831`, `ApprovalAction` model, `ApprovalActionRepository`, engine extension (`approve()`/`reject()` visibility kwargs, `_record_action()`), and `FacultyRequestService` pass-throughs. 18 integration tests, 0 skips.
 
 **Filed:** M10 Phase 7B, 2026-06-16.
+
+
+---
+
+### TD-083 — Phase 7C approver UI deviations (permission triple + comment-on-approve + downward attachments)
+
+**Phase:** M10 Phase 7C. **Status:** Open. **Priority:** Medium.
+
+**Location:** `durgam/states/approver_requests.py`, `durgam/services/faculty_request.py`.
+
+**What it is:** Three honest deviations from the intended Phase 7C design:
+
+1. **Permission triple mismatch**: `ApproverRequestDetailState.approve()` and `.reject()` use `@require_role(action="approve", resource="approval_request", scope="*")` — the seeded triple from M7. The intended triple would be `faculty_request:approve:*` and `faculty_request:reject:*`, which do not exist in the seed. Adding them without a design review and seed update is out of Phase 7C scope (seed-only permissions rule).
+
+2. **Comment-on-approve deferred**: `FacultyRequestService.approve_request()` does not accept a `comment` parameter — it delegates to `ApprovalRequestService.approve()` which does not expose comment. The action form collects a comment field but it is not persisted for approvals (only for rejections, which pass `reason=comment`). Full comment-on-approve requires `ApprovalRequestService.approve()` signature extension.
+
+3. **Downward attachment upload deferred**: The action form has no file upload zone for approver-side attachments. `approve_request()` does not accept `downward_attachment_file_ids`. This requires `_record_action()` extension in the approval engine and a separate upload flow.
+
+**Risk:** Approvers cannot attach supporting documents to their approval decision (cosmetically incomplete). Comment on positive decisions is not preserved (audit completeness gap for approve path).
+
+**Resolution path:**
+- TD-083.1 (permissions): Seed `faculty_request:approve:*` and `faculty_request:reject:*` triples assigned to HOD, AHOD, REGISTRAR. Update `@require_role` decorators in approver state. Estimated effort: 0.5 day.
+- TD-083.2 (comment-on-approve): Extend `ApprovalRequestService.approve()` with `comment: str | None = None` kwarg; propagate to `_record_action()`; update service and state handler. Estimated effort: 0.5 day.
+- TD-083.3 (downward attachments): Extend `_record_action()` to accept `file_ids`; add upload zone to detail page; add `add_downward_attachment()` service method. Estimated effort: 1–2 days.
+
+**Filed:** M10 Phase 7C, 2026-06-17.
