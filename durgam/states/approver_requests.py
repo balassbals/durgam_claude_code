@@ -95,6 +95,9 @@ class ApproverRequestDetailState(BaseState):
     action_in_progress: bool = False
     action_error: str = ""
 
+    # Downward attachments (approver-side; staged before approve/reject is clicked)
+    action_downward_attachments: list[dict[str, Any]] = []
+
     def set_action_comment(self, v: str) -> None:
         self.action_comment = v
 
@@ -108,6 +111,71 @@ class ApproverRequestDetailState(BaseState):
             ]
         else:
             self.action_share_with_user_ids = [*self.action_share_with_user_ids, user_id]
+
+    @require_role(action="approve", resource="approval_request", scope="*")
+    async def handle_downward_upload(self, files: list[rx.UploadFile]) -> None:
+        """Upload approver-side PDFs (e.g., signed NOC). Validates MIME + size from
+        ApprovalProcess config (allowed_attachment_mime_types_json, max_attachment_mb).
+        Staged in action_downward_attachments until approve/reject is clicked.
+        """
+        if not files:
+            return
+
+        from durgam.services.faculty_request import (  # noqa: PLC0415
+            AttachmentTooLargeError,
+            DisallowedMimeTypeError,
+            FacultyRequestService,
+        )
+
+        request_id_str = self.router.page.params.get("faculty_request_id", "")
+        if not request_id_str:
+            self.action_error = "Cannot upload: no request selected."
+            return
+
+        user_id = UUID(self.current_user_id)
+        request_id = UUID(request_id_str)
+
+        self.action_error = ""
+        try:
+            with open_session() as session:
+                svc = FacultyRequestService(session)
+                new_files: list[dict[str, Any]] = []
+                for f in files:
+                    content = await f.read()
+                    if not content:
+                        continue
+                    asset = svc.add_downward_attachment(
+                        request_id=request_id,
+                        file_bytes=content,
+                        filename=f.filename or "attachment.pdf",
+                        mime_type=f.content_type or "application/octet-stream",
+                        actor_id=user_id,
+                    )
+                    new_files.append({
+                        "file_id": str(asset.id),
+                        "name": asset.original_name,
+                        "size": asset.size_bytes,
+                    })
+                session.commit()
+            self.action_downward_attachments = [
+                *self.action_downward_attachments,
+                *new_files,
+            ]
+        except DisallowedMimeTypeError as e:
+            self.action_error = str(e)
+        except AttachmentTooLargeError as e:
+            self.action_error = str(e)
+        except Exception as e:
+            log.error("downward_upload_failed", exc_info=True, error_type=type(e).__name__)
+            self.action_error = "Upload failed. Please try again."
+
+    @require_role(action="approve", resource="approval_request", scope="*")
+    def remove_downward_attachment(self, file_id: str) -> None:
+        """Remove a staged downward attachment from in-memory list (no DB action — the
+        FileAsset row is retained for audit but won't be passed to approve/reject)."""
+        self.action_downward_attachments = [
+            f for f in self.action_downward_attachments if f["file_id"] != file_id
+        ]
 
     async def load_detail(self) -> None:
         redirect = _resolve_or_redirect(self)
@@ -127,6 +195,7 @@ class ApproverRequestDetailState(BaseState):
         self.action_share_with_user_ids = []
         self.action_in_progress = False
         self.action_error = ""
+        self.action_downward_attachments = []
 
         request_id_str = self.router.page.params.get("faculty_request_id", "")
         if not request_id_str:
@@ -277,6 +346,8 @@ class ApproverRequestDetailState(BaseState):
         request_id = UUID(request_id_str)
         is_visible = not self.action_hide_from_requestor
         share_with = [UUID(uid) for uid in self.action_share_with_user_ids] or None
+        comment = self.action_comment.strip() or None
+        file_ids = [UUID(f["file_id"]) for f in self.action_downward_attachments] or None
 
         try:
             with open_session() as session:
@@ -284,6 +355,8 @@ class ApproverRequestDetailState(BaseState):
                 svc.approve_request(
                     request_id=request_id,
                     actor_id=user_id,
+                    comment=comment,
+                    downward_attachment_file_ids=file_ids,
                     expected_stage_index=self.current_stage or None,
                     is_visible_to_requestor=is_visible,
                     visible_to_lower_user_ids=share_with,
@@ -336,6 +409,7 @@ class ApproverRequestDetailState(BaseState):
         request_id = UUID(request_id_str)
         is_visible = not self.action_hide_from_requestor
         share_with = [UUID(uid) for uid in self.action_share_with_user_ids] or None
+        file_ids = [UUID(f["file_id"]) for f in self.action_downward_attachments] or None
 
         try:
             with open_session() as session:
@@ -344,6 +418,7 @@ class ApproverRequestDetailState(BaseState):
                     request_id=request_id,
                     actor_id=user_id,
                     reason=self.action_comment.strip(),
+                    downward_attachment_file_ids=file_ids,
                     expected_stage_index=self.current_stage or None,
                     is_visible_to_requestor=is_visible,
                     visible_to_lower_user_ids=share_with,

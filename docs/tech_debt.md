@@ -1395,23 +1395,23 @@ First-action-wins semantics per Q-P5C.1 freeze: any user in the resolved pool ca
 
 ### TD-083 — Phase 7C approver UI deviations (permission triple + comment-on-approve + downward attachments)
 
-**Phase:** M10 Phase 7C. **Status:** Open. **Priority:** Medium.
+**Phase:** M10 Phase 7C. **Status:** Partially resolved (TD-083.2 ✓, TD-083.3 ✓, TD-083.1 open). **Priority:** Low.
 
 **Location:** `durgam/states/approver_requests.py`, `durgam/services/faculty_request.py`.
 
 **What it is:** Three honest deviations from the intended Phase 7C design:
 
-1. **Permission triple mismatch**: `ApproverRequestDetailState.approve()` and `.reject()` use `@require_role(action="approve", resource="approval_request", scope="*")` — the seeded triple from M7. The intended triple would be `faculty_request:approve:*` and `faculty_request:reject:*`, which do not exist in the seed. Adding them without a design review and seed update is out of Phase 7C scope (seed-only permissions rule).
+1. **Permission triple mismatch** (TD-083.1 — OPEN): `ApproverRequestDetailState.approve()` and `.reject()` use `@require_role(action="approve", resource="approval_request", scope="*")` — the seeded triple from M7. The intended triple would be `faculty_request:approve:*` and `faculty_request:reject:*`, which do not exist in the seed. Adding them without a design review and seed update is out of Phase 7C scope (seed-only permissions rule). *Deferred to later cleanup phase.*
 
-2. **Comment-on-approve deferred**: `FacultyRequestService.approve_request()` does not accept a `comment` parameter — it delegates to `ApprovalRequestService.approve()` which does not expose comment. The action form collects a comment field but it is not persisted for approvals (only for rejections, which pass `reason=comment`). Full comment-on-approve requires `ApprovalRequestService.approve()` signature extension.
+2. **Comment-on-approve deferred** (TD-083.2 — **RESOLVED** in Phase 7C-fix, 2026-06-17): `ApprovalRequestService.approve()` extended with `comment: str | None = None`; `_record_action()` already accepted `comment`; `FacultyRequestService.approve_request()` now passes `comment` through; `ApproverRequestDetailState.approve()` now passes `comment=self.action_comment.strip() or None`. 6 integration tests added in `TestCommentAndDownwardAttachments`.
 
-3. **Downward attachment upload deferred**: The action form has no file upload zone for approver-side attachments. `approve_request()` does not accept `downward_attachment_file_ids`. This requires `_record_action()` extension in the approval engine and a separate upload flow.
+3. **Downward attachment upload deferred** (TD-083.3 — **RESOLVED** in Phase 7C-fix, 2026-06-17): `ApprovalRequestService.reject()` extended with `downward_attachment_file_ids`; `FacultyRequestService.approve_request()` and `reject_request()` both pass through `downward_attachment_file_ids`; new `FacultyRequestService.add_downward_attachment()` validates MIME + size against `ApprovalProcess` config; upload zone added to detail page; `ApproverRequestDetailState` gains `action_downward_attachments`, `handle_downward_upload()`, `remove_downward_attachment()`. 6 integration tests cover comment persistence, downward attachment persistence, and MIME/size validation.
 
-**Risk:** Approvers cannot attach supporting documents to their approval decision (cosmetically incomplete). Comment on positive decisions is not preserved (audit completeness gap for approve path).
+**Risk (remaining):** TD-083.1 only — approvers without `approval_request:approve:*` cannot act. Functional for HOD/AHOD/REGISTRAR/SYSTEM_ADMIN who hold that triple via M7 seeding.
 
 **Resolution path:**
-- TD-083.1 (permissions): Seed `faculty_request:approve:*` and `faculty_request:reject:*` triples assigned to HOD, AHOD, REGISTRAR. Update `@require_role` decorators in approver state. Estimated effort: 0.5 day.
-- TD-083.2 (comment-on-approve): Extend `ApprovalRequestService.approve()` with `comment: str | None = None` kwarg; propagate to `_record_action()`; update service and state handler. Estimated effort: 0.5 day.
-- TD-083.3 (downward attachments): Extend `_record_action()` to accept `file_ids`; add upload zone to detail page; add `add_downward_attachment()` service method. Estimated effort: 1–2 days.
+- TD-083.1 (permissions — OPEN): Seed `faculty_request:approve:*` and `faculty_request:reject:*` triples assigned to HOD, AHOD, REGISTRAR. Update `@require_role` decorators in approver state. Estimated effort: 0.5 day. *Deferred to later cleanup phase.*
+- TD-083.2 (comment-on-approve — RESOLVED): See description above.
+- TD-083.3 (downward attachments — RESOLVED): See description above.
 
-**Filed:** M10 Phase 7C, 2026-06-17.
+**Filed:** M10 Phase 7C, 2026-06-17. **Partially resolved:** Phase 7C-fix, 2026-06-17.

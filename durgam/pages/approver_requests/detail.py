@@ -213,6 +213,76 @@ def _confidentiality_controls() -> rx.Component:
     )
 
 
+_DOWNWARD_UPLOAD_ID = "approver_downward_attachments"
+
+
+def _downward_upload_zone() -> rx.Component:
+    """Approver-side file upload zone for downward attachments (e.g. signed NOC PDF)."""
+    return rx.vstack(
+        rx.text(
+            "Attach Documents (e.g. Signed NOC — PDF only)",
+            font_size="0.85rem",
+            font_weight="500",
+        ),
+        rx.upload(
+            rx.vstack(
+                rx.icon("upload", size=18, color="var(--color-muted)"),
+                rx.text(
+                    "Drag and drop PDF files here, or click to browse",
+                    font_size="0.82rem",
+                    color="var(--color-muted)",
+                    text_align="center",
+                ),
+                align="center",
+                gap="0.4rem",
+                padding="1.2rem",
+            ),
+            id=_DOWNWARD_UPLOAD_ID,
+            accept={"application/pdf": [".pdf"]},
+            max_files=5,
+            on_drop=ApproverRequestDetailState.handle_downward_upload(
+                rx.upload_files(upload_id=_DOWNWARD_UPLOAD_ID)
+            ),
+            border="2px dashed var(--color-rule)",
+            border_radius="var(--radius-2)",
+            width="100%",
+            cursor="pointer",
+        ),
+        rx.cond(
+            ApproverRequestDetailState.action_downward_attachments.length() > 0,
+            rx.vstack(
+                rx.foreach(
+                    ApproverRequestDetailState.action_downward_attachments,
+                    lambda f: rx.hstack(
+                        rx.icon("file-text", size=14, color="var(--color-muted)"),
+                        rx.text(f["name"], font_size="0.83rem", flex="1"),
+                        rx.icon_button(
+                            rx.icon("x", size=12),
+                            on_click=ApproverRequestDetailState.remove_downward_attachment(
+                                f["file_id"]
+                            ),
+                            variant="ghost",
+                            size="1",
+                            aria_label="Remove attachment",
+                            cursor="pointer",
+                        ),
+                        align="center",
+                        gap="0.5rem",
+                        width="100%",
+                    ),
+                ),
+                gap="0.3rem",
+                width="100%",
+                margin_top="0.5rem",
+            ),
+            rx.fragment(),
+        ),
+        align="start",
+        gap="0.4rem",
+        width="100%",
+    )
+
+
 def _action_form() -> rx.Component:
     """Approve/reject form — only shown when user is eligible."""
     return rx.cond(
@@ -232,6 +302,7 @@ def _action_form() -> rx.Component:
                         font_size="0.9rem",
                     ),
                     _confidentiality_controls(),
+                    _downward_upload_zone(),
                     rx.cond(
                         ApproverRequestDetailState.action_error != "",
                         rx.callout(

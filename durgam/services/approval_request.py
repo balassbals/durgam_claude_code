@@ -398,6 +398,7 @@ class ApprovalRequestService:
         request_id: UUID,
         approver_user_id: UUID,
         comment: str,
+        downward_attachment_file_ids: list[UUID] | None = None,
         is_visible_to_requestor: bool = True,
         visible_to_lower_user_ids: list[UUID] | None = None,
     ) -> ApprovalRequest:
@@ -427,6 +428,8 @@ class ApprovalRequestService:
                 "You are not an approver for the current stage."
             )
 
+        self._validate_downward_attachments(process, downward_attachment_file_ids)
+
         # E6: extract role_code via helper (handles M8 dict entries).
         channel = self._get_channel_for_stage(request, process)
         entry = channel[request.current_stage - 1]
@@ -450,9 +453,15 @@ class ApprovalRequestService:
             actor_user_id=approver_user_id,
             action_type="reject",
             comment=comment.strip(),
-            downward_attachment_file_ids=[],
+            downward_attachment_file_ids=downward_attachment_file_ids or [],
             is_visible_to_requestor=is_visible_to_requestor,
             visible_to_lower_user_ids=visible_to_lower_user_ids,
+        )
+
+        self._link_attachments(
+            downward_attachment_file_ids or [],
+            request.id,
+            "approval_downward",
         )
 
         old_state = request.state

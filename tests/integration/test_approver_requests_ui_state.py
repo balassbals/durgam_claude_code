@@ -1,4 +1,4 @@
-"""Integration tests for approver-side faculty request UI state (M10 Phase 7C).
+"""Integration tests for approver-side faculty request UI state (M10 Phase 7C + 7C-fix).
 
 Tests exercise the service layer directly (FacultyRequestService + ApprovalRequestService)
 to verify the data contracts that ApproverInboxState and ApproverRequestDetailState depend on.
@@ -14,6 +14,10 @@ Coverage:
      unauthorized actor raises, stage-already-advanced guard fires
   E (list_actions_for_approver, 4): empty before approve, returns action after approve,
      reject action visible, prior-stage actions for multi-stage
+  F (comment + downward attachments — Phase 7C-fix, 6): comment persisted on approve,
+     null comment accepted on approve, downward file_ids stored on approve action row,
+     downward file_ids stored on reject action row, MIME validation on upload,
+     size validation on upload
 
 DB strategy: db_session (function-scoped, rolls back). All synthetic data.
 Same get-or-create helpers as test_faculty_requests_ui_state.py — no seed dependency.
@@ -36,13 +40,17 @@ from durgam.models.faculty_request import REQUEST_TYPE_NOC, STATUS_APPROVED, STA
 from durgam.models.identity import Role, User, UserRole
 from durgam.models.school import School
 from durgam.services.approval_request import ApprovalRequestService
+from durgam.models.crosscutting import ApprovalAction
 from durgam.services.faculty_request import (
+    AttachmentTooLargeError,
+    DisallowedMimeTypeError,
     EmptyApproverPoolError,
     FacultyRequestService,
     InvalidRejectReasonError,
     StageAlreadyAdvancedError,
     UnauthorizedActorError,
 )
+from durgam.storage.local import LocalFilesystemBackend
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -534,3 +542,190 @@ class TestListActionsForApprover:
             approver_stage=2,  # wrong stage
         )
         assert result == []
+
+
+# ── Group F: comment + downward attachments (Phase 7C-fix) ────────────────────
+
+
+class TestCommentAndDownwardAttachments:
+
+    def test_approve_persists_comment(self, db_session: Session) -> None:
+        """Comment passed to approve_request() is stored on the ApprovalAction row."""
+        faculty = _make_faculty(db_session)
+        _, approver = _make_process_and_approver(db_session, faculty)
+        req_id = _submit_noc(db_session, faculty)
+        svc = FacultyRequestService(db_session)
+        svc.submit_for_approval(req_id, faculty.user_id)
+        svc.approve_request(req_id, approver.id, comment="Looks good — approved.")
+        db_session.commit()
+
+        row = svc.get_request(req_id)
+        action = db_session.exec(
+            select(ApprovalAction).where(
+                ApprovalAction.approval_request_id == row.approval_request_id,
+                ApprovalAction.action_type == "approve",
+                ApprovalAction.is_deleted == False,  # noqa: E712
+            )
+        ).first()
+        assert action is not None
+        assert action.comment == "Looks good — approved."
+
+    def test_approve_with_no_comment_succeeds(self, db_session: Session) -> None:
+        """approve_request() with comment=None succeeds; action row has null comment."""
+        faculty = _make_faculty(db_session)
+        _, approver = _make_process_and_approver(db_session, faculty)
+        req_id = _submit_noc(db_session, faculty)
+        svc = FacultyRequestService(db_session)
+        svc.submit_for_approval(req_id, faculty.user_id)
+        svc.approve_request(req_id, approver.id, comment=None)
+        db_session.commit()
+
+        row = svc.get_request(req_id)
+        action = db_session.exec(
+            select(ApprovalAction).where(
+                ApprovalAction.approval_request_id == row.approval_request_id,
+                ApprovalAction.action_type == "approve",
+                ApprovalAction.is_deleted == False,  # noqa: E712
+            )
+        ).first()
+        assert action is not None
+        assert action.comment is None
+
+    def test_approve_persists_downward_attachments(
+        self, db_session: Session, tmp_path
+    ) -> None:
+        """File IDs passed to approve_request() appear in ApprovalAction.downward_attachment_file_ids_json."""
+        faculty = _make_faculty(db_session)
+        _, approver = _make_process_and_approver(db_session, faculty)
+        req_id = _submit_noc(db_session, faculty)
+        svc = FacultyRequestService(
+            db_session,
+            storage_backend=LocalFilesystemBackend(str(tmp_path)),
+        )
+        svc.submit_for_approval(req_id, faculty.user_id)
+
+        asset1 = svc.add_downward_attachment(
+            request_id=req_id,
+            file_bytes=b"%PDF-1.4 fake pdf content",
+            filename="signed_noc_1.pdf",
+            mime_type="application/pdf",
+            actor_id=approver.id,
+        )
+        asset2 = svc.add_downward_attachment(
+            request_id=req_id,
+            file_bytes=b"%PDF-1.4 another fake pdf",
+            filename="signed_noc_2.pdf",
+            mime_type="application/pdf",
+            actor_id=approver.id,
+        )
+
+        svc.approve_request(
+            req_id,
+            approver.id,
+            downward_attachment_file_ids=[asset1.id, asset2.id],
+        )
+        db_session.commit()
+
+        row = svc.get_request(req_id)
+        action = db_session.exec(
+            select(ApprovalAction).where(
+                ApprovalAction.approval_request_id == row.approval_request_id,
+                ApprovalAction.action_type == "approve",
+                ApprovalAction.is_deleted == False,  # noqa: E712
+            )
+        ).first()
+        assert action is not None
+        stored = action.downward_attachment_file_ids_json or []
+        assert str(asset1.id) in stored
+        assert str(asset2.id) in stored
+
+    def test_reject_persists_downward_attachments(
+        self, db_session: Session, tmp_path
+    ) -> None:
+        """File IDs passed to reject_request() appear in ApprovalAction.downward_attachment_file_ids_json."""
+        faculty = _make_faculty(db_session)
+        _, approver = _make_process_and_approver(db_session, faculty)
+        req_id = _submit_noc(db_session, faculty)
+        svc = FacultyRequestService(
+            db_session,
+            storage_backend=LocalFilesystemBackend(str(tmp_path)),
+        )
+        svc.submit_for_approval(req_id, faculty.user_id)
+
+        asset = svc.add_downward_attachment(
+            request_id=req_id,
+            file_bytes=b"%PDF-1.4 rejection evidence",
+            filename="evidence.pdf",
+            mime_type="application/pdf",
+            actor_id=approver.id,
+        )
+
+        svc.reject_request(
+            req_id,
+            approver.id,
+            reason="Rejected with evidence.",
+            downward_attachment_file_ids=[asset.id],
+        )
+        db_session.commit()
+
+        row = svc.get_request(req_id)
+        action = db_session.exec(
+            select(ApprovalAction).where(
+                ApprovalAction.approval_request_id == row.approval_request_id,
+                ApprovalAction.action_type == "reject",
+                ApprovalAction.is_deleted == False,  # noqa: E712
+            )
+        ).first()
+        assert action is not None
+        stored = action.downward_attachment_file_ids_json or []
+        assert str(asset.id) in stored
+
+    def test_downward_upload_validates_mime(
+        self, db_session: Session, tmp_path
+    ) -> None:
+        """add_downward_attachment() raises DisallowedMimeTypeError for non-PDF files."""
+        faculty = _make_faculty(db_session)
+        _make_process_and_approver(db_session, faculty)
+        req_id = _submit_noc(db_session, faculty)
+        svc = FacultyRequestService(
+            db_session,
+            storage_backend=LocalFilesystemBackend(str(tmp_path)),
+        )
+        svc.submit_for_approval(req_id, faculty.user_id)
+
+        user_id = faculty.user_id  # faculty tries to upload a PNG — wrong MIME
+        with pytest.raises(DisallowedMimeTypeError):
+            svc.add_downward_attachment(
+                request_id=req_id,
+                file_bytes=b"\x89PNG\r\nfake png",
+                filename="screenshot.png",
+                mime_type="image/png",
+                actor_id=user_id,
+            )
+
+    def test_downward_upload_validates_size(
+        self, db_session: Session, tmp_path
+    ) -> None:
+        """add_downward_attachment() raises AttachmentTooLargeError when file exceeds max_attachment_mb."""
+        faculty = _make_faculty(db_session)
+        process, approver = _make_process_and_approver(db_session, faculty)
+        req_id = _submit_noc(db_session, faculty)
+        svc = FacultyRequestService(
+            db_session,
+            storage_backend=LocalFilesystemBackend(str(tmp_path)),
+        )
+        svc.submit_for_approval(req_id, faculty.user_id)
+
+        # Lower the process limit so a small file triggers the error
+        process.max_attachment_mb = 1
+        db_session.flush()
+
+        two_mb = b"%PDF-1.4 " + b"x" * (2 * 1024 * 1024)
+        with pytest.raises(AttachmentTooLargeError):
+            svc.add_downward_attachment(
+                request_id=req_id,
+                file_bytes=two_mb,
+                filename="too_large.pdf",
+                mime_type="application/pdf",
+                actor_id=approver.id,
+            )

@@ -253,6 +253,8 @@ class FacultyRequestService:
         self,
         request_id: UUID,
         actor_id: UUID,
+        comment: str | None = None,
+        downward_attachment_file_ids: list[UUID] | None = None,
         expected_stage_index: int | None = None,
         is_visible_to_requestor: bool = True,
         visible_to_lower_user_ids: list[UUID] | None = None,
@@ -304,6 +306,8 @@ class FacultyRequestService:
             updated = svc.approve(
                 request_id=row.approval_request_id,
                 approver_user_id=actor_id,
+                comment=comment or None,
+                downward_attachment_file_ids=downward_attachment_file_ids,
                 is_visible_to_requestor=is_visible_to_requestor,
                 visible_to_lower_user_ids=visible_to_lower_user_ids,
             )
@@ -325,6 +329,7 @@ class FacultyRequestService:
         request_id: UUID,
         actor_id: UUID,
         reason: str,
+        downward_attachment_file_ids: list[UUID] | None = None,
         expected_stage_index: int | None = None,
         is_visible_to_requestor: bool = True,
         visible_to_lower_user_ids: list[UUID] | None = None,
@@ -385,6 +390,7 @@ class FacultyRequestService:
                 request_id=row.approval_request_id,
                 approver_user_id=actor_id,
                 comment=reason,
+                downward_attachment_file_ids=downward_attachment_file_ids,
                 is_visible_to_requestor=is_visible_to_requestor,
                 visible_to_lower_user_ids=visible_to_lower_user_ids,
             )
@@ -650,6 +656,102 @@ class FacultyRequestService:
             approver_user_id=approver_user_id,
             approver_stage=approver_stage,
         )
+
+    # ── Approver downward attachments (Phase 7C-fix) ─────────────────────────
+
+    def add_downward_attachment(
+        self,
+        request_id: UUID,
+        file_bytes: bytes,
+        filename: str,
+        mime_type: str,
+        actor_id: UUID,
+    ) -> "FileAsset":
+        """Store an approver-side attachment (e.g. signed NOC PDF) as a FileAsset.
+
+        Validates MIME type and size against the linked ApprovalProcess config:
+        - allowed_attachment_mime_types_json — if None, defaults to ["application/pdf"]
+        - max_attachment_mb — if 0, defaults to 10 MB for downward attachments
+
+        The FileAsset is created with purpose='approval_downward_attachment'. Its
+        metadata_json is populated with approval_request_id when approve/reject is called
+        (via _link_attachments in the engine). This two-phase approach mirrors Phase 6's
+        upward attachment pattern.
+
+        The request must be in SUBMITTED status (only submitted requests can be acted on).
+
+        Raises:
+        - FacultyRequestNotFoundError if request_id not found or not linked to an approval request
+        - InvalidRequestStatusTransitionError if not SUBMITTED
+        - DisallowedMimeTypeError if mime_type not in allowed list
+        - AttachmentTooLargeError if file exceeds max size
+        """
+        row = self._repo.get(request_id)
+        if row is None:
+            raise FacultyRequestNotFoundError(f"FacultyRequest {request_id} not found")
+        if row.status != STATUS_SUBMITTED:
+            raise InvalidRequestStatusTransitionError(
+                f"Cannot attach downward file: status is '{row.status}'. "
+                "Downward attachments are only allowed on submitted requests."
+            )
+        if row.approval_request_id is None:
+            raise FacultyRequestNotFoundError(
+                f"FacultyRequest {request_id} is not linked to an approval request"
+            )
+
+        process_code = f"faculty_{row.request_type}"
+        process_repo = ApprovalProcessRepository(self._session)
+        process = process_repo.get_by_code(process_code)
+
+        allowed_mimes: list[str] = (
+            process.allowed_attachment_mime_types_json
+            if process and process.allowed_attachment_mime_types_json
+            else ["application/pdf"]
+        )
+        if mime_type not in allowed_mimes:
+            raise DisallowedMimeTypeError(
+                f"MIME type '{mime_type}' is not allowed for downward attachments on "
+                f"process '{process_code}'. Allowed: {', '.join(sorted(allowed_mimes))}"
+            )
+
+        max_mb: int = (
+            process.max_attachment_mb
+            if process and process.max_attachment_mb > 0
+            else 10
+        )
+        max_bytes = max_mb * 1024 * 1024
+        if len(file_bytes) > max_bytes:
+            raise AttachmentTooLargeError(
+                f"File exceeds the {max_mb} MB size limit "
+                f"({len(file_bytes)} bytes > {max_bytes} bytes)."
+            )
+
+        backend = self._storage_backend
+        if backend is None:
+            from durgam.storage import get_storage_backend  # noqa: PLC0415
+            backend = get_storage_backend()
+
+        sha256 = hashlib.sha256(file_bytes).hexdigest()
+        storage_key = uuid4().hex
+        backend.put(storage_key, file_bytes, mime_type)
+
+        now = datetime.now(UTC)
+        asset = FileAsset(
+            storage_key=storage_key,
+            original_name=filename,
+            mime_type=mime_type,
+            size_bytes=len(file_bytes),
+            sha256=sha256,
+            owner_user_id=actor_id,
+            purpose="approval_downward_attachment",
+            metadata_json={"faculty_request_id": str(request_id)},
+            created_by=actor_id,
+            updated_by=actor_id,
+            created_at=now,
+            updated_at=now,
+        )
+        file_repo = FileAssetRepository(self._session)
+        return file_repo.save(asset)
 
     # ── Approver inbox (Phase 7C) ─────────────────────────────────────────────
 
