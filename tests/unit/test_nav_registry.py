@@ -81,10 +81,10 @@ class TestApprovalsNavGate:
         sees it; a user without does not."""
         all_entries = get_all()
         approvals_entry = next(
-            (e for e in all_entries if e.label == "Approvals" and e.href == "/approvals/inbox"),
+            (e for e in all_entries if e.label == "Other Approvals" and e.href == "/approvals/inbox"),
             None,
         )
-        assert approvals_entry is not None, "Approvals nav entry not registered"
+        assert approvals_entry is not None, "Other Approvals nav entry not registered"
         assert approvals_entry.permission_action == "approve"
         assert approvals_entry.permission_resource == "approval_request"
 
@@ -96,11 +96,11 @@ class TestApprovalsNavGate:
 
         with patch("durgam.nav.registry.can", side_effect=_can_approve_only):
             visible = get_visible_entries(user_id, session)
-        assert any(r["label"] == "Approvals" for r in visible)
+        assert any(r["label"] == "Other Approvals" for r in visible)
 
         with patch("durgam.nav.registry.can", return_value=False):
             visible = get_visible_entries(user_id, session)
-        assert not any(r["label"] == "Approvals" for r in visible)
+        assert not any(r["label"] == "Other Approvals" for r in visible)
 
     @pytest.mark.parametrize(
         "role_label, can_returns, expected_visible",
@@ -127,14 +127,14 @@ class TestApprovalsNavGate:
         session = MagicMock()
         with patch("durgam.nav.registry.can", return_value=can_returns):
             visible = get_visible_entries(user_id, session)
-        result = any(r["label"] == "Approvals" for r in visible)
+        result = any(r["label"] == "Other Approvals" for r in visible)
         assert result is expected_visible, f"{role_label} visibility mismatch"
 
     def test_my_requests_nav_visible_to_all(self):
         """My Requests nav entry uses permission_action=None — visible to all."""
         all_entries = get_all()
         my_req_entry = next(
-            (e for e in all_entries if e.label == "My Requests"),
+            (e for e in all_entries if e.label == "Other Requests"),
             None,
         )
         assert my_req_entry is not None
