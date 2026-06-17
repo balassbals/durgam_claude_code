@@ -230,7 +230,13 @@ def submit_page() -> rx.Component:
                 "New Approval Request",
                 size="5",
                 font_family="var(--font-sans)",
-                margin_bottom="1.5rem",
+                margin_bottom="1rem",
+            ),
+            rx.callout(
+                "For NOC and other faculty-specific requests, use My Requests instead.",
+                icon="info",
+                color="blue",
+                margin_bottom="1rem",
             ),
             # Error banner
             rx.cond(

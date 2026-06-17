@@ -13,7 +13,15 @@ import reflex as rx
 import structlog
 
 from durgam.db import open_session
+from durgam.models.faculty_request import FACULTY_REQUEST_TYPES
 from durgam.states.base import BaseState
+
+# Process codes that belong to the structured faculty-request flow at /faculty/requests.
+# Excluded from the generic submit dropdown so users aren't routed to the wrong form.
+# Auto-expands when new request types are added to FACULTY_REQUEST_TYPES.
+_FACULTY_PROCESS_CODES: frozenset[str] = frozenset(
+    f"faculty_{rt}" for rt in FACULTY_REQUEST_TYPES
+)
 
 log = structlog.get_logger(__name__)
 
@@ -334,6 +342,8 @@ class SubmitRequestState(BaseState):
             all_procs = proc_repo.list_all_active()
             eligible: list[dict[str, Any]] = []
             for proc in all_procs:
+                if proc.code in _FACULTY_PROCESS_CODES:
+                    continue  # faculty types have a dedicated UI at /faculty/requests
                 if proc.requestor_role_codes:
                     if not user_role_codes & set(proc.requestor_role_codes):
                         continue
