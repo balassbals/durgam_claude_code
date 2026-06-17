@@ -26,11 +26,11 @@ from datetime import UTC, date, datetime
 from uuid import UUID, uuid4
 
 import pytest
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from durgam.models.campus import Campus
 from durgam.models.config_anchors import Designation
-from durgam.models.crosscutting import ApprovalAction, ApprovalProcess, ApprovalRequest
+from durgam.models.crosscutting import ApprovalAction, ApprovalProcess, ApprovalRequest, ApprovalStageOption
 from durgam.models.department import Department
 from durgam.models.faculty import Faculty
 from durgam.models.faculty_request import (
@@ -44,6 +44,7 @@ from durgam.models.school import School
 from durgam.repositories.approval_action import ApprovalActionRepository
 from durgam.repositories.faculty import FacultyRepository
 from durgam.services.faculty_request import (
+    EmptyApproverPoolError,
     FacultyRequestNotFoundError,
     FacultyRequestService,
     InvalidRequestStatusTransitionError,
@@ -128,15 +129,62 @@ def _noc_payload() -> dict:
 
 
 def _make_process_and_approver(session: Session, faculty: Faculty) -> tuple[ApprovalProcess, User]:
-    """Create a synthetic universitywide approver + faculty_noc approval process."""
+    """Get-or-create the faculty_noc process + a dept-scoped HOD approver.
+
+    In isolation (no seed): creates a minimal process (no ApprovalStageOption rows);
+    legacy routing via channel_role_codes=["HOD"] dispatches submit.
+    In full suite (with seed): gets the existing seeded process + creates a synthetic HOD
+    whose Faculty.campus_id and UserRole.scope_id match the requestor faculty, satisfying
+    the dept_head_at_requestor_campus OR-set resolver.
+
+    Returns (process, approver_user).
+    """
     uid = uuid4().hex[:8]
     now = _now()
-    role_code = f"UIHOD_{uid[:6]}"
 
-    role = Role(code=role_code, name=f"UI HOD {uid}", level=50, created_at=now, updated_at=now)
-    session.add(role)
-    session.flush()
+    # 1. Get-or-create faculty_noc — avoids UniqueViolation when running alongside seeded DB.
+    process = session.exec(
+        select(ApprovalProcess).where(
+            ApprovalProcess.code == "faculty_noc",
+            ApprovalProcess.is_deleted == False,  # noqa: E712
+        )
+    ).first()
+    if process is None:
+        # Isolation mode: create process with OR-set config so dept_head_at_requestor_campus
+        # resolver runs instead of legacy scope-chain routing (which needs requestor UserRole rows).
+        process = ApprovalProcess(
+            code="faculty_noc",
+            title="Faculty NOC Approval",
+            channel_role_codes=["HOD"],
+            requestor_role_codes=["FACULTY"],
+            stage_pick_modes_json={"1": "approver"},
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(process)
+        session.flush()
+        option = ApprovalStageOption(
+            approval_process_id=process.id,
+            stage_index=1,
+            resolver_name="dept_head_at_requestor_campus",
+            label="Head of Department",
+            sort_order=0,
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(option)
+        session.flush()
 
+    # 2. Get-or-create HOD role.
+    hod_role = session.exec(
+        select(Role).where(Role.code == "HOD", Role.is_deleted == False)  # noqa: E712
+    ).first()
+    if hod_role is None:
+        hod_role = Role(code="HOD", name="Head of Department", level=50, created_at=now, updated_at=now)
+        session.add(hod_role)
+        session.flush()
+
+    # 3. Synthetic approver user.
     approver_user = User(
         username=f"uiapp_{uid}",
         email=f"uiapp_{uid}@dev.local",
@@ -148,24 +196,38 @@ def _make_process_and_approver(session: Session, faculty: Faculty) -> tuple[Appr
     session.add(approver_user)
     session.flush()
 
-    user_role = UserRole(
+    # 4. Approver Faculty on the SAME dept + campus as the requestor.
+    #    The dept_head_at_requestor_campus resolver joins Faculty.campus_id == requestor campus.
+    approver_faculty = Faculty(
         user_id=approver_user.id,
-        role_id=role.id,
-        scope_type=None,
-        scope_id=None,
-    )
-    session.add(user_role)
-    session.flush()
-
-    process = ApprovalProcess(
-        code=f"faculty_noc",
-        title="Faculty NOC Approval",
-        channel_role_codes=[role_code],
-        requestor_role_codes=["FACULTY"],
+        employee_id=f"APPFAC-{uid}",
+        title="Dr",
+        first_name="Approver",
+        last_name="HOD",
+        designation_id=faculty.designation_id,
+        department_id=faculty.department_id,
+        campus_id=faculty.campus_id,
+        joining_date=date(2020, 1, 1),
+        phone="9000000099",
+        emergency_contact_name="EC",
+        emergency_contact_relation="Parent",
+        emergency_contact_phone="9000000098",
+        is_phd=False,
         created_at=now,
         updated_at=now,
     )
-    session.add(process)
+    session.add(approver_faculty)
+    session.flush()
+
+    # 5. Bind HOD role scoped to requestor's department (satisfies both legacy routing
+    #    scope-chain walk and OR-set resolver's UserRole.scope_id == dept_id check).
+    user_role = UserRole(
+        user_id=approver_user.id,
+        role_id=hod_role.id,
+        scope_type="department",
+        scope_id=faculty.department_id,
+    )
+    session.add(user_role)
     session.flush()
 
     return process, approver_user
@@ -321,7 +383,10 @@ class TestSubmitFlow:
         assert approval is not None
         assert approval.state == "submitted"
 
-    def test_submit_requires_configured_process(self, db_session: Session) -> None:
+    def test_submit_fails_when_no_approver_configured(self, db_session: Session) -> None:
+        # In isolation (no seed): process absent → UnknownRequestTypeError.
+        # In full suite (with seed): process present but no HOD for this test dept →
+        # OR-set resolver returns empty pool → EmptyApproverPoolError.
         faculty = _make_faculty(db_session)
         svc = FacultyRequestService(db_session)
         req = svc.create_request(
@@ -330,7 +395,7 @@ class TestSubmitFlow:
             payload=_noc_payload(),
             actor_id=faculty.user_id,
         )
-        with pytest.raises(UnknownRequestTypeError):
+        with pytest.raises((UnknownRequestTypeError, EmptyApproverPoolError)):
             svc.submit_for_approval(req.id, faculty.user_id)
 
     def test_double_submit_rejected(self, db_session: Session) -> None:

@@ -14,6 +14,7 @@ from uuid import UUID
 import reflex as rx
 import structlog
 
+from durgam.auth.decorators import audit_action, require_role
 from durgam.db import open_session
 from durgam.states.base import BaseState
 
@@ -167,6 +168,8 @@ class NewFacultyRequestState(BaseState):
 
         self._load_nav_entries()
 
+    @require_role(action="create", resource="faculty_request", scope="own")
+    @audit_action(action="create", resource="faculty_request")
     async def handle_upload(self, files: list[rx.UploadFile]) -> None:
         if not files or not self.draft_id:
             return
@@ -214,6 +217,8 @@ class NewFacultyRequestState(BaseState):
                     return
             session.commit()
 
+    @require_role(action="create", resource="faculty_request", scope="own")
+    @audit_action(action="create", resource="faculty_request")
     def remove_attachment(self, file_id: str) -> None:
         from durgam.services.faculty_request import FacultyRequestService
 
@@ -224,6 +229,8 @@ class NewFacultyRequestState(BaseState):
             session.commit()
         self.attached_files = [f for f in self.attached_files if f["id"] != file_id]
 
+    @require_role(action="create", resource="faculty_request", scope="own")
+    @audit_action(action="create", resource="faculty_request")
     async def submit_request(self) -> None:
         self.form_error = ""
         if not self.purpose.strip():
@@ -390,6 +397,8 @@ class FacultyRequestDetailState(BaseState):
     def cancel_withdraw_confirm(self) -> None:
         self.confirm_withdraw_open = False
 
+    @require_role(action="create", resource="faculty_request", scope="own")
+    @audit_action(action="withdraw", resource="faculty_request")
     async def withdraw_current_request(self) -> None:
         self.confirm_withdraw_open = False
         request_id_str = self.router.page.params.get("faculty_request_id", "")
