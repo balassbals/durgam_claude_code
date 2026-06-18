@@ -14,6 +14,7 @@ import structlog
 
 from durgam.db import open_session
 from durgam.states.base import BaseState
+from durgam.utils.ist_format import format_ist
 
 log = structlog.get_logger(__name__)
 
@@ -36,9 +37,7 @@ def _resolve_or_redirect(state: BaseState):
 
 
 def _format_dt(dt: datetime | None) -> str:
-    if dt is None:
-        return "—"
-    return dt.strftime("%Y-%m-%d %H:%M UTC")
+    return format_ist(dt)
 
 
 def _stage_label(current_stage: int, channel_len: int, state: str) -> str:

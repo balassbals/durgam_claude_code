@@ -22,6 +22,8 @@ Covers:
   S. Issue B — open_deactivate_by_id(1 arg) replaces 2-arg open_deactivate_confirm in _row_actions (7G.3)
   T. Issue C — data_table actions column width widened from 3rem to 12rem (7G.4)
   U. Issue D — approver redaction: list_actions_for_approver_redacted returns all rows with flag (7G.4)
+  V. Issue E — actions column hydration fix: non-empty "Actions" label + min_width on header and cell (7G.5)
+  W. Issue F — UTC→IST display: _format_dt delegates to format_ist (7G.5)
 
 DB strategy (Phase 7F.1 fix — 7F contamination correction):
   ALL DB tests use `db_session` (function-scoped, rolled back at teardown).
@@ -1383,3 +1385,78 @@ class TestApproverRedaction:
             "load_detail must use list_actions_for_approver_redacted in the approver "
             "branch so higher-stage unshared rows appear with placeholder comment"
         )
+
+
+# ── V. Issue E — actions column hydration fix (Phase 7G.5) ──────────────────
+
+
+class TestActionsColumnHydrationFix:
+    """Phase 7G.5: Empty header cell ('') causes browser/Radix to collapse the
+    actions column during SSR→hydration transition. width='12rem' (from 7G.4)
+    is not honored until a reflow event; DevTools open forces the reflow, which
+    is why buttons appear after opening DevTools. Fix: non-empty 'Actions' label
+    on the header cell + min_width='12rem' on BOTH header and row cell.
+    """
+
+    def test_actions_header_has_non_empty_label(self) -> None:
+        """Actions column header must use 'Actions' text, not empty string."""
+        with open("durgam/pages/shared/data_table.py") as f:
+            src = f.read()
+        assert 'column_header_cell("")' not in src, (
+            "Actions header uses empty string — browser collapses the column during "
+            "SSR→hydration before reflow; replace with 'Actions' label text"
+        )
+        assert '"Actions"' in src, (
+            "Actions column header must contain 'Actions' label text so the browser "
+            "keeps the column visible during SSR→hydration"
+        )
+
+    def test_actions_header_and_cell_have_min_width(self) -> None:
+        """Header and row cell must carry min_width='12rem' to survive hydration."""
+        with open("durgam/pages/shared/data_table.py") as f:
+            src = f.read()
+        # Count occurrences: one on header + one on cell = at least 2
+        count = src.count('min_width="12rem"')
+        assert count >= 2, (
+            f"Expected min_width='12rem' on BOTH header cell and row cell; "
+            f"found {count} occurrence(s). Add min_width to both so the column "
+            f"survives SSR→hydration reflow."
+        )
+
+
+# ── W. Issue F — UTC→IST display fix (Phase 7G.5) ───────────────────────────
+
+
+class TestFormatDtISTDisplay:
+    """Phase 7G.5: _format_dt at approval_requests.py:38 used naive strftime
+    returning '2026-06-14 03:30 UTC'. format_ist from durgam/utils/ist_format.py
+    converts to 'Asia/Kolkata' and returns e.g. '14 Jun 2026, 9:00 AM IST'.
+    Routing _format_dt through format_ist fixes all 7 call sites in one change.
+    """
+
+    def test_format_dt_returns_ist_label(self) -> None:
+        """_format_dt output must contain 'IST', not 'UTC'."""
+        from durgam.states.approval_requests import _format_dt
+
+        dt = datetime(2026, 6, 14, 3, 30, 0, tzinfo=UTC)
+        result = _format_dt(dt)
+        assert "IST" in result, f"Expected 'IST' in output, got: {result!r}"
+        assert "UTC" not in result, (
+            f"_format_dt must no longer append 'UTC'; got: {result!r}"
+        )
+
+    def test_format_dt_converts_utc_to_ist(self) -> None:
+        """UTC 00:00 must display as 5:30 AM IST (UTC+5:30 offset)."""
+        from durgam.states.approval_requests import _format_dt
+
+        dt = datetime(2026, 6, 14, 0, 0, 0, tzinfo=UTC)
+        result = _format_dt(dt)
+        assert "5:30" in result, (
+            f"UTC 00:00 should display as 5:30 AM IST; got: {result!r}"
+        )
+
+    def test_format_dt_none_returns_dash(self) -> None:
+        """_format_dt(None) must return the em-dash sentinel '—'."""
+        from durgam.states.approval_requests import _format_dt
+
+        assert _format_dt(None) == "—"
