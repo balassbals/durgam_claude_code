@@ -120,8 +120,8 @@ class ApproverInboxState(BaseState):
     loading: bool = True
     view_mode: str = "pending"  # "pending" | "past"
 
-    async def set_view_mode(self, mode: str) -> None:
-        self.view_mode = mode
+    async def set_view_mode(self, mode: str | list[str]) -> None:
+        self.view_mode = mode if isinstance(mode, str) else (mode[0] if mode else "pending")
         await self.load_inbox()
 
     def _potential_approver_guard(self) -> rx.Component | None:
