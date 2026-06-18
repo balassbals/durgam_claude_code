@@ -24,6 +24,8 @@ Covers:
   U. Issue D — approver redaction: list_actions_for_approver_redacted returns all rows with flag (7G.4)
   V. Issue E — actions column hydration fix: non-empty "Actions" label + min_width on header and cell (7G.5)
   W. Issue F — UTC→IST display: _format_dt delegates to format_ist (7G.5)
+  X. Issue G — actions column sticky-right so wide tables don't push it off-screen (7G.6)
+  Y. Debug paint cleanup — no "red" background or "3px solid blue" in approval_processes._row_actions (7G.6)
 
 DB strategy (Phase 7F.1 fix — 7F contamination correction):
   ALL DB tests use `db_session` (function-scoped, rolled back at teardown).
@@ -1242,16 +1244,19 @@ class TestDataTableActionsColumnWidth:
     """
 
     def test_actions_column_header_width_is_wide_enough(self) -> None:
-        """Actions column header must use at least 10rem — not the old 3rem."""
+        """Actions column header must not use the old 3rem (too narrow for text buttons).
+        Updated by 7G.6: width tightened from 12rem to 8rem + sticky positioning."""
         with open("durgam/pages/shared/data_table.py") as f:
             src = f.read()
         assert 'width="3rem"' not in src, (
-            'Actions column header still uses width="3rem" — too narrow for text '
-            'buttons; two text buttons need at least 12rem'
+            'Actions column header still uses width="3rem" — too narrow for text buttons'
         )
-        assert 'width="12rem"' in src, (
-            'Actions column header must use width="12rem" (or wider) to accommodate '
-            'paired text buttons like Edit + Deactivate'
+        assert 'width="12rem"' not in src, (
+            'width="12rem" was replaced by width="8rem" in Phase 7G.6 (sticky column)'
+        )
+        assert 'width="8rem"' in src, (
+            'Actions column must use width="8rem" (sufficient for Edit + Deactivate '
+            'at size="1"; narrower than 12rem reduces wasted space)'
         )
 
 
@@ -1412,15 +1417,15 @@ class TestActionsColumnHydrationFix:
         )
 
     def test_actions_header_and_cell_have_min_width(self) -> None:
-        """Header and row cell must carry min_width='12rem' to survive hydration."""
+        """Header and row cell must carry min_width to survive hydration.
+        Updated by 7G.6: min_width tightened from 12rem to 8rem + sticky positioning."""
         with open("durgam/pages/shared/data_table.py") as f:
             src = f.read()
         # Count occurrences: one on header + one on cell = at least 2
-        count = src.count('min_width="12rem"')
+        count = src.count('min_width="8rem"')
         assert count >= 2, (
-            f"Expected min_width='12rem' on BOTH header cell and row cell; "
-            f"found {count} occurrence(s). Add min_width to both so the column "
-            f"survives SSR→hydration reflow."
+            f"Expected min_width='8rem' on BOTH header cell and row cell; "
+            f"found {count} occurrence(s). Phase 7G.6 changed 12rem → 8rem."
         )
 
 
@@ -1460,3 +1465,91 @@ class TestFormatDtISTDisplay:
         from durgam.states.approval_requests import _format_dt
 
         assert _format_dt(None) == "—"
+
+
+# ── X. Issue G — sticky actions column (Phase 7G.6) ─────────────────────────
+
+
+class TestStickyActionsColumn:
+    """Phase 7G.6: Wide tables (approval_processes, leave_sanction_matrix, etc.)
+    push the actions column off-screen to the right. width='12rem' keeps the
+    column wide but not visible when the table overflows the container.
+    Fix: position='sticky' + right='0' on BOTH header cell and row cell in
+    _reactive_table_view. Width tightened to 8rem (sufficient for Edit +
+    Deactivate at size='1'; kebab/icon pages gain whitespace, not a problem).
+    The box_shadow provides a visual separator from the scrollable content.
+    """
+
+    def test_actions_header_is_sticky_right(self) -> None:
+        """Actions header cell must carry position='sticky' and right='0'."""
+        with open("durgam/pages/shared/data_table.py") as f:
+            src = f.read()
+        assert 'position="sticky"' in src, (
+            "Actions column header must use position='sticky' so it stays visible "
+            "when the table is wider than the container"
+        )
+        assert 'right="0"' in src, (
+            "Actions column header must use right='0' to anchor sticky at the right edge"
+        )
+
+    def test_actions_header_and_cell_both_sticky(self) -> None:
+        """Both header cell AND row cell must be sticky (not just one)."""
+        with open("durgam/pages/shared/data_table.py") as f:
+            src = f.read()
+        sticky_count = src.count('position="sticky"')
+        right_count = src.count('right="0"')
+        assert sticky_count >= 2, (
+            f"Expected position='sticky' on BOTH header and row cell; "
+            f"found {sticky_count} occurrence(s)"
+        )
+        assert right_count >= 2, (
+            f"Expected right='0' on BOTH header and row cell; "
+            f"found {right_count} occurrence(s)"
+        )
+
+    def test_actions_column_width_is_8rem(self) -> None:
+        """Width tightened to 8rem (12rem was too wide; 8rem fits Edit+Deactivate)."""
+        with open("durgam/pages/shared/data_table.py") as f:
+            src = f.read()
+        assert 'width="8rem"' in src, (
+            "Actions column must use width='8rem' after the 12rem → 8rem tightening"
+        )
+        assert 'width="12rem"' not in src, (
+            "Old width='12rem' must be replaced; 8rem is sufficient for text buttons"
+        )
+
+
+# ── Y. Debug paint cleanup (Phase 7G.6) ──────────────────────────────────────
+
+
+class TestDebugPaintCleanup:
+    """Phase 7G.6: Bala's debug paint (background='red', border='3px solid blue')
+    in approval_processes._row_actions must be removed — not merely commented out.
+    Commented code is noise and may confuse future readers.
+    """
+
+    def test_row_actions_has_no_debug_paint(self) -> None:
+        """No 'red' background or '3px solid blue' border in approval_processes.py."""
+        with open("durgam/pages/admin/config/approval_processes.py") as f:
+            src = f.read()
+        active_lines = [
+            line for line in src.splitlines() if not line.strip().startswith("#")
+        ]
+        active_src = "\n".join(active_lines)
+        assert "background=\"red\"" not in active_src, (
+            "Debug background='red' must be removed from _row_actions"
+        )
+        assert "3px solid blue" not in active_src, (
+            "Debug border='3px solid blue' must be removed from _row_actions"
+        )
+
+    def test_commented_debug_lines_removed(self) -> None:
+        """Even as comments, debug paint lines must not remain in the file."""
+        with open("durgam/pages/admin/config/approval_processes.py") as f:
+            src = f.read()
+        assert "background=\"red\"" not in src, (
+            "Commented '# background=\"red\"' must be deleted, not left as comment noise"
+        )
+        assert "3px solid blue" not in src, (
+            "Commented '# border=\"3px solid blue\"' must be deleted from the file"
+        )
