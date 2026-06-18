@@ -12,9 +12,12 @@ Covers:
   I. list_actions_for_approver visibility filtering
   J. submit_request propagates return value from _submit_faculty_request (7F.2)
   K. Defect 1 — redacted action history: requestor sees ALL rows, hidden ones redacted (7G)
-  L. Defect 2 — past actions view: list_terminal_where_actor repo method (7G)
+  L. Defect 2 — past actions view: list_where_actor_acted repo method (7G + 7G.2)
   M. Defect 3 — seed.py downward attachment block for faculty_noc (7G)
   N. Defect 4 — admin processes page uses _row_actions not _kebab (7G)
+  O. Defect 1 round 2 — step dict uses bool is_redacted + correct placeholder (7G.2)
+  P. Defect 2 round 2 — load_inbox pre-loads both pending_rows and past_rows (7G.2)
+  Q. Defect 5 — approval processes Edit button uses open_edit_by_id(1 arg) (7G.2)
 
 DB strategy (Phase 7F.1 fix — 7F contamination correction):
   ALL DB tests use `db_session` (function-scoped, rolled back at teardown).
@@ -704,8 +707,8 @@ class TestRedactedActionHistory:
 
 
 class TestPastActionsRepo:
-    """list_terminal_where_actor returns terminal ApprovalRequests where the
-    viewer has any approval_action row.
+    """list_where_actor_acted returns ApprovalRequests (any state) where the viewer
+    has any approval_action row. No state filter — includes in-flight requests.
     """
 
     def _make_terminal_request_with_action(
@@ -770,7 +773,7 @@ class TestPastActionsRepo:
         req, _action = self._make_terminal_request_with_action(db_session, actor.id)
 
         repo = ApprovalRequestRepository(db_session)
-        result = repo.list_terminal_where_actor(actor.id)
+        result = repo.list_where_actor_acted(actor.id)
         request_ids = {r.id for r in result}
         assert req.id in request_ids
 
@@ -784,21 +787,25 @@ class TestPastActionsRepo:
         req, _action = self._make_terminal_request_with_action(db_session, other.id)
 
         repo = ApprovalRequestRepository(db_session)
-        result = repo.list_terminal_where_actor(actor.id)
+        result = repo.list_where_actor_acted(actor.id)
         request_ids = {r.id for r in result}
         assert req.id not in request_ids
 
-    def test_past_actions_excludes_active_states(
+    def test_past_actions_includes_in_flight_where_actor_acted(
         self, db_session: Session
     ) -> None:
-        """Active (submitted/in_review) requests are NOT returned even if actor acted."""
+        """In-review requests ARE returned when the actor has an action row.
+
+        Phase 7G.2 fix: no state filter. An HoD who approved Stage 1 of a 2-stage
+        request (still in_review) must see that request in Past Actions immediately.
+        """
         from durgam.models.crosscutting import ApprovalAction, ApprovalProcess, ApprovalRequest
         from durgam.repositories.approval_request import ApprovalRequestRepository
 
         actor = _make_user(db_session, "pa_active")
         now = _now()
 
-        process = session_exec = db_session.exec(
+        process = db_session.exec(
             select(ApprovalProcess).where(ApprovalProcess.is_deleted == False)  # noqa: E712
         ).first()
         if process is None:
@@ -813,9 +820,9 @@ class TestPastActionsRepo:
         req = ApprovalRequest(
             process_id=process.id,
             requestor_user_id=actor.id,
-            title="Active req",
+            title="In-flight req",
             state="in_review",
-            current_stage=1,
+            current_stage=2,
             created_by=actor.id,
             updated_by=actor.id,
             created_at=now,
@@ -840,9 +847,12 @@ class TestPastActionsRepo:
         db_session.flush()
 
         repo = ApprovalRequestRepository(db_session)
-        result = repo.list_terminal_where_actor(actor.id)
+        result = repo.list_where_actor_acted(actor.id)
         request_ids = {r.id for r in result}
-        assert req.id not in request_ids, "Active requests must not appear in past actions"
+        assert req.id in request_ids, (
+            "In-review requests must appear in past actions after actor has acted "
+            "(Phase 7G.2: no state filter in list_where_actor_acted)"
+        )
 
 
 # ── M. Defect 3 — seed faculty_noc downward config (Phase 7G) ────────────────
@@ -902,4 +912,139 @@ class TestAdminProcessesDirectActions:
         assert "actions=_kebab" not in src, (
             "_kebab must no longer be wired as the actions renderer — "
             "it has been replaced by _row_actions."
+        )
+
+
+# ── O. Defect 1 round 2 — step dict bool is_redacted (Phase 7G.2) ────────────
+
+
+class TestStepDictBoolIsRedacted:
+    """Phase 7G.2: is_redacted in step_dicts must be a bool (True/False), not a
+    string ("1"/""). The UI uses rx.cond(step["is_redacted"], ...) which requires
+    a bool Var; string equality comparison was unreliable in Reflex 0.9.x.
+    """
+
+    def test_load_detail_uses_bool_is_redacted(self) -> None:
+        """Source must store is_redacted as a bool, not "1"/"" string."""
+        from durgam.states.approval_requests import RequestDetailState
+
+        src = inspect.getsource(RequestDetailState.load_detail.fn)
+        assert '"is_redacted": is_redacted' in src, (
+            'load_detail must set "is_redacted": is_redacted (bool), '
+            'not "is_redacted": "1" if is_redacted else "".'
+        )
+        assert '"1" if is_redacted' not in src, (
+            'is_redacted must be stored as bool, not string "1".'
+        )
+
+    def test_ui_uses_bool_cond_not_string_equality(self) -> None:
+        """request_detail.py must use rx.cond(step["is_redacted"], ...) not == '1'."""
+        detail_path = "durgam/pages/approvals/request_detail.py"
+        with open(detail_path) as f:
+            src = f.read()
+        assert 'step["is_redacted"]' in src, (
+            "request_detail.py must reference step['is_redacted'] for conditional styling"
+        )
+        assert '== "1"' not in src, (
+            'String equality == "1" removed; bool rx.cond used instead.'
+        )
+
+
+# ── P. Defect 2 round 2 — dual-load inbox (Phase 7G.2) ───────────────────────
+
+
+class TestDualLoadInbox:
+    """Phase 7G.2: load_inbox pre-loads both pending_rows and past_rows in a single
+    DB query. set_view_mode is now synchronous — no DB roundtrip on tab switch.
+    """
+
+    def test_approver_inbox_has_pending_and_past_vars(self) -> None:
+        """ApproverInboxState must have pending_rows and past_rows state vars."""
+        from durgam.states.approval_requests import ApproverInboxState
+
+        assert hasattr(ApproverInboxState, "pending_rows"), (
+            "ApproverInboxState must have pending_rows state var"
+        )
+        assert hasattr(ApproverInboxState, "past_rows"), (
+            "ApproverInboxState must have past_rows state var"
+        )
+
+    def test_set_view_mode_is_sync(self) -> None:
+        """set_view_mode must be a sync method (no await load_inbox call)."""
+        import inspect as _inspect
+        from durgam.states.approval_requests import ApproverInboxState
+
+        method = ApproverInboxState.set_view_mode
+        fn = getattr(method, "fn", method)
+        src = _inspect.getsource(fn)
+        assert "await self.load_inbox" not in src, (
+            "set_view_mode must not call await self.load_inbox — "
+            "both lists are pre-loaded; tab switch has no DB roundtrip."
+        )
+
+    def test_load_inbox_populates_both_lists(self) -> None:
+        """load_inbox source must set both pending_rows and past_rows."""
+        import inspect as _inspect
+        from durgam.states.approval_requests import ApproverInboxState
+
+        src = _inspect.getsource(ApproverInboxState.load_inbox.fn)
+        assert "self.pending_rows" in src, (
+            "load_inbox must populate self.pending_rows"
+        )
+        assert "self.past_rows" in src, (
+            "load_inbox must populate self.past_rows"
+        )
+
+    def test_rows_computed_var_exists(self) -> None:
+        """ApproverInboxState.rows must be a computed var (not a plain state var)."""
+        from durgam.states.approval_requests import ApproverInboxState
+
+        rows_attr = ApproverInboxState.__dict__.get("rows")
+        assert rows_attr is not None, "rows must be defined on ApproverInboxState"
+        assert callable(rows_attr) or hasattr(rows_attr, "__get__"), (
+            "rows must be a computed var or property, not a plain state var list"
+        )
+
+
+# ── Q. Defect 5 — open_edit_by_id simplifies row action partial (Phase 7G.2) ──
+
+
+class TestOpenEditById:
+    """Phase 7G.2: _row_actions uses open_edit_by_id(row["id"]) — 1 arg instead
+    of 13. This avoids complex Reflex partial-application serialization that silently
+    produced invisible buttons.
+    """
+
+    def test_open_edit_by_id_exists(self) -> None:
+        """ApprovalProcessConfigState must have an open_edit_by_id method."""
+        from durgam.states.config_approval_process import ApprovalProcessConfigState
+
+        assert hasattr(ApprovalProcessConfigState, "open_edit_by_id"), (
+            "ApprovalProcessConfigState must have open_edit_by_id(pid: str) method"
+        )
+
+    def test_row_actions_uses_open_edit_by_id(self) -> None:
+        """_row_actions must call open_edit_by_id with only row['id']."""
+        page_path = "durgam/pages/admin/config/approval_processes.py"
+        with open(page_path) as f:
+            src = f.read()
+        assert "open_edit_by_id" in src, (
+            "_row_actions must call open_edit_by_id (1-arg Edit trigger)"
+        )
+        assert "open_edit_by_id(\n                row[" in src or "open_edit_by_id(  # type:" in src, (
+            "_row_actions must pass only row['id'] to open_edit_by_id"
+        )
+
+    def test_open_edit_by_id_reads_from_processes_list(self) -> None:
+        """open_edit_by_id source must iterate self.processes to find the row."""
+        import inspect as _inspect
+        from durgam.states.config_approval_process import ApprovalProcessConfigState
+
+        fn = ApprovalProcessConfigState.open_edit_by_id.fn  # type: ignore[attr-defined]
+        src = _inspect.getsource(fn)
+        assert "self.processes" in src, (
+            "open_edit_by_id must look up data from self.processes (no extra DB query)"
+        )
+        assert "self.show_form = True" in src, (
+            "open_edit_by_id must set show_form=True after populating fields"
         )

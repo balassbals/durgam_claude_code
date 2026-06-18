@@ -70,23 +70,14 @@ def _step_row(step: rx.Var) -> rx.Component:
         rx.table.cell(rx.text(step["approver_role_code"], font_size="0.85rem")),
         rx.table.cell(_step_decision_badge(step["decision"])),
         rx.table.cell(
-            rx.cond(
-                step["is_redacted"] == "1",
-                rx.text(
-                    step["comment"],
-                    font_size="0.85rem",
-                    color="var(--color-muted)",
-                    font_style="italic",
-                    max_width="300px",
-                ),
-                rx.text(
-                    step["comment"],
-                    font_size="0.85rem",
-                    color="var(--color-body)",
-                    max_width="300px",
-                    overflow="hidden",
-                    text_overflow="ellipsis",
-                ),
+            rx.text(
+                step["comment"],
+                font_size="0.85rem",
+                color=rx.cond(step["is_redacted"], "var(--color-muted)", "var(--color-body)"),
+                font_style=rx.cond(step["is_redacted"], "italic", "normal"),
+                max_width="300px",
+                overflow="hidden",
+                text_overflow="ellipsis",
             ),
         ),
         rx.table.cell(rx.text(step["decided_at"], font_size="0.8rem", color="var(--color-muted)")),

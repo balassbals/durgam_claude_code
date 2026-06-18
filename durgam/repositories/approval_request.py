@@ -47,21 +47,22 @@ class ApprovalRequestRepository(BaseRepository[ApprovalRequest]):
         )
         return list(self._session.exec(stmt).all())
 
-    def list_terminal_where_actor(self, actor_user_id: UUID) -> list[ApprovalRequest]:
-        """ApprovalRequests in terminal states where the user has any approval_action row.
+    def list_where_actor_acted(self, actor_user_id: UUID) -> list[ApprovalRequest]:
+        """ApprovalRequests where the user has any approval_action row.
 
-        Used by the approver inbox 'Past Actions' view to show closed requests the
-        viewer participated in as an approver.
+        No state filter — includes in-flight requests (submitted, in_review) AND
+        terminal ones (approved, rejected, withdrawn, cancelled). Used by the approver
+        inbox 'Past Actions' view to surface requests the viewer has acted on even if
+        the workflow is still progressing at a later stage.
         """
-        _TERMINAL = ("approved", "rejected", "withdrawn", "cancelled")
         stmt = (
             select(ApprovalRequest)
             .join(ApprovalAction, ApprovalAction.approval_request_id == ApprovalRequest.id)
             .where(
                 ApprovalAction.actor_user_id == actor_user_id,
                 ApprovalAction.is_deleted == False,  # noqa: E712
-                ApprovalRequest.state.in_(_TERMINAL),  # type: ignore[union-attr]
                 ApprovalRequest.is_deleted == False,  # noqa: E712
+                # NO state filter — show all states where actor has acted
             )
             .distinct()
             .order_by(ApprovalRequest.updated_at.desc())  # type: ignore[union-attr]

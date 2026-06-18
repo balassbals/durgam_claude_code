@@ -50,7 +50,7 @@ def inbox_page() -> rx.Component:
             rx.text(
                 rx.cond(
                     ApproverInboxState.view_mode == "past",
-                    "Requests you acted on that have since been closed.",
+                    "Requests you have acted on as an approver.",
                     rx.cond(
                         ApproverInboxState.rows.length() > 0,  # type: ignore[attr-defined]
                         rx.cond(

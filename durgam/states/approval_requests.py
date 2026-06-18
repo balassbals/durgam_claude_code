@@ -116,13 +116,21 @@ class MyRequestsState(BaseState):
 
 
 class ApproverInboxState(BaseState):
-    rows: list[dict[str, Any]] = []
+    pending_rows: list[dict[str, Any]] = []
+    past_rows: list[dict[str, Any]] = []
     loading: bool = True
     view_mode: str = "pending"  # "pending" | "past"
 
-    async def set_view_mode(self, mode: str | list[str]) -> None:
+    @rx.var
+    def rows(self) -> list[dict[str, Any]]:
+        """Reactive selector — returns the active list; no DB query on tab switch."""
+        if self.view_mode == "past":
+            return self.past_rows
+        return self.pending_rows
+
+    def set_view_mode(self, mode: str | list[str]) -> None:
+        """Switch view. Both lists are pre-loaded by load_inbox; no DB roundtrip here."""
         self.view_mode = mode if isinstance(mode, str) else (mode[0] if mode else "pending")
-        await self.load_inbox()
 
     def _potential_approver_guard(self) -> rx.Component | None:
         """Route guard: redirect if user cannot possibly be an approver."""
@@ -150,7 +158,8 @@ class ApproverInboxState(BaseState):
             return guard
 
         self.loading = True
-        self.rows = []
+        self.pending_rows = []
+        self.past_rows = []
 
         from durgam.models.identity import User
         from durgam.repositories.approval_process import ApprovalProcessRepository
@@ -163,74 +172,74 @@ class ApproverInboxState(BaseState):
 
             viewer_id = UUID(self.current_user_id)
             proc_cache: dict[UUID, Any] = {}
-            enriched: list[dict[str, Any]] = []
 
-            if self.view_mode == "past":
-                # Past Actions: terminal requests the viewer acted on as an approver
-                past_requests = req_repo.list_terminal_where_actor(viewer_id)
-                for r in past_requests:
-                    if r.process_id not in proc_cache:
-                        proc_cache[r.process_id] = proc_repo.get_by_id(r.process_id)
-                    proc = proc_cache[r.process_id]
-                    if proc is None:
-                        continue
-                    channel_len = len(proc.channel_role_codes) if proc.channel_role_codes else 0
-                    if r.resolved_channel_json:
-                        channel_len = len(r.resolved_channel_json)
-                    requestor = session.get(User, r.requestor_user_id)
-                    requestor_display = (
-                        (requestor.full_name or requestor.username) if requestor else "Unknown"
+            # ── Past Actions: all requests the viewer acted on, any state ──────
+            past_enriched: list[dict[str, Any]] = []
+            past_requests = req_repo.list_where_actor_acted(viewer_id)
+            for r in past_requests:
+                if r.process_id not in proc_cache:
+                    proc_cache[r.process_id] = proc_repo.get_by_id(r.process_id)
+                proc = proc_cache[r.process_id]
+                if proc is None:
+                    continue
+                channel_len = len(proc.channel_role_codes) if proc.channel_role_codes else 0
+                if r.resolved_channel_json:
+                    channel_len = len(r.resolved_channel_json)
+                requestor = session.get(User, r.requestor_user_id)
+                requestor_display = (
+                    (requestor.full_name or requestor.username) if requestor else "Unknown"
+                )
+                past_enriched.append({
+                    "id": str(r.id),
+                    "title": r.title,
+                    "process_code": proc.code,
+                    "process_title": proc.title,
+                    "requestor_display": requestor_display,
+                    "current_stage_label": _stage_label(r.current_stage, channel_len, r.state),
+                    "submitted_at_display": _format_dt(r.created_at),
+                    "state": r.state,
+                })
+            self.past_rows = past_enriched
+
+            # ── Pending: active requests awaiting the viewer's decision ────────
+            pending_enriched: list[dict[str, Any]] = []
+            pending = req_repo.list_by_states(["submitted", "in_review"])
+            for r in pending:
+                if r.process_id not in proc_cache:
+                    proc_cache[r.process_id] = proc_repo.get_by_id(r.process_id)
+                proc = proc_cache[r.process_id]
+                if proc is None:
+                    continue
+
+                try:
+                    approvers = resolve_stage_approvers(
+                        request=r, process=proc, session=session,
                     )
-                    enriched.append({
-                        "id": str(r.id),
-                        "title": r.title,
-                        "process_code": proc.code,
-                        "process_title": proc.title,
-                        "requestor_display": requestor_display,
-                        "current_stage_label": _stage_label(r.current_stage, channel_len, r.state),
-                        "submitted_at_display": _format_dt(r.created_at),
-                        "state": r.state,
-                    })
-            else:
-                # Pending (default): active requests awaiting the viewer's decision
-                pending = req_repo.list_by_states(["submitted", "in_review"])
-                for r in pending:
-                    if r.process_id not in proc_cache:
-                        proc_cache[r.process_id] = proc_repo.get_by_id(r.process_id)
-                    proc = proc_cache[r.process_id]
-                    if proc is None:
-                        continue
+                except Exception:
+                    continue
 
-                    try:
-                        approvers = resolve_stage_approvers(
-                            request=r, process=proc, session=session,
-                        )
-                    except Exception:
-                        continue
+                approver_ids = {u.id for u in approvers}
+                if viewer_id not in approver_ids:
+                    continue
 
-                    approver_ids = {u.id for u in approvers}
-                    if viewer_id not in approver_ids:
-                        continue
-
-                    channel_len = len(proc.channel_role_codes) if proc.channel_role_codes else 0
-                    if r.resolved_channel_json:
-                        channel_len = len(r.resolved_channel_json)
-                    requestor = session.get(User, r.requestor_user_id)
-                    requestor_display = (
-                        (requestor.full_name or requestor.username) if requestor else "Unknown"
-                    )
-                    enriched.append({
-                        "id": str(r.id),
-                        "title": r.title,
-                        "process_code": proc.code,
-                        "process_title": proc.title,
-                        "requestor_display": requestor_display,
-                        "current_stage_label": _stage_label(r.current_stage, channel_len, r.state),
-                        "submitted_at_display": _format_dt(r.created_at),
-                        "state": r.state,
-                    })
-
-            self.rows = enriched
+                channel_len = len(proc.channel_role_codes) if proc.channel_role_codes else 0
+                if r.resolved_channel_json:
+                    channel_len = len(r.resolved_channel_json)
+                requestor = session.get(User, r.requestor_user_id)
+                requestor_display = (
+                    (requestor.full_name or requestor.username) if requestor else "Unknown"
+                )
+                pending_enriched.append({
+                    "id": str(r.id),
+                    "title": r.title,
+                    "process_code": proc.code,
+                    "process_title": proc.title,
+                    "requestor_display": requestor_display,
+                    "current_stage_label": _stage_label(r.current_stage, channel_len, r.state),
+                    "submitted_at_display": _format_dt(r.created_at),
+                    "state": r.state,
+                })
+            self.pending_rows = pending_enriched
 
         self.loading = False
         self._load_nav_entries()
@@ -902,7 +911,7 @@ class RequestDetailState(BaseState):
                         "Comment not shared with you." if is_redacted else (act.comment or "")
                     ),
                     "decided_at": _format_dt(act.created_at),
-                    "is_redacted": "1" if is_redacted else "",
+                    "is_redacted": is_redacted,
                 })
                 if act.stage_index < req.current_stage and str(act.actor_user_id) not in prior_actors_seen:
                     prior_actors_seen[str(act.actor_user_id)] = actor_display

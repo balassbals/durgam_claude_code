@@ -202,6 +202,43 @@ class ApprovalProcessConfigState(BaseState):
         self.form_allowed_mimes = [m for m in allowed_mimes.split(",") if m.strip()]
         self.show_form = True
 
+    def open_edit_by_id(self, pid: str) -> None:
+        """Look up the process row by ID from the loaded list and open the edit form.
+
+        Passes only one Var arg from the row (the ID), avoiding partial-application
+        complexity with 13 Vars. Looks up remaining fields from self.processes.
+        """
+        self.flash = ""
+        self.flash_type = "info"
+        for p in self.processes:
+            if p["id"] == pid:
+                self.editing_id = p["id"]
+                self.form_code = p["code"]
+                self.form_title = p["title"]
+                self.form_requestors_selected = [r for r in p["raw_requestors"].split(",") if r]
+                self.form_channel_selected = [c for c in p["raw_channel"].split(",") if c]
+                self.form_cc_selected = [c for c in p["raw_cc"].split(",") if c]
+                self.form_is_finance = p["raw_finance"] == "1"
+                self.form_requires_upward = p["raw_requires_upward"] == "1"
+                try:
+                    self.form_max_upward = int(p["raw_max_upward"])
+                except (ValueError, TypeError):
+                    self.form_max_upward = 0
+                self.form_requires_downward = p["raw_requires_downward"] == "1"
+                try:
+                    self.form_max_downward = int(p["raw_max_downward"])
+                except (ValueError, TypeError):
+                    self.form_max_downward = 0
+                try:
+                    self.form_max_attachment_mb = max(1, int(p["raw_max_attachment_mb"]))
+                except (ValueError, TypeError):
+                    self.form_max_attachment_mb = 5
+                self.form_allowed_mimes = [m for m in p["raw_allowed_mimes"].split(",") if m.strip()]
+                self.show_form = True
+                return
+        self.flash = "Process not found."
+        self.flash_type = "error"
+
     def cancel_form(self):
         self.show_form = False
         self.editing_id = ""

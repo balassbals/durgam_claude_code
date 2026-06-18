@@ -46,13 +46,8 @@ def _row_actions(row: dict) -> rx.Component:
     return rx.hstack(
         rx.button(
             "Edit",
-            on_click=ApprovalProcessConfigState.open_edit(  # type: ignore[call-arg, func-returns-value]
-                row["id"], row["code"], row["title"],
-                row["raw_requestors"], row["raw_channel"],
-                row["raw_finance"], row["raw_cc"],
-                row["raw_requires_upward"], row["raw_max_upward"],
-                row["raw_requires_downward"], row["raw_max_downward"],
-                row["raw_max_attachment_mb"], row["raw_allowed_mimes"],
+            on_click=ApprovalProcessConfigState.open_edit_by_id(  # type: ignore[call-arg, func-returns-value]
+                row["id"],
             ),
             size="1",
             variant="soft",
