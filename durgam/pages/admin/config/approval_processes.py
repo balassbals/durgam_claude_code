@@ -42,39 +42,33 @@ def _mime_checkbox(label: str, value: str) -> rx.Component:
     )
 
 
-def _kebab(row: dict) -> rx.Component:
-    return rx.menu.root(
-        rx.menu.trigger(
-            rx.button(
-                "⋮",
-                background="transparent",
-                border="none",
-                cursor="pointer",
-                font_size="1.2rem",
-                color="var(--color-muted)",
-                padding="0.1rem 0.4rem",
-            )
-        ),
-        rx.menu.content(
-            rx.menu.item(
-                "Edit",
-                on_click=ApprovalProcessConfigState.open_edit(  # type: ignore[call-arg, func-returns-value]
-                    row["id"], row["code"], row["title"],
-                    row["raw_requestors"], row["raw_channel"],
-                    row["raw_finance"], row["raw_cc"],
-                    row["raw_requires_upward"], row["raw_max_upward"],
-                    row["raw_requires_downward"], row["raw_max_downward"],
-                    row["raw_max_attachment_mb"], row["raw_allowed_mimes"],
-                ),
+def _row_actions(row: dict) -> rx.Component:
+    return rx.hstack(
+        rx.button(
+            "Edit",
+            on_click=ApprovalProcessConfigState.open_edit(  # type: ignore[call-arg, func-returns-value]
+                row["id"], row["code"], row["title"],
+                row["raw_requestors"], row["raw_channel"],
+                row["raw_finance"], row["raw_cc"],
+                row["raw_requires_upward"], row["raw_max_upward"],
+                row["raw_requires_downward"], row["raw_max_downward"],
+                row["raw_max_attachment_mb"], row["raw_allowed_mimes"],
             ),
-            rx.menu.item(
-                "Deactivate",
-                on_click=ApprovalProcessConfigState.open_deactivate_confirm(  # type: ignore[call-arg, func-returns-value]
-                    row["id"], row["code"],
-                ),
-                color="var(--color-danger, #c0392b)",
-            ),
+            size="1",
+            variant="soft",
+            cursor="pointer",
         ),
+        rx.button(
+            "Deactivate",
+            on_click=ApprovalProcessConfigState.open_deactivate_confirm(  # type: ignore[call-arg, func-returns-value]
+                row["id"], row["code"],
+            ),
+            size="1",
+            variant="soft",
+            color_scheme="red",
+            cursor="pointer",
+        ),
+        gap="0.4rem",
     )
 
 
@@ -266,7 +260,7 @@ def admin_config_approval_processes() -> rx.Component:
                         ],
                         card_primary_key="code",
                         is_mobile=False,
-                        actions=_kebab,
+                        actions=_row_actions,
                         empty_message="No approval processes configured.",
                     ),
                 ),

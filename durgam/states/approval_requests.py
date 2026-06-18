@@ -118,6 +118,11 @@ class MyRequestsState(BaseState):
 class ApproverInboxState(BaseState):
     rows: list[dict[str, Any]] = []
     loading: bool = True
+    view_mode: str = "pending"  # "pending" | "past"
+
+    async def set_view_mode(self, mode: str) -> None:
+        self.view_mode = mode
+        await self.load_inbox()
 
     def _potential_approver_guard(self) -> rx.Component | None:
         """Route guard: redirect if user cannot possibly be an approver."""
@@ -156,48 +161,75 @@ class ApproverInboxState(BaseState):
             req_repo = ApprovalRequestRepository(session)
             proc_repo = ApprovalProcessRepository(session)
 
-            pending = req_repo.list_by_states(["submitted", "in_review"])
-
             viewer_id = UUID(self.current_user_id)
             proc_cache: dict[UUID, Any] = {}
             enriched: list[dict[str, Any]] = []
 
-            for r in pending:
-                if r.process_id not in proc_cache:
-                    proc_cache[r.process_id] = proc_repo.get_by_id(r.process_id)
-                proc = proc_cache[r.process_id]
-                if proc is None:
-                    continue
-
-                try:
-                    approvers = resolve_stage_approvers(
-                        request=r, process=proc, session=session,
+            if self.view_mode == "past":
+                # Past Actions: terminal requests the viewer acted on as an approver
+                past_requests = req_repo.list_terminal_where_actor(viewer_id)
+                for r in past_requests:
+                    if r.process_id not in proc_cache:
+                        proc_cache[r.process_id] = proc_repo.get_by_id(r.process_id)
+                    proc = proc_cache[r.process_id]
+                    if proc is None:
+                        continue
+                    channel_len = len(proc.channel_role_codes) if proc.channel_role_codes else 0
+                    if r.resolved_channel_json:
+                        channel_len = len(r.resolved_channel_json)
+                    requestor = session.get(User, r.requestor_user_id)
+                    requestor_display = (
+                        (requestor.full_name or requestor.username) if requestor else "Unknown"
                     )
-                except Exception:
-                    continue
+                    enriched.append({
+                        "id": str(r.id),
+                        "title": r.title,
+                        "process_code": proc.code,
+                        "process_title": proc.title,
+                        "requestor_display": requestor_display,
+                        "current_stage_label": _stage_label(r.current_stage, channel_len, r.state),
+                        "submitted_at_display": _format_dt(r.created_at),
+                        "state": r.state,
+                    })
+            else:
+                # Pending (default): active requests awaiting the viewer's decision
+                pending = req_repo.list_by_states(["submitted", "in_review"])
+                for r in pending:
+                    if r.process_id not in proc_cache:
+                        proc_cache[r.process_id] = proc_repo.get_by_id(r.process_id)
+                    proc = proc_cache[r.process_id]
+                    if proc is None:
+                        continue
 
-                approver_ids = {u.id for u in approvers}
-                if viewer_id not in approver_ids:
-                    continue
+                    try:
+                        approvers = resolve_stage_approvers(
+                            request=r, process=proc, session=session,
+                        )
+                    except Exception:
+                        continue
 
-                channel_len = len(proc.channel_role_codes) if proc.channel_role_codes else 0
-                if r.resolved_channel_json:
-                    channel_len = len(r.resolved_channel_json)
-                requestor = session.get(User, r.requestor_user_id)
-                requestor_display = (
-                    (requestor.full_name or requestor.username) if requestor else "Unknown"
-                )
+                    approver_ids = {u.id for u in approvers}
+                    if viewer_id not in approver_ids:
+                        continue
 
-                enriched.append({
-                    "id": str(r.id),
-                    "title": r.title,
-                    "process_code": proc.code,
-                    "process_title": proc.title,
-                    "requestor_display": requestor_display,
-                    "current_stage_label": _stage_label(r.current_stage, channel_len, r.state),
-                    "submitted_at_display": _format_dt(r.created_at),
-                    "state": r.state,
-                })
+                    channel_len = len(proc.channel_role_codes) if proc.channel_role_codes else 0
+                    if r.resolved_channel_json:
+                        channel_len = len(r.resolved_channel_json)
+                    requestor = session.get(User, r.requestor_user_id)
+                    requestor_display = (
+                        (requestor.full_name or requestor.username) if requestor else "Unknown"
+                    )
+                    enriched.append({
+                        "id": str(r.id),
+                        "title": r.title,
+                        "process_code": proc.code,
+                        "process_title": proc.title,
+                        "requestor_display": requestor_display,
+                        "current_stage_label": _stage_label(r.current_stage, channel_len, r.state),
+                        "submitted_at_display": _format_dt(r.created_at),
+                        "state": r.state,
+                    })
+
             self.rows = enriched
 
         self.loading = False
@@ -844,10 +876,11 @@ class RequestDetailState(BaseState):
             # Keep raw_steps for downward-attachment uploader attribution only
             raw_steps = step_repo.list_for_request(request_id)
 
-            # Phase 7F: switch history to visibility-filtered ApprovalActions
+            # Phase 7F/7G: switch history to ApprovalActions; redact hidden rows for requestor
             apr_svc = ApprovalRequestService(session)
             if self.viewer_is_requestor:
-                visible_actions = apr_svc.list_actions_for_requestor(request_id)
+                # Phase 7G: return ALL actions; redact hidden ones (don't filter them out)
+                visible_actions = apr_svc.list_actions_for_requestor_redacted(request_id)
             else:
                 visible_actions = apr_svc.list_actions_for_approver(
                     approval_request_id=request_id,
@@ -859,13 +892,17 @@ class RequestDetailState(BaseState):
             for act in visible_actions:
                 actor = session.get(User, act.actor_user_id)
                 actor_display = (actor.full_name or actor.username) if actor else "—"
+                is_redacted = self.viewer_is_requestor and not act.is_visible_to_requestor
                 step_dicts.append({
                     "stage": act.stage_index,
                     "approver_role_code": "—",
                     "approver_display": actor_display,
                     "decision": act.action_type.capitalize(),
-                    "comment": act.comment or "",
+                    "comment": (
+                        "Comment not shared with you." if is_redacted else (act.comment or "")
+                    ),
                     "decided_at": _format_dt(act.created_at),
+                    "is_redacted": "1" if is_redacted else "",
                 })
                 if act.stage_index < req.current_stage and str(act.actor_user_id) not in prior_actors_seen:
                     prior_actors_seen[str(act.actor_user_id)] = actor_display

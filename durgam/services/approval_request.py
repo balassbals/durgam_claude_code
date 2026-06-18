@@ -1302,6 +1302,17 @@ class ApprovalRequestService:
         all_actions = self._action_repo.list_by_request_id(approval_request_id)
         return [a for a in all_actions if a.is_visible_to_requestor]
 
+    def list_actions_for_requestor_redacted(
+        self, approval_request_id: UUID
+    ) -> list[ApprovalAction]:
+        """Return ALL actions for the requestor's view (Phase 7G revised design).
+
+        Replaces Q-P7A.3 filter-out behavior: hidden actions are NOT excluded.
+        Caller must check is_visible_to_requestor and redact comment /
+        downward_attachment_file_ids before displaying to the requestor.
+        """
+        return self._action_repo.list_by_request_id(approval_request_id)
+
     def list_actions_for_approver(
         self,
         approval_request_id: UUID,

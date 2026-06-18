@@ -2791,6 +2791,11 @@ def _seed_faculty_noc_process(session: Session) -> int:
             process.allowed_attachment_mime_types_json = ["application/pdf"]
             session.add(process)
             session.flush()
+        # Phase 7G: enable downward attachments for approver NOC response documents.
+        if process.max_downward_attachments == 0 and not process.requires_downward_attachments:
+            process.max_downward_attachments = 3
+            session.add(process)
+            session.flush()
         existing_option = session.exec(
             select(ApprovalStageOption).where(
                 ApprovalStageOption.approval_process_id == process.id,

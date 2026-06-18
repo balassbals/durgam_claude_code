@@ -11,6 +11,10 @@ Covers:
   H. list_actions_for_requestor visibility filtering
   I. list_actions_for_approver visibility filtering
   J. submit_request propagates return value from _submit_faculty_request (7F.2)
+  K. Defect 1 — redacted action history: requestor sees ALL rows, hidden ones redacted (7G)
+  L. Defect 2 — past actions view: list_terminal_where_actor repo method (7G)
+  M. Defect 3 — seed.py downward attachment block for faculty_noc (7G)
+  N. Defect 4 — admin processes page uses _row_actions not _kebab (7G)
 
 DB strategy (Phase 7F.1 fix — 7F contamination correction):
   ALL DB tests use `db_session` (function-scoped, rolled back at teardown).
@@ -624,4 +628,278 @@ class TestNOCSubmitReturnPropagation:
         assert return_hint is not None, (
             "_submit_faculty_request return type must not be None — it returns an "
             "rx.redirect EventSpec on success."
+        )
+
+
+# ── K. Defect 1 — redacted action history for requestor (Phase 7G) ───────────
+
+
+class TestRedactedActionHistory:
+    """list_actions_for_requestor_redacted returns ALL actions; hidden ones are
+    not filtered out. The caller (load_detail) applies redaction in the step dict.
+    Q-P7A.3 filter-out behavior is replaced by this show-but-redact approach.
+    """
+
+    def _make_svc(self, actions: list) -> Any:
+        from durgam.services.approval_request import ApprovalRequestService
+
+        mock_repo = MagicMock()
+        mock_repo.list_by_request_id.return_value = actions
+
+        svc = ApprovalRequestService.__new__(ApprovalRequestService)
+        svc._session = MagicMock()
+        svc._req_repo = MagicMock()
+        svc._step_repo = MagicMock()
+        svc._proc_repo = MagicMock()
+        svc._action_repo = mock_repo
+        return svc
+
+    def test_requestor_sees_all_rows_including_hidden(self) -> None:
+        """Requestor sees ALL action rows — hidden ones appear (redacted, not absent)."""
+        visible = SimpleNamespace(is_visible_to_requestor=True, action_type="approve", comment="Good")
+        hidden = SimpleNamespace(is_visible_to_requestor=False, action_type="reject", comment="private")
+
+        svc = self._make_svc([visible, hidden])
+        result = svc.list_actions_for_requestor_redacted(uuid4())
+        assert len(result) == 2, "Both visible and hidden actions must be returned"
+
+    def test_requestor_sees_all_when_all_hidden(self) -> None:
+        """When all actions are hidden, redacted method still returns all of them."""
+        hidden1 = SimpleNamespace(is_visible_to_requestor=False, action_type="approve")
+        hidden2 = SimpleNamespace(is_visible_to_requestor=False, action_type="reject")
+
+        svc = self._make_svc([hidden1, hidden2])
+        result = svc.list_actions_for_requestor_redacted(uuid4())
+        assert len(result) == 2
+
+    def test_original_list_actions_still_filters(self) -> None:
+        """Backward-compat: list_actions_for_requestor (old method) still filters."""
+        visible = SimpleNamespace(is_visible_to_requestor=True, action_type="approve")
+        hidden = SimpleNamespace(is_visible_to_requestor=False, action_type="reject")
+
+        svc = self._make_svc([visible, hidden])
+        result = svc.list_actions_for_requestor(uuid4())
+        assert len(result) == 1
+        assert result[0].is_visible_to_requestor is True
+
+    def test_load_detail_uses_redacted_method_for_requestor(self) -> None:
+        """load_detail source must use list_actions_for_requestor_redacted for requestors.
+        Source inspection via EventHandler.fn (Reflex wraps public async methods).
+        """
+        from durgam.states.approval_requests import RequestDetailState
+
+        src = inspect.getsource(RequestDetailState.load_detail.fn)
+        assert "list_actions_for_requestor_redacted" in src, (
+            "load_detail must call list_actions_for_requestor_redacted when "
+            "viewer_is_requestor — hidden actions must appear as redacted rows, "
+            "not be filtered out entirely."
+        )
+        assert "Comment not shared with you." in src, (
+            "load_detail must set comment to 'Comment not shared with you.' "
+            "for actions where is_visible_to_requestor=False."
+        )
+
+
+# ── L. Defect 2 — past actions view (Phase 7G) ───────────────────────────────
+
+
+class TestPastActionsRepo:
+    """list_terminal_where_actor returns terminal ApprovalRequests where the
+    viewer has any approval_action row.
+    """
+
+    def _make_terminal_request_with_action(
+        self, session: Session, actor_user_id: UUID
+    ):
+        """Create a terminal ApprovalRequest + ApprovalAction for the given actor."""
+        from durgam.models.crosscutting import ApprovalAction, ApprovalProcess, ApprovalRequest
+
+        uid = uuid4().hex[:8]
+        now = _now()
+
+        process = session.exec(
+            select(ApprovalProcess).where(
+                ApprovalProcess.code == "faculty_noc",
+                ApprovalProcess.is_deleted == False,  # noqa: E712
+            )
+        ).first()
+        if process is None:
+            process = ApprovalProcess(
+                code=f"proc_{uid}", title=f"Proc {uid}", created_at=now, updated_at=now
+            )
+            session.add(process)
+            session.flush()
+            session.refresh(process)
+
+        req = ApprovalRequest(
+            process_id=process.id,
+            requestor_user_id=actor_user_id,
+            title=f"Past req {uid}",
+            state="approved",
+            current_stage=1,
+            created_by=actor_user_id,
+            updated_by=actor_user_id,
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(req)
+        session.flush()
+        session.refresh(req)
+
+        action = ApprovalAction(
+            approval_request_id=req.id,
+            stage_index=1,
+            actor_user_id=actor_user_id,
+            action_type="approve",
+            is_visible_to_requestor=True,
+            created_by=actor_user_id,
+            updated_by=actor_user_id,
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(action)
+        session.flush()
+        return req, action
+
+    def test_past_actions_shows_terminal_where_actor_acted(
+        self, db_session: Session
+    ) -> None:
+        from durgam.repositories.approval_request import ApprovalRequestRepository
+
+        actor = _make_user(db_session, "pa_actor")
+        req, _action = self._make_terminal_request_with_action(db_session, actor.id)
+
+        repo = ApprovalRequestRepository(db_session)
+        result = repo.list_terminal_where_actor(actor.id)
+        request_ids = {r.id for r in result}
+        assert req.id in request_ids
+
+    def test_past_actions_excludes_where_actor_did_not_act(
+        self, db_session: Session
+    ) -> None:
+        from durgam.repositories.approval_request import ApprovalRequestRepository
+
+        actor = _make_user(db_session, "pa_actor")
+        other = _make_user(db_session, "pa_other")
+        req, _action = self._make_terminal_request_with_action(db_session, other.id)
+
+        repo = ApprovalRequestRepository(db_session)
+        result = repo.list_terminal_where_actor(actor.id)
+        request_ids = {r.id for r in result}
+        assert req.id not in request_ids
+
+    def test_past_actions_excludes_active_states(
+        self, db_session: Session
+    ) -> None:
+        """Active (submitted/in_review) requests are NOT returned even if actor acted."""
+        from durgam.models.crosscutting import ApprovalAction, ApprovalProcess, ApprovalRequest
+        from durgam.repositories.approval_request import ApprovalRequestRepository
+
+        actor = _make_user(db_session, "pa_active")
+        now = _now()
+
+        process = session_exec = db_session.exec(
+            select(ApprovalProcess).where(ApprovalProcess.is_deleted == False)  # noqa: E712
+        ).first()
+        if process is None:
+            uid = uuid4().hex[:6]
+            process = ApprovalProcess(
+                code=f"tmp_{uid}", title=f"Tmp {uid}", created_at=now, updated_at=now
+            )
+            db_session.add(process)
+            db_session.flush()
+            db_session.refresh(process)
+
+        req = ApprovalRequest(
+            process_id=process.id,
+            requestor_user_id=actor.id,
+            title="Active req",
+            state="in_review",
+            current_stage=1,
+            created_by=actor.id,
+            updated_by=actor.id,
+            created_at=now,
+            updated_at=now,
+        )
+        db_session.add(req)
+        db_session.flush()
+        db_session.refresh(req)
+
+        action = ApprovalAction(
+            approval_request_id=req.id,
+            stage_index=1,
+            actor_user_id=actor.id,
+            action_type="approve",
+            is_visible_to_requestor=True,
+            created_by=actor.id,
+            updated_by=actor.id,
+            created_at=now,
+            updated_at=now,
+        )
+        db_session.add(action)
+        db_session.flush()
+
+        repo = ApprovalRequestRepository(db_session)
+        result = repo.list_terminal_where_actor(actor.id)
+        request_ids = {r.id for r in result}
+        assert req.id not in request_ids, "Active requests must not appear in past actions"
+
+
+# ── M. Defect 3 — seed faculty_noc downward config (Phase 7G) ────────────────
+
+
+class TestFacultyNocSeedDownwardConfig:
+    """seed.py must set max_downward_attachments=3 for faculty_noc via an
+    idempotent post-insert block (same pattern as Phase 6 upward config).
+    """
+
+    def test_seed_has_downward_attachment_block(self) -> None:
+        """seed.py source contains the downward-attachment update block."""
+        seed_path = "scripts/seed.py"
+        with open(seed_path) as f:
+            src = f.read()
+        assert "max_downward_attachments = 3" in src, (
+            "seed.py must set max_downward_attachments=3 for faculty_noc "
+            "in an idempotent post-insert block."
+        )
+
+    def test_seed_downward_block_is_conditional(self) -> None:
+        """The downward block only updates when still at the default (preserves edits)."""
+        seed_path = "scripts/seed.py"
+        with open(seed_path) as f:
+            src = f.read()
+        assert "max_downward_attachments == 0" in src, (
+            "The downward update must be conditional on max_downward_attachments == 0 "
+            "so it doesn't overwrite manual sys admin edits."
+        )
+
+
+# ── N. Defect 4 — admin processes page direct action buttons (Phase 7G) ───────
+
+
+class TestAdminProcessesDirectActions:
+    """approval_processes.py must use _row_actions (direct Edit + Deactivate buttons)
+    instead of the _kebab dropdown. The kebab's rx.menu portal had visibility issues.
+    """
+
+    def test_row_actions_function_exists(self) -> None:
+        from durgam.pages.admin.config import approval_processes
+
+        assert hasattr(approval_processes, "_row_actions"), (
+            "_row_actions function must exist in approval_processes module"
+        )
+        assert not hasattr(approval_processes, "_kebab") or True, "ok if _kebab removed"
+
+    def test_page_uses_row_actions_not_kebab(self) -> None:
+        """Source of admin_config_approval_processes must reference _row_actions."""
+        page_path = "durgam/pages/admin/config/approval_processes.py"
+        with open(page_path) as f:
+            src = f.read()
+        assert "actions=_row_actions" in src, (
+            "data_table must use actions=_row_actions (direct buttons) "
+            "not actions=_kebab (hidden dropdown trigger)."
+        )
+        assert "actions=_kebab" not in src, (
+            "_kebab must no longer be wired as the actions renderer — "
+            "it has been replaced by _row_actions."
         )

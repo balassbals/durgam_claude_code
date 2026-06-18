@@ -7,7 +7,7 @@ from uuid import UUID
 
 from sqlmodel import Session, select
 
-from durgam.models.crosscutting import ApprovalRequest
+from durgam.models.crosscutting import ApprovalAction, ApprovalRequest
 from durgam.repositories.base import BaseRepository
 
 
@@ -44,6 +44,27 @@ class ApprovalRequestRepository(BaseRepository[ApprovalRequest]):
                 ApprovalRequest.is_deleted == False,  # noqa: E712
             )
             .order_by(ApprovalRequest.created_at.desc())  # type: ignore[union-attr]
+        )
+        return list(self._session.exec(stmt).all())
+
+    def list_terminal_where_actor(self, actor_user_id: UUID) -> list[ApprovalRequest]:
+        """ApprovalRequests in terminal states where the user has any approval_action row.
+
+        Used by the approver inbox 'Past Actions' view to show closed requests the
+        viewer participated in as an approver.
+        """
+        _TERMINAL = ("approved", "rejected", "withdrawn", "cancelled")
+        stmt = (
+            select(ApprovalRequest)
+            .join(ApprovalAction, ApprovalAction.approval_request_id == ApprovalRequest.id)
+            .where(
+                ApprovalAction.actor_user_id == actor_user_id,
+                ApprovalAction.is_deleted == False,  # noqa: E712
+                ApprovalRequest.state.in_(_TERMINAL),  # type: ignore[union-attr]
+                ApprovalRequest.is_deleted == False,  # noqa: E712
+            )
+            .distinct()
+            .order_by(ApprovalRequest.updated_at.desc())  # type: ignore[union-attr]
         )
         return list(self._session.exec(stmt).all())
 
