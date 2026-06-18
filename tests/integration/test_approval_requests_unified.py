@@ -11,22 +11,25 @@ Covers:
   H. list_actions_for_requestor visibility filtering
   I. list_actions_for_approver visibility filtering
 
-DB strategy:
-  - `seeded_session` (function-scoped, rolls back) for tests that write DB rows.
-  - `seeded_db_engine` ONLY for the `test_returns_none_when_no_link` (read-only on existing data).
-  - Pure-Python for state/service/nav tests.
+DB strategy (Phase 7F.1 fix — 7F contamination correction):
+  ALL DB tests use `db_session` (function-scoped, rolled back at teardown).
+  NO `seeded_session` or `seeded_db_engine` usage — they share the session-scoped
+  seeded engine and a failed/interrupted rollback contaminates downstream tests.
+  `db_session.flush()` within a test is safe (rolled back on teardown).
+  Pure-Python for state/service/nav tests (no DB fixture needed).
 """
 
 from __future__ import annotations
 
 import inspect
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock
 from uuid import UUID, uuid4
 
 import pytest
+from sqlmodel import Session, select
 
 
 # ── shared helpers ────────────────────────────────────────────────────────────
@@ -36,7 +39,7 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
-def _make_user(session, prefix: str = "u"):
+def _make_user(session: Session, prefix: str = "u"):
     from durgam.models.identity import User
 
     uid = uuid4().hex[:8]
@@ -55,9 +58,7 @@ def _make_user(session, prefix: str = "u"):
     return user
 
 
-def _make_faculty(session, user, dept, campus, desig):
-    from datetime import date
-
+def _make_faculty(session: Session, user, dept, campus, desig):
     from durgam.models.faculty import Faculty
 
     now = _now()
@@ -85,11 +86,27 @@ def _make_faculty(session, user, dept, campus, desig):
     return faculty
 
 
-def _get_seeded_noc_process(session):
-    from sqlmodel import select
+def _make_approval_request_and_fac_req(
+    session: Session, *, is_deleted: bool = False, status: str = "submitted"
+):
+    """Create linked ApprovalRequest + FacultyRequest rows using synthetic data.
 
-    from durgam.models.crosscutting import ApprovalProcess
+    Uses get-or-create for faculty_noc ApprovalProcess (may exist from seed or
+    prior fixture setup). Creates synthetic org-core entities with uuid-based
+    codes so there are no collisions. Safe to call with db_session (function-
+    scoped, rolled back at teardown). Returns (FacultyRequest, ApprovalRequest).
+    """
+    from durgam.models.campus import Campus
+    from durgam.models.config_anchors import Designation
+    from durgam.models.crosscutting import ApprovalProcess, ApprovalRequest
+    from durgam.models.department import Department
+    from durgam.models.faculty_request import FacultyRequest
+    from durgam.models.school import School
 
+    uid = uuid4().hex[:8]
+    now = _now()
+
+    # Get-or-create faculty_noc process (seed has it; fresh db creates it)
     process = session.exec(
         select(ApprovalProcess).where(
             ApprovalProcess.code == "faculty_noc",
@@ -97,45 +114,48 @@ def _get_seeded_noc_process(session):
         )
     ).first()
     if process is None:
-        pytest.skip("faculty_noc process not seeded")
-    return process
+        process = ApprovalProcess(
+            code="faculty_noc",
+            title="NOC Request",
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(process)
+        session.flush()
+        session.refresh(process)
 
+    # Synthetic org-core chain (unique codes per call; rolled back by db_session)
+    campus = Campus(code=f"7F{uid[:4]}", name=f"7F Campus {uid}", created_at=now, updated_at=now)
+    session.add(campus)
+    session.flush()
 
-def _get_seeded_dept_chain(session):
-    """Return (campus, school, designation, department) from seed."""
-    from sqlmodel import select
+    school = School(code=f"7F{uid[:4]}", name=f"7F School {uid}", created_at=now, updated_at=now)
+    session.add(school)
+    session.flush()
 
-    from durgam.models.campus import Campus
-    from durgam.models.config_anchors import Designation
-    from durgam.models.department import Department
-    from durgam.models.school import School
+    desig = Designation(code=f"7F{uid[:4]}", name=f"7F Desig {uid}", rank=99, created_at=now, updated_at=now)
+    session.add(desig)
+    session.flush()
 
-    campus = session.exec(select(Campus).where(Campus.is_deleted == False)).first()  # noqa: E712
-    school = session.exec(select(School).where(School.is_deleted == False)).first()  # noqa: E712
-    desig = session.exec(select(Designation)).first()
-    dept = session.exec(select(Department).where(Department.is_deleted == False)).first()  # noqa: E712
-    if not all((campus, school, desig, dept)):
-        pytest.skip("Org-core seed incomplete")
-    return campus, school, desig, dept
+    dept = Department(
+        code=f"7FD{uid[:3]}",
+        name=f"7F Dept {uid}",
+        school_id=school.id,
+        main_campus_id=campus.id,
+        created_at=now,
+        updated_at=now,
+    )
+    session.add(dept)
+    session.flush()
 
-
-def _make_approval_request_and_fac_req(session, *, is_deleted: bool = False, status: str = "submitted"):
-    """Create linked ApprovalRequest + FacultyRequest rows. Returns (fr, apr)."""
-    from durgam.models.crosscutting import ApprovalRequest
-    from durgam.models.faculty_request import FacultyRequest
-
-    process = _get_seeded_noc_process(session)
-    campus, school, desig, dept = _get_seeded_dept_chain(session)
     user = _make_user(session, "fr7f")
     faculty = _make_faculty(session, user, dept, campus, desig)
-
-    now = _now()
     actor_id = user.id
 
     apr = ApprovalRequest(
         process_id=process.id,
         requestor_user_id=user.id,
-        title="Phase 7F test request",
+        title="Phase 7F.1 test request",
         state="submitted",
         current_stage=1,
         created_by=actor_id,
@@ -171,32 +191,29 @@ def _make_approval_request_and_fac_req(session, *, is_deleted: bool = False, sta
 
 
 class TestGetByApprovalRequestId:
-    def test_returns_none_when_no_link(self, seeded_db_engine) -> None:
-        from sqlmodel import Session
-
+    def test_returns_none_when_no_link(self, db_session: Session) -> None:
         from durgam.repositories.faculty_request import FacultyRequestRepository
 
-        with Session(seeded_db_engine) as session:
-            repo = FacultyRequestRepository(session)
-            result = repo.get_by_approval_request_id(uuid4())
-            assert result is None
+        repo = FacultyRequestRepository(db_session)
+        result = repo.get_by_approval_request_id(uuid4())
+        assert result is None
 
-    def test_returns_linked_request(self, seeded_session) -> None:
+    def test_returns_linked_request(self, db_session: Session) -> None:
         from durgam.repositories.faculty_request import FacultyRequestRepository
 
-        fr, apr = _make_approval_request_and_fac_req(seeded_session)
-        repo = FacultyRequestRepository(seeded_session)
+        fr, apr = _make_approval_request_and_fac_req(db_session)
+        repo = FacultyRequestRepository(db_session)
         result = repo.get_by_approval_request_id(apr.id)
         assert result is not None
         assert result.id == fr.id
         assert result.approval_request_id == apr.id
 
-    def test_ignores_soft_deleted(self, seeded_session) -> None:
+    def test_ignores_soft_deleted(self, db_session: Session) -> None:
         """Soft-deleted rows are not returned."""
         from durgam.repositories.faculty_request import FacultyRequestRepository
 
-        _fr, apr = _make_approval_request_and_fac_req(seeded_session, is_deleted=True)
-        repo = FacultyRequestRepository(seeded_session)
+        _fr, apr = _make_approval_request_and_fac_req(db_session, is_deleted=True)
+        repo = FacultyRequestRepository(db_session)
         result = repo.get_by_approval_request_id(apr.id)
         assert result is None
 
@@ -205,41 +222,37 @@ class TestGetByApprovalRequestId:
 
 
 class TestSyncFacultyRequestStatus:
-    def test_sync_skips_when_no_linked_row(self, seeded_db_engine) -> None:
+    def test_sync_skips_when_no_linked_row(self, db_session: Session) -> None:
         """No exception raised when no FacultyRequest is linked."""
-        from sqlmodel import Session
-
         from durgam.services.approval_request import ApprovalRequestService
 
-        with Session(seeded_db_engine) as session:
-            svc = ApprovalRequestService(session)
-            svc._sync_faculty_request_status(uuid4(), "approved", uuid4())
+        svc = ApprovalRequestService(db_session)
+        svc._sync_faculty_request_status(uuid4(), "approved", uuid4())
 
-    def test_sync_updates_status_to_approved(self, seeded_session) -> None:
+    def test_sync_updates_status_to_approved(self, db_session: Session) -> None:
         from durgam.repositories.faculty_request import FacultyRequestRepository
         from durgam.services.approval_request import ApprovalRequestService
 
-        fr, apr = _make_approval_request_and_fac_req(seeded_session, status="submitted")
-        svc = ApprovalRequestService(seeded_session)
+        fr, apr = _make_approval_request_and_fac_req(db_session, status="submitted")
+        svc = ApprovalRequestService(db_session)
         svc._sync_faculty_request_status(apr.id, "approved", fr.created_by)
-        seeded_session.flush()
+        # update() already flushes internally; no extra flush needed
 
-        repo = FacultyRequestRepository(seeded_session)
+        repo = FacultyRequestRepository(db_session)
         updated = repo.get(fr.id)
         assert updated is not None
         assert updated.status == "approved"
 
-    def test_sync_skips_already_terminal(self, seeded_session) -> None:
+    def test_sync_skips_already_terminal(self, db_session: Session) -> None:
         """If FacultyRequest is already in a terminal state, sync does not overwrite."""
         from durgam.repositories.faculty_request import FacultyRequestRepository
         from durgam.services.approval_request import ApprovalRequestService
 
-        fr, apr = _make_approval_request_and_fac_req(seeded_session, status="withdrawn")
-        svc = ApprovalRequestService(seeded_session)
+        fr, apr = _make_approval_request_and_fac_req(db_session, status="withdrawn")
+        svc = ApprovalRequestService(db_session)
         svc._sync_faculty_request_status(apr.id, "approved", fr.created_by)
-        seeded_session.flush()
 
-        repo = FacultyRequestRepository(seeded_session)
+        repo = FacultyRequestRepository(db_session)
         unchanged = repo.get(fr.id)
         assert unchanged is not None
         assert unchanged.status == "withdrawn"  # not overwritten
