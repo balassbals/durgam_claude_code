@@ -18,6 +18,8 @@ Covers:
   O. Defect 1 round 2 — step dict uses bool is_redacted + correct placeholder (7G.2)
   P. Defect 2 round 2 — load_inbox pre-loads both pending_rows and past_rows (7G.2)
   Q. Defect 5 — approval processes Edit button uses open_edit_by_id(1 arg) (7G.2)
+  R. Issue A — visibility leak: lower-stage approver must not see higher-stage unshared action (7G.3)
+  S. Issue B — open_deactivate_by_id(1 arg) replaces 2-arg open_deactivate_confirm in _row_actions (7G.3)
 
 DB strategy (Phase 7F.1 fix — 7F contamination correction):
   ALL DB tests use `db_session` (function-scoped, rolled back at teardown).
@@ -1047,4 +1049,179 @@ class TestOpenEditById:
         )
         assert "self.show_form = True" in src, (
             "open_edit_by_id must set show_form=True after populating fields"
+        )
+
+
+# ── R. Issue A — visibility leak fix (Phase 7G.3) ────────────────────────────
+
+
+class TestApproverVisibilityLeakFix:
+    """Phase 7G.3 regression guard: list_actions_for_approver must use the
+    viewer's acted stage_index (not the request's current_stage) to determine
+    which actions are visible. Using req.current_stage causes a visibility leak
+    where a lower-stage approver (HoD, stage 1) sees a higher-stage approver's
+    (Registrar, stage 2) action after the request advances past stage 1.
+    """
+
+    def _make_svc(self, actions: list) -> Any:
+        from durgam.services.approval_request import ApprovalRequestService
+
+        mock_action_repo = MagicMock()
+        mock_action_repo.list_by_request_id.return_value = actions
+
+        svc = ApprovalRequestService.__new__(ApprovalRequestService)
+        svc._session = MagicMock()
+        svc._req_repo = MagicMock()
+        svc._step_repo = MagicMock()
+        svc._proc_repo = MagicMock()
+        svc._action_repo = mock_action_repo
+        return svc
+
+    def test_intermediate_approver_does_not_see_higher_stage_hidden_action(
+        self,
+    ) -> None:
+        """HoD (stage 1) must NOT see Registrar's (stage 2) action when Registrar
+        did not share it — even if the caller passes approver_stage=2 (stale
+        req.current_stage after Registrar acts).
+
+        Root cause (Phase 7G.3): load_detail passed req.current_stage which advances
+        to 2 after HoD acts, giving HoD an inflated effective_stage. Fix: service
+        internally computes effective_stage from viewer's own acted action (stage 1).
+        """
+        hod_id = uuid4()
+        reg_id = uuid4()
+
+        hod_action = SimpleNamespace(
+            actor_user_id=hod_id,
+            stage_index=1,
+            visible_to_lower_user_ids_json=None,
+        )
+        reg_action = SimpleNamespace(
+            actor_user_id=reg_id,
+            stage_index=2,
+            visible_to_lower_user_ids_json=None,  # Registrar did NOT share
+        )
+
+        svc = self._make_svc([hod_action, reg_action])
+        # approver_stage=2 simulates the WRONG caller value (req.current_stage after
+        # Registrar acts).  The fix must override this with HoD's own stage (1).
+        result = svc.list_actions_for_approver(uuid4(), hod_id, approver_stage=2)
+
+        actor_ids = {a.actor_user_id for a in result}
+        assert hod_id in actor_ids, "HoD must see their own action"
+        assert reg_id not in actor_ids, (
+            "HoD must NOT see Registrar's unshared action — visibility leak (Phase 7G.3)"
+        )
+
+    def test_higher_approver_sees_lower_stage_actions_by_default(self) -> None:
+        """Registrar (stage 2) must see HoD's (stage 1) action without an explicit share."""
+        hod_id = uuid4()
+        reg_id = uuid4()
+
+        hod_action = SimpleNamespace(
+            actor_user_id=hod_id,
+            stage_index=1,
+            visible_to_lower_user_ids_json=None,
+        )
+        reg_action = SimpleNamespace(
+            actor_user_id=reg_id,
+            stage_index=2,
+            visible_to_lower_user_ids_json=None,
+        )
+
+        svc = self._make_svc([hod_action, reg_action])
+        result = svc.list_actions_for_approver(uuid4(), reg_id, approver_stage=2)
+
+        actor_ids = {a.actor_user_id for a in result}
+        assert reg_id in actor_ids, "Registrar must see their own action"
+        assert hod_id in actor_ids, (
+            "Registrar (higher authority, stage 2) must see HoD's (stage 1) action by default"
+        )
+
+    def test_explicit_share_grants_visibility_to_lower_approver(self) -> None:
+        """When Registrar explicitly shares (adds HoD's id to visible_to_lower_user_ids_json),
+        HoD must see Registrar's action."""
+        hod_id = uuid4()
+        reg_id = uuid4()
+
+        hod_action = SimpleNamespace(
+            actor_user_id=hod_id,
+            stage_index=1,
+            visible_to_lower_user_ids_json=None,
+        )
+        reg_action = SimpleNamespace(
+            actor_user_id=reg_id,
+            stage_index=2,
+            visible_to_lower_user_ids_json=[str(hod_id)],  # explicitly shared
+        )
+
+        svc = self._make_svc([hod_action, reg_action])
+        result = svc.list_actions_for_approver(uuid4(), hod_id, approver_stage=2)
+
+        actor_ids = {a.actor_user_id for a in result}
+        assert hod_id in actor_ids, "HoD must see their own action"
+        assert reg_id in actor_ids, (
+            "HoD must see Registrar's action when Registrar explicitly shared it"
+        )
+
+    def test_decision_share_with_user_ids_resets_on_load_detail(self) -> None:
+        """RequestDetailState.load_detail must reset decision_share_with_user_ids to []
+        at the start of every load. Stale values from a prior request must not carry
+        over and silently pre-populate the share checkboxes for the next action.
+        """
+        import inspect as _inspect
+
+        from durgam.states.approval_requests import RequestDetailState
+
+        fn = RequestDetailState.load_detail.fn  # type: ignore[attr-defined]
+        src = _inspect.getsource(fn)
+        assert "self.decision_share_with_user_ids = []" in src, (
+            "load_detail must reset decision_share_with_user_ids = [] on every load "
+            "to prevent stale share selections from a prior action leaking into the next one"
+        )
+
+
+# ── S. Issue B — open_deactivate_by_id 1-arg fix (Phase 7G.3) ────────────────
+
+
+class TestOpenDeactivateById:
+    """Phase 7G.3: _row_actions must use open_deactivate_by_id(row["id"]) — 1 arg
+    instead of open_deactivate_confirm(row["id"], row["code"]) — 2 args.
+    Passing 2 rx.Var args via partial EventSpec silently produces invisible buttons
+    in Reflex 0.9.x, the same failure mode as the 13-arg open_edit (Phase 7G.2).
+    """
+
+    def test_open_deactivate_by_id_exists(self) -> None:
+        """ApprovalProcessConfigState must have open_deactivate_by_id(pid: str)."""
+        from durgam.states.config_approval_process import ApprovalProcessConfigState
+
+        assert hasattr(ApprovalProcessConfigState, "open_deactivate_by_id"), (
+            "ApprovalProcessConfigState must have open_deactivate_by_id(pid) — 1-arg deactivate trigger"
+        )
+
+    def test_row_actions_uses_open_deactivate_by_id(self) -> None:
+        """_row_actions must call open_deactivate_by_id with only row['id']."""
+        page_path = "durgam/pages/admin/config/approval_processes.py"
+        with open(page_path) as f:
+            src = f.read()
+        assert "open_deactivate_by_id" in src, (
+            "_row_actions must call open_deactivate_by_id (1-arg Deactivate trigger)"
+        )
+        assert "open_deactivate_confirm" not in src.split("def open_deactivate_confirm")[0].split("_row_actions")[1] if "_row_actions" in src else True, (
+            "_row_actions must NOT call the 2-arg open_deactivate_confirm"
+        )
+
+    def test_open_deactivate_by_id_reads_from_processes_list(self) -> None:
+        """open_deactivate_by_id source must iterate self.processes to find the row."""
+        import inspect as _inspect
+
+        from durgam.states.config_approval_process import ApprovalProcessConfigState
+
+        fn = ApprovalProcessConfigState.open_deactivate_by_id.fn  # type: ignore[attr-defined]
+        src = _inspect.getsource(fn)
+        assert "self.processes" in src, (
+            "open_deactivate_by_id must look up code from self.processes (no extra DB query)"
+        )
+        assert "self.confirm_open = True" in src, (
+            "open_deactivate_by_id must set confirm_open=True after finding the process"
         )

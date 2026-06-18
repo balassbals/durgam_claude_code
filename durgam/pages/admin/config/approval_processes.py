@@ -55,8 +55,8 @@ def _row_actions(row: dict) -> rx.Component:
         ),
         rx.button(
             "Deactivate",
-            on_click=ApprovalProcessConfigState.open_deactivate_confirm(  # type: ignore[call-arg, func-returns-value]
-                row["id"], row["code"],
+            on_click=ApprovalProcessConfigState.open_deactivate_by_id(  # type: ignore[call-arg, func-returns-value]
+                row["id"],
             ),
             size="1",
             variant="soft",

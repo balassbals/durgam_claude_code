@@ -1319,24 +1319,42 @@ class ApprovalRequestService:
         approver_user_id: UUID,
         approver_stage: int,
     ) -> list[ApprovalAction]:
-        """Return actions visible to an approver at the given stage.
+        """Return actions visible to an approver.
 
-        Visibility rules:
-        - Own actions (actor_user_id == approver_user_id): always visible.
-        - Actions at stages ≤ approver_stage: visible (higher hierarchy sees lower).
-        - Actions at stages > approver_stage: visible only if approver_user_id appears
-          in visible_to_lower_user_ids_json.
+        Visibility matrix (authoritative post-Phase-7G.3):
+        - Own actions (actor == viewer): always visible.
+        - Lower stages (stage_index < viewer_effective_stage): always visible.
+          Higher-chain approvers see what lower approvers did.
+        - Peer stage (stage_index == viewer_effective_stage): visible by default.
+          Peers at the same channel stage see each other's actions.
+        - Higher stages (stage_index > viewer_effective_stage): visible ONLY if
+          viewer's id appears in action.visible_to_lower_user_ids_json.
+
+        approver_stage is a FALLBACK used when the viewer has not yet acted
+        (i.e., they are the pending approver at req.current_stage). If the viewer
+        HAS acted, their own action's stage_index overrides approver_stage.
+        This prevents req.current_stage (which advances to the next actor after
+        each approval) from leaking higher-stage actions to lower-stage viewers.
         """
         all_actions = self._action_repo.list_by_request_id(approval_request_id)
+        # Phase 7G.3 fix: use viewer's acted stage to prevent visibility leakage.
+        # req.current_stage advances after each approval; a lower-stage approver
+        # viewing after a higher-stage acts would get an inflated effective_stage,
+        # incorrectly revealing the higher approver's actions.
+        viewer_own = next(
+            (a for a in all_actions if a.actor_user_id == approver_user_id),
+            None,
+        )
+        effective_stage = viewer_own.stage_index if viewer_own is not None else approver_stage
         result: list[ApprovalAction] = []
         for action in all_actions:
             if action.actor_user_id == approver_user_id:
                 result.append(action)
                 continue
-            if action.stage_index <= approver_stage:
+            if action.stage_index <= effective_stage:
                 result.append(action)
                 continue
-            # stage_index > approver_stage: check explicit grant
+            # stage_index > effective_stage: check explicit grant
             if action.visible_to_lower_user_ids_json and str(approver_user_id) in action.visible_to_lower_user_ids_json:
                 result.append(action)
         return result

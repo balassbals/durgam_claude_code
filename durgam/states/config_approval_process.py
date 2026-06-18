@@ -328,6 +328,22 @@ class ApprovalProcessConfigState(BaseState):
         self.flash = "Approval process saved."
         self.flash_type = "success"
 
+    def open_deactivate_by_id(self, pid: str) -> None:
+        """Look up the process by ID from the loaded list and open deactivate confirm.
+
+        Passes only one Var arg from the row, avoiding partial-application failure
+        with multiple rx.Var args in Reflex 0.9.x. Looks up code from self.processes.
+        """
+        for p in self.processes:
+            if p["id"] == pid:
+                self.confirm_id = pid
+                self.confirm_title = f"Deactivate '{p['code']}'?"
+                self.confirm_body = "This will remove the approval process template."
+                self.confirm_open = True
+                return
+        self.flash = "Process not found."
+        self.flash_type = "error"
+
     def open_deactivate_confirm(self, record_id: str, code: str) -> None:
         self.confirm_id = record_id
         self.confirm_title = f"Deactivate '{code}'?"
