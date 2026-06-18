@@ -885,23 +885,29 @@ class RequestDetailState(BaseState):
             # Keep raw_steps for downward-attachment uploader attribution only
             raw_steps = step_repo.list_for_request(request_id)
 
-            # Phase 7F/7G: switch history to ApprovalActions; redact hidden rows for requestor
+            # Phase 7F/7G/7G.4: switch history to ApprovalActions; redact hidden rows.
+            # Both requestor and approver views use a (action, is_redacted) tuple list
+            # so the step-building loop below is shared. Redacted rows show
+            # "Comment not shared with you." — consistent UX for both viewer types.
             apr_svc = ApprovalRequestService(session)
             if self.viewer_is_requestor:
-                # Phase 7G: return ALL actions; redact hidden ones (don't filter them out)
-                visible_actions = apr_svc.list_actions_for_requestor_redacted(request_id)
+                # Phase 7G: return ALL actions; derive redaction from is_visible_to_requestor
+                action_pairs: list[tuple[Any, bool]] = [
+                    (act, not act.is_visible_to_requestor)
+                    for act in apr_svc.list_actions_for_requestor_redacted(request_id)
+                ]
             else:
-                visible_actions = apr_svc.list_actions_for_approver(
+                # Phase 7G.4: return ALL actions; redact higher-stage unshared ones
+                action_pairs = apr_svc.list_actions_for_approver_redacted(
                     approval_request_id=request_id,
                     approver_user_id=viewer_id,
                     approver_stage=req.current_stage,
                 )
             step_dicts: list[dict[str, Any]] = []
             prior_actors_seen: dict[str, str] = {}
-            for act in visible_actions:
+            for act, is_redacted in action_pairs:
                 actor = session.get(User, act.actor_user_id)
                 actor_display = (actor.full_name or actor.username) if actor else "—"
-                is_redacted = self.viewer_is_requestor and not act.is_visible_to_requestor
                 step_dicts.append({
                     "stage": act.stage_index,
                     "approver_role_code": "—",
@@ -913,7 +919,14 @@ class RequestDetailState(BaseState):
                     "decided_at": _format_dt(act.created_at),
                     "is_redacted": is_redacted,
                 })
-                if act.stage_index < req.current_stage and str(act.actor_user_id) not in prior_actors_seen:
+                # Only include non-redacted prior actors in the share-with picker:
+                # offering a "Share with X" checkbox when X's action is hidden is
+                # confusing (the current approver can't see what they'd be sharing about).
+                if (
+                    act.stage_index < req.current_stage
+                    and not is_redacted
+                    and str(act.actor_user_id) not in prior_actors_seen
+                ):
                     prior_actors_seen[str(act.actor_user_id)] = actor_display
             self.steps = step_dicts
             self.prior_action_actors = [

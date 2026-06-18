@@ -1358,3 +1358,46 @@ class ApprovalRequestService:
             if action.visible_to_lower_user_ids_json and str(approver_user_id) in action.visible_to_lower_user_ids_json:
                 result.append(action)
         return result
+
+    def list_actions_for_approver_redacted(
+        self,
+        approval_request_id: UUID,
+        approver_user_id: UUID,
+        approver_stage: int,
+    ) -> list[tuple[ApprovalAction, bool]]:
+        """Return ALL actions with a per-action redaction flag for the approver's view.
+
+        Mirrors Phase 7G's list_actions_for_requestor_redacted pattern but for the
+        approver: instead of filtering out higher-stage unshared actions, every action
+        is returned with an is_redacted flag. Redacted rows show
+        "Comment not shared with you." — same UX as the requestor view.
+
+        Visibility / redaction matrix (same stages as list_actions_for_approver):
+        - Own actions (actor == viewer):       is_redacted=False (always full)
+        - Lower or peer (stage_index <= effective_stage): is_redacted=False
+        - Higher stage, explicitly shared:     is_redacted=False
+        - Higher stage, NOT shared:            is_redacted=True  (row shown, comment hidden)
+
+        approver_stage is the fallback for the "viewer hasn't acted" case.
+        """
+        all_actions = self._action_repo.list_by_request_id(approval_request_id)
+        viewer_own = next(
+            (a for a in all_actions if a.actor_user_id == approver_user_id),
+            None,
+        )
+        effective_stage = viewer_own.stage_index if viewer_own is not None else approver_stage
+        result: list[tuple[ApprovalAction, bool]] = []
+        for action in all_actions:
+            if action.actor_user_id == approver_user_id:
+                result.append((action, False))
+                continue
+            if action.stage_index <= effective_stage:
+                result.append((action, False))
+                continue
+            # higher stage — redacted unless explicitly shared
+            shared = (
+                action.visible_to_lower_user_ids_json is not None
+                and str(approver_user_id) in action.visible_to_lower_user_ids_json
+            )
+            result.append((action, not shared))
+        return result

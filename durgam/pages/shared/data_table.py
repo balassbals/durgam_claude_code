@@ -122,7 +122,7 @@ def _reactive_table_view(
         for col in columns
     ]
     if actions is not None:
-        header_cells.append(rx.table.column_header_cell("", width="3rem"))
+        header_cells.append(rx.table.column_header_cell("", width="12rem"))
 
     # The row-builder must close over the Python-level columns list and
     # actions callable. rx.foreach calls it with each Var[dict] item.

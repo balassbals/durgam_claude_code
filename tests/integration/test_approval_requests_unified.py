@@ -20,6 +20,8 @@ Covers:
   Q. Defect 5 — approval processes Edit button uses open_edit_by_id(1 arg) (7G.2)
   R. Issue A — visibility leak: lower-stage approver must not see higher-stage unshared action (7G.3)
   S. Issue B — open_deactivate_by_id(1 arg) replaces 2-arg open_deactivate_confirm in _row_actions (7G.3)
+  T. Issue C — data_table actions column width widened from 3rem to 12rem (7G.4)
+  U. Issue D — approver redaction: list_actions_for_approver_redacted returns all rows with flag (7G.4)
 
 DB strategy (Phase 7F.1 fix — 7F contamination correction):
   ALL DB tests use `db_session` (function-scoped, rolled back at teardown).
@@ -1224,4 +1226,160 @@ class TestOpenDeactivateById:
         )
         assert "self.confirm_open = True" in src, (
             "open_deactivate_by_id must set confirm_open=True after finding the process"
+        )
+
+
+# ── T. Issue C — data_table actions column width (Phase 7G.4) ────────────────
+
+
+class TestDataTableActionsColumnWidth:
+    """Phase 7G.4 root cause: data_table actions column header used width='3rem'
+    (kebab-icon era sizing). Two text buttons (Edit + Deactivate) need ~12rem.
+    Buttons were in the DOM but visually clipped — confirmed via browser DevTools.
+    Phases 7G/7G.2/7G.3 fixed click handlers, none touched the column width.
+    """
+
+    def test_actions_column_header_width_is_wide_enough(self) -> None:
+        """Actions column header must use at least 10rem — not the old 3rem."""
+        with open("durgam/pages/shared/data_table.py") as f:
+            src = f.read()
+        assert 'width="3rem"' not in src, (
+            'Actions column header still uses width="3rem" — too narrow for text '
+            'buttons; two text buttons need at least 12rem'
+        )
+        assert 'width="12rem"' in src, (
+            'Actions column header must use width="12rem" (or wider) to accommodate '
+            'paired text buttons like Edit + Deactivate'
+        )
+
+
+# ── U. Issue D — approver redaction (Phase 7G.4) ────────────────────────────
+
+
+class TestApproverRedaction:
+    """Phase 7G.4: list_actions_for_approver_redacted mirrors the requestor-redacted
+    pattern. Higher-stage unshared actions are returned (not filtered) with
+    is_redacted=True so the UI shows 'Comment not shared with you.' instead of
+    hiding the row entirely.
+    """
+
+    def _make_svc(self, actions: list) -> Any:
+        from durgam.services.approval_request import ApprovalRequestService
+
+        mock_action_repo = MagicMock()
+        mock_action_repo.list_by_request_id.return_value = actions
+
+        svc = ApprovalRequestService.__new__(ApprovalRequestService)
+        svc._session = MagicMock()
+        svc._req_repo = MagicMock()
+        svc._step_repo = MagicMock()
+        svc._proc_repo = MagicMock()
+        svc._action_repo = mock_action_repo
+        return svc
+
+    def test_approver_sees_redacted_row_for_higher_unshared_action(self) -> None:
+        """HoD (stage 1) must see Registrar's (stage 2) unshared action as a ROW
+        with is_redacted=True — not filtered out — matching the requestor UX."""
+        hod_id = uuid4()
+        reg_id = uuid4()
+
+        hod_action = SimpleNamespace(
+            actor_user_id=hod_id,
+            stage_index=1,
+            visible_to_lower_user_ids_json=None,
+        )
+        reg_action = SimpleNamespace(
+            actor_user_id=reg_id,
+            stage_index=2,
+            visible_to_lower_user_ids_json=None,  # NOT shared
+        )
+
+        svc = self._make_svc([hod_action, reg_action])
+        # Pass stale approver_stage=2 (old wrong caller value) to confirm
+        # service still self-corrects to effective_stage=1 for HoD.
+        result = svc.list_actions_for_approver_redacted(uuid4(), hod_id, approver_stage=2)
+
+        assert len(result) == 2, "Both rows must be returned (redacted one included)"
+        by_actor = {a.actor_user_id: flag for a, flag in result}
+        assert by_actor[hod_id] is False, "HoD's own action must not be redacted"
+        assert by_actor[reg_id] is True, (
+            "Registrar's unshared higher-stage action must be redacted (is_redacted=True)"
+        )
+
+    def test_approver_sees_full_content_for_higher_shared_action(self) -> None:
+        """When Registrar explicitly shares, HoD sees Registrar's action unredacted."""
+        hod_id = uuid4()
+        reg_id = uuid4()
+
+        hod_action = SimpleNamespace(
+            actor_user_id=hod_id,
+            stage_index=1,
+            visible_to_lower_user_ids_json=None,
+        )
+        reg_action = SimpleNamespace(
+            actor_user_id=reg_id,
+            stage_index=2,
+            visible_to_lower_user_ids_json=[str(hod_id)],  # explicitly shared
+        )
+
+        svc = self._make_svc([hod_action, reg_action])
+        result = svc.list_actions_for_approver_redacted(uuid4(), hod_id, approver_stage=2)
+
+        by_actor = {a.actor_user_id: flag for a, flag in result}
+        assert by_actor[reg_id] is False, (
+            "Registrar's explicitly shared action must NOT be redacted"
+        )
+
+    def test_approver_own_action_never_redacted(self) -> None:
+        """An approver's own action is always returned unredacted."""
+        hod_id = uuid4()
+
+        own_action = SimpleNamespace(
+            actor_user_id=hod_id,
+            stage_index=2,
+            visible_to_lower_user_ids_json=None,
+        )
+
+        svc = self._make_svc([own_action])
+        result = svc.list_actions_for_approver_redacted(uuid4(), hod_id, approver_stage=1)
+
+        assert len(result) == 1
+        assert result[0][1] is False, "Own action must never be redacted"
+
+    def test_approver_lower_stage_action_never_redacted(self) -> None:
+        """A lower-stage action (peer or below) is always returned unredacted."""
+        hod_id = uuid4()
+        other_id = uuid4()
+
+        hod_action = SimpleNamespace(
+            actor_user_id=hod_id,
+            stage_index=2,
+            visible_to_lower_user_ids_json=None,
+        )
+        lower_action = SimpleNamespace(
+            actor_user_id=other_id,
+            stage_index=1,  # lower
+            visible_to_lower_user_ids_json=None,
+        )
+
+        svc = self._make_svc([hod_action, lower_action])
+        result = svc.list_actions_for_approver_redacted(uuid4(), hod_id, approver_stage=2)
+
+        by_actor = {a.actor_user_id: flag for a, flag in result}
+        assert by_actor[other_id] is False, (
+            "Lower-stage action must never be redacted (higher authority sees lower by default)"
+        )
+
+    def test_load_detail_uses_approver_redacted_method(self) -> None:
+        """load_detail must call list_actions_for_approver_redacted (not the old
+        filtering list_actions_for_approver) in the approver branch (Phase 7G.4)."""
+        import inspect as _inspect
+
+        from durgam.states.approval_requests import RequestDetailState
+
+        fn = RequestDetailState.load_detail.fn  # type: ignore[attr-defined]
+        src = _inspect.getsource(fn)
+        assert "list_actions_for_approver_redacted" in src, (
+            "load_detail must use list_actions_for_approver_redacted in the approver "
+            "branch so higher-stage unshared rows appear with placeholder comment"
         )
