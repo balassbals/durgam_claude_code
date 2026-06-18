@@ -453,8 +453,7 @@ class SubmitRequestState(BaseState):
 
         # NOC and other faculty-typed processes route through FacultyRequestService
         if self.selected_process_code.startswith("faculty_"):
-            await self._submit_faculty_request()
-            return
+            return await self._submit_faculty_request()
 
         from durgam.services.approval_request import (
             ApprovalRequestError,
@@ -511,7 +510,7 @@ class SubmitRequestState(BaseState):
             self.error = "An unexpected error occurred. Please try again."
             self.submitting = False
 
-    async def _submit_faculty_request(self) -> None:
+    async def _submit_faculty_request(self) -> rx.event.EventSpec | None:
         """Handle submit for faculty_* process codes (NOC, bonafide_cert, address_change).
 
         Creates a FacultyRequest draft, updates payload, and submits for approval.

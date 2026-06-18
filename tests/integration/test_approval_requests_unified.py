@@ -10,6 +10,7 @@ Covers:
   G. RequestDetailState new vars present with correct defaults
   H. list_actions_for_requestor visibility filtering
   I. list_actions_for_approver visibility filtering
+  J. submit_request propagates return value from _submit_faculty_request (7F.2)
 
 DB strategy (Phase 7F.1 fix — 7F contamination correction):
   ALL DB tests use `db_session` (function-scoped, rolled back at teardown).
@@ -580,3 +581,47 @@ class TestListActionsForApproverVisibility:
         svc = self._make_svc([higher_action])
         result = svc.list_actions_for_approver(uuid4(), approver_id, approver_stage=2)
         assert len(result) == 1
+
+
+# ── J. submit_request return propagation (Phase 7F.2) ────────────────────────
+
+
+class TestNOCSubmitReturnPropagation:
+    """Regression guard for Phase 7F.2 — submit_request must propagate the
+    rx.redirect event spec returned by _submit_faculty_request.
+
+    Reflex child states cannot be instantiated in isolation (parent_state is None
+    outside the Reflex runtime; inherited vars like current_user_id raise
+    AttributeError). Source inspection is the correct approach here.
+    """
+
+    def test_submit_request_propagates_redirect(self) -> None:
+        """submit_request must use 'return await' so the EventSpec reaches the framework.
+        A bare 'await' followed by 'return' discards the redirect and the page stays still.
+
+        Reflex wraps public async methods as EventHandler objects. The underlying
+        function is accessed via .fn for source inspection.
+        """
+        from durgam.states.approval_requests import SubmitRequestState
+
+        src = inspect.getsource(SubmitRequestState.submit_request.fn)
+        assert "return await self._submit_faculty_request()" in src, (
+            "submit_request must propagate the return value of _submit_faculty_request "
+            "via 'return await ...'. A bare 'await' followed by a bare 'return' discards "
+            "the rx.redirect EventSpec and the post-submit redirect never fires."
+        )
+
+    def test_helper_return_type_is_event_spec(self) -> None:
+        """_submit_faculty_request must declare a non-None return type so the
+        intent is clear to static analysis tools and future readers.
+        """
+        import typing
+
+        from durgam.states.approval_requests import SubmitRequestState
+
+        hints = typing.get_type_hints(SubmitRequestState._submit_faculty_request)
+        return_hint = hints.get("return")
+        assert return_hint is not None, (
+            "_submit_faculty_request return type must not be None — it returns an "
+            "rx.redirect EventSpec on success."
+        )
