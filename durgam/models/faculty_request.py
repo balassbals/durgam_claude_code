@@ -22,13 +22,17 @@ from durgam.models.base import TimestampedSoftDelete
 
 # ── Request type registry (extensible at Python level, no migration needed) ──
 REQUEST_TYPE_NOC = "noc"
-REQUEST_TYPE_BONAFIDE_CERTIFICATE = "bonafide_certificate"
-REQUEST_TYPE_ADDRESS_CHANGE = "address_change"
+REQUEST_TYPE_INVITED_TALK = "invited_talk"
+REQUEST_TYPE_PROFESSIONAL_MEMBERSHIP = "professional_membership"
+REQUEST_TYPE_WFH = "wfh"
+REQUEST_TYPE_FIELD_VISIT = "field_visit"
 
 FACULTY_REQUEST_TYPES: frozenset[str] = frozenset({
     REQUEST_TYPE_NOC,
-    REQUEST_TYPE_BONAFIDE_CERTIFICATE,
-    REQUEST_TYPE_ADDRESS_CHANGE,
+    REQUEST_TYPE_INVITED_TALK,
+    REQUEST_TYPE_PROFESSIONAL_MEMBERSHIP,
+    REQUEST_TYPE_WFH,
+    REQUEST_TYPE_FIELD_VISIT,
 })
 
 # ── Status lifecycle (stable; enforced via DB CHECK constraint) ──

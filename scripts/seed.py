@@ -2666,6 +2666,32 @@ def seed(session: Session) -> dict[str, int]:
     # ── ApprovalProcess — faculty_noc (M10 Phase 5B) ─────────────────────────
     counts["faculty_noc_process"] = _seed_faculty_noc_process(session)
 
+    # ── ApprovalProcess — 4 linear faculty processes (M10 Phase 5D) ──────────
+    counts["faculty_invited_talk_process"] = _seed_faculty_simple_linear_process(
+        session,
+        code="faculty_invited_talk",
+        title="Faculty Invited Talk Request",
+        channel_role_codes=["HOD", "DIRECTOR"],
+    )
+    counts["faculty_professional_membership_process"] = _seed_faculty_simple_linear_process(
+        session,
+        code="faculty_professional_membership",
+        title="Faculty Professional Body Membership Request",
+        channel_role_codes=["HOD", "DIRECTOR"],
+    )
+    counts["faculty_wfh_process"] = _seed_faculty_simple_linear_process(
+        session,
+        code="faculty_wfh",
+        title="Faculty Work From Home Request",
+        channel_role_codes=["HOD", "DIRECTOR"],
+    )
+    counts["faculty_field_visit_process"] = _seed_faculty_simple_linear_process(
+        session,
+        code="faculty_field_visit",
+        title="Faculty Field/Industry Visit Request",
+        channel_role_codes=["HOD", "DIRECTOR"],
+    )
+
     session.commit()
     return counts
 
@@ -2745,6 +2771,80 @@ def _seed_faculty_backfill(session: Session) -> int:
                 is_phd=is_phd,
             ).on_conflict_do_nothing(constraint="uq_faculties_employee_id"),
         )
+
+    return inserted
+
+
+def _seed_faculty_simple_linear_process(
+    session: Session,
+    *,
+    code: str,
+    title: str,
+    channel_role_codes: list[str],
+) -> int:
+    """Seed a faculty_* ApprovalProcess with Stage 1 resolver + linear channel (idempotent).
+
+    Channel shape: dept_head_at_requestor_campus → remaining channel_role_codes.
+    Used for the 4 Phase 5D linear-channel seeds (INVITED_TALK, PROFESSIONAL_MEMBERSHIP,
+    WFH, FIELD_VISIT). Mirrors _seed_faculty_noc_process idempotency pattern.
+
+    Returns total rows inserted (0–2).
+    """
+    from datetime import UTC, datetime
+
+    from durgam.models.crosscutting import ApprovalProcess, ApprovalStageOption
+
+    inserted = _exec_insert(
+        session,
+        pg_insert(ApprovalProcess)
+        .values(
+            code=code,
+            title=title,
+            requestor_role_codes=["FACULTY"],
+            channel_role_codes=channel_role_codes,
+            is_finance=False,
+            stage_pick_modes_json={"1": "approver"},
+        )
+        .on_conflict_do_nothing(constraint="uq_approval_processes_code"),
+    )
+
+    process = session.exec(
+        select(ApprovalProcess).where(
+            ApprovalProcess.code == code,
+            ApprovalProcess.is_deleted == False,  # noqa: E712
+        )
+    ).first()
+
+    if process is not None:
+        # Idempotently set attachment config from defaults (preserves manual sys-admin edits).
+        if process.max_upward_attachments == 0 and process.allowed_attachment_mime_types_json is None:
+            process.max_upward_attachments = 3
+            process.allowed_attachment_mime_types_json = ["application/pdf"]
+            session.add(process)
+            session.flush()
+
+        existing_option = session.exec(
+            select(ApprovalStageOption).where(
+                ApprovalStageOption.approval_process_id == process.id,
+                ApprovalStageOption.stage_index == 1,
+                ApprovalStageOption.resolver_name == "dept_head_at_requestor_campus",
+                ApprovalStageOption.is_deleted == False,  # noqa: E712
+            )
+        ).first()
+        if existing_option is None:
+            now = datetime.now(UTC)
+            option = ApprovalStageOption(
+                approval_process_id=process.id,
+                stage_index=1,
+                resolver_name="dept_head_at_requestor_campus",
+                label="Head of Department",
+                sort_order=0,
+                created_at=now,
+                updated_at=now,
+            )
+            session.add(option)
+            session.flush()
+            inserted += 1
 
     return inserted
 

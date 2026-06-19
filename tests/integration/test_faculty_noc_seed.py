@@ -65,3 +65,82 @@ class TestFacultyNocSeed:
             )
         ).all()
         assert len(processes) == 1, "Idempotent: must not create duplicate processes"
+
+
+# ── Phase 5D: 4 linear faculty processes ────────────────────────────────────
+
+
+_PHASE_5D_PROCESSES = [
+    ("faculty_invited_talk", "Faculty Invited Talk Request"),
+    ("faculty_professional_membership", "Faculty Professional Body Membership Request"),
+    ("faculty_wfh", "Faculty Work From Home Request"),
+    ("faculty_field_visit", "Faculty Field/Industry Visit Request"),
+]
+
+
+class TestPhase5DLinearSeeds:
+    @pytest.mark.parametrize("code,title", _PHASE_5D_PROCESSES)
+    def test_process_seeded(self, seeded_session: Session, code: str, title: str) -> None:
+        """Each Phase 5D process exists with correct metadata."""
+        process = seeded_session.exec(
+            select(ApprovalProcess).where(
+                ApprovalProcess.code == code,
+                ApprovalProcess.is_deleted == False,  # noqa: E712
+            )
+        ).first()
+
+        assert process is not None, f"{code} process must be seeded"
+        assert process.title == title
+        assert process.requestor_role_codes == ["FACULTY"]
+        assert process.channel_role_codes == ["HOD", "DIRECTOR"]
+        assert process.stage_pick_modes_json == {"1": "approver"}
+        assert not process.is_finance
+        assert process.max_upward_attachments == 3
+        assert process.allowed_attachment_mime_types_json == ["application/pdf"]
+        assert process.max_downward_attachments == 0, "Only faculty_noc has downward attachments"
+
+    @pytest.mark.parametrize("code,_", _PHASE_5D_PROCESSES)
+    def test_stage1_option_seeded(self, seeded_session: Session, code: str, _: str) -> None:
+        """Each Phase 5D process has exactly one Stage 1 resolver option."""
+        process = seeded_session.exec(
+            select(ApprovalProcess).where(
+                ApprovalProcess.code == code,
+                ApprovalProcess.is_deleted == False,  # noqa: E712
+            )
+        ).first()
+        assert process is not None
+
+        option = seeded_session.exec(
+            select(ApprovalStageOption).where(
+                ApprovalStageOption.approval_process_id == process.id,
+                ApprovalStageOption.stage_index == 1,
+                ApprovalStageOption.is_deleted == False,  # noqa: E712
+            )
+        ).first()
+
+        assert option is not None, f"Stage 1 option must be seeded for {code}"
+        assert option.resolver_name == "dept_head_at_requestor_campus"
+        assert option.label == "Head of Department"
+        assert option.sort_order == 0
+
+    def test_phase5d_seeds_idempotent(self, seeded_session: Session) -> None:
+        """Calling _seed_faculty_simple_linear_process on already-seeded data returns 0."""
+        from scripts.seed import _seed_faculty_simple_linear_process
+
+        for code, title in _PHASE_5D_PROCESSES:
+            result = _seed_faculty_simple_linear_process(
+                seeded_session,
+                code=code,
+                title=title,
+                channel_role_codes=["HOD", "DIRECTOR"],
+            )
+            seeded_session.flush()
+            assert result == 0, f"Second seed call for {code} must be idempotent (got {result})"
+
+            count = len(seeded_session.exec(
+                select(ApprovalProcess).where(
+                    ApprovalProcess.code == code,
+                    ApprovalProcess.is_deleted == False,  # noqa: E712
+                )
+            ).all())
+            assert count == 1, f"Idempotent: must not create duplicate process for {code}"

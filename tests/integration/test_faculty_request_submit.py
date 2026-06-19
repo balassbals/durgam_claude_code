@@ -5,6 +5,8 @@ Tests that need the faculty_noc process look it up from db_session (seeded_db_en
 runs first in the smoke-check invocation, so the seeded process is visible); they skip
 gracefully when run standalone without test_faculty_noc_seed.py.
 Tests for requestor-pick mode use a synthetic faculty_address_change process (not seeded).
+Phase 5D: REQUEST_TYPE_ADDRESS_CHANGE dropped from FACULTY_REQUEST_TYPES (Q-P5.1).
+Requestor-pick tests use repo.create() directly to bypass service-level type validation.
 """
 
 from __future__ import annotations
@@ -21,7 +23,6 @@ from durgam.models.crosscutting import ApprovalProcess, ApprovalRequest, Approva
 from durgam.models.department import Department
 from durgam.models.faculty import Faculty
 from durgam.models.faculty_request import (
-    REQUEST_TYPE_ADDRESS_CHANGE,
     REQUEST_TYPE_NOC,
     STATUS_DRAFT,
     STATUS_SUBMITTED,
@@ -192,8 +193,13 @@ class TestSubmitForApproval:
         svc = FacultyRequestService(db_session)
         actor = uuid4()
 
-        # bonafide_certificate → looks up "faculty_bonafide_certificate" which is not seeded
-        req = svc.create_request(
+        # bonafide_certificate → looks up "faculty_bonafide_certificate" which is not seeded.
+        # Use repo.create() directly: "bonafide_certificate" is no longer in
+        # FACULTY_REQUEST_TYPES (dropped at Phase 5D per Q-P5.1), so bypassing
+        # service-level type validation is required to test the submit-time error.
+        from durgam.repositories.faculty_request import FacultyRequestRepository
+        repo = FacultyRequestRepository(db_session)
+        req = repo.create(
             faculty_id=faculty.id,
             request_type="bonafide_certificate",
             payload=None,
@@ -388,14 +394,18 @@ class TestSubmitForApproval:
             lambda ctx, s: [approver],
         )
 
-        svc = FacultyRequestService(db_session)
-        req = svc.create_request(
+        # Use repo.create() directly: "address_change" no longer in FACULTY_REQUEST_TYPES
+        # (dropped at Phase 5D per Q-P5.1). Testing submit_for_approval not create_request.
+        from durgam.repositories.faculty_request import FacultyRequestRepository
+        repo = FacultyRequestRepository(db_session)
+        req = repo.create(
             faculty_id=faculty.id,
-            request_type=REQUEST_TYPE_ADDRESS_CHANGE,
+            request_type="address_change",
             payload=None,
             actor_id=faculty.user_id,
         )
 
+        svc = FacultyRequestService(db_session)
         with pytest.raises(InvalidRequestStatusTransitionError, match="requestor pick"):
             svc.submit_for_approval(req.id, actor_id=faculty.user_id)  # no picked_option_ids
 
@@ -416,14 +426,17 @@ class TestSubmitForApproval:
             lambda ctx, s: [approver],
         )
 
-        svc = FacultyRequestService(db_session)
-        req = svc.create_request(
+        # Use repo.create() directly: "address_change" no longer in FACULTY_REQUEST_TYPES.
+        from durgam.repositories.faculty_request import FacultyRequestRepository
+        repo = FacultyRequestRepository(db_session)
+        req = repo.create(
             faculty_id=faculty.id,
-            request_type=REQUEST_TYPE_ADDRESS_CHANGE,
+            request_type="address_change",
             payload=None,
             actor_id=faculty.user_id,
         )
 
+        svc = FacultyRequestService(db_session)
         with pytest.raises(StageOptionMismatchError):
             svc.submit_for_approval(
                 req.id,
@@ -446,14 +459,17 @@ class TestSubmitForApproval:
             lambda ctx, s: [approver],
         )
 
-        svc = FacultyRequestService(db_session)
-        req = svc.create_request(
+        # Use repo.create() directly: "address_change" no longer in FACULTY_REQUEST_TYPES.
+        from durgam.repositories.faculty_request import FacultyRequestRepository
+        repo = FacultyRequestRepository(db_session)
+        req = repo.create(
             faculty_id=faculty.id,
-            request_type=REQUEST_TYPE_ADDRESS_CHANGE,
+            request_type="address_change",
             payload=None,
             actor_id=faculty.user_id,
         )
 
+        svc = FacultyRequestService(db_session)
         updated = svc.submit_for_approval(
             req.id,
             actor_id=faculty.user_id,

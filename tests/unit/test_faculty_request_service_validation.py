@@ -13,9 +13,11 @@ import pytest
 from durgam.models.faculty_request import (
     FACULTY_REQUEST_STATUSES,
     FACULTY_REQUEST_TYPES,
-    REQUEST_TYPE_ADDRESS_CHANGE,
-    REQUEST_TYPE_BONAFIDE_CERTIFICATE,
+    REQUEST_TYPE_FIELD_VISIT,
+    REQUEST_TYPE_INVITED_TALK,
     REQUEST_TYPE_NOC,
+    REQUEST_TYPE_PROFESSIONAL_MEMBERSHIP,
+    REQUEST_TYPE_WFH,
     STATUS_APPROVED,
     STATUS_DRAFT,
     STATUS_REJECTED,
@@ -79,8 +81,10 @@ class TestCreateValidation:
         "rtype",
         [
             REQUEST_TYPE_NOC,
-            REQUEST_TYPE_BONAFIDE_CERTIFICATE,
-            REQUEST_TYPE_ADDRESS_CHANGE,
+            REQUEST_TYPE_INVITED_TALK,
+            REQUEST_TYPE_PROFESSIONAL_MEMBERSHIP,
+            REQUEST_TYPE_WFH,
+            REQUEST_TYPE_FIELD_VISIT,
         ],
     )
     def test_create_accepts_known_types(self, rtype):
@@ -125,9 +129,41 @@ class TestConstants:
         assert isinstance(FACULTY_REQUEST_TYPES, frozenset)
         assert FACULTY_REQUEST_TYPES == frozenset({
             REQUEST_TYPE_NOC,
-            REQUEST_TYPE_BONAFIDE_CERTIFICATE,
-            REQUEST_TYPE_ADDRESS_CHANGE,
+            REQUEST_TYPE_INVITED_TALK,
+            REQUEST_TYPE_PROFESSIONAL_MEMBERSHIP,
+            REQUEST_TYPE_WFH,
+            REQUEST_TYPE_FIELD_VISIT,
         })
+
+    def test_types_has_exactly_five_entries(self):
+        assert len(FACULTY_REQUEST_TYPES) == 5
+
+    @pytest.mark.parametrize("rtype", [
+        REQUEST_TYPE_INVITED_TALK,
+        REQUEST_TYPE_PROFESSIONAL_MEMBERSHIP,
+        REQUEST_TYPE_WFH,
+        REQUEST_TYPE_FIELD_VISIT,
+    ])
+    def test_new_types_in_frozenset(self, rtype):
+        assert rtype in FACULTY_REQUEST_TYPES
+
+    @pytest.mark.parametrize("dropped", ["bonafide_certificate", "address_change"])
+    def test_dropped_types_not_in_frozenset(self, dropped):
+        assert dropped not in FACULTY_REQUEST_TYPES
+
+    @pytest.mark.parametrize("attr", ["REQUEST_TYPE_BONAFIDE_CERTIFICATE", "REQUEST_TYPE_ADDRESS_CHANGE"])
+    def test_dropped_constants_not_exported(self, attr):
+        import durgam.models.faculty_request as mod
+        assert not hasattr(mod, attr), f"{attr} must be removed per Q-P5.1"
+
+    @pytest.mark.parametrize("constant, expected", [
+        (REQUEST_TYPE_INVITED_TALK, "invited_talk"),
+        (REQUEST_TYPE_PROFESSIONAL_MEMBERSHIP, "professional_membership"),
+        (REQUEST_TYPE_WFH, "wfh"),
+        (REQUEST_TYPE_FIELD_VISIT, "field_visit"),
+    ])
+    def test_new_constant_string_values(self, constant, expected):
+        assert constant == expected
 
     def test_statuses_frozen(self):
         assert isinstance(FACULTY_REQUEST_STATUSES, frozenset)

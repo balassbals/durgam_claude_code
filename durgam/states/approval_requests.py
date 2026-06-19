@@ -551,10 +551,11 @@ class SubmitRequestState(BaseState):
             self.submitting = False
 
     async def _submit_faculty_request(self) -> rx.event.EventSpec | None:
-        """Handle submit for faculty_* process codes (NOC, bonafide_cert, address_change).
+        """Handle submit for faculty_* process codes.
 
-        Creates a FacultyRequest draft, updates payload, and submits for approval.
-        Redirects to the ApprovalRequest detail page on success.
+        Phase 5D supports: noc, invited_talk, professional_membership, wfh, field_visit.
+        NOC has structured payload (purpose/to_whom/date_required_by/notes). All others
+        use generic description-only payload per Q-P5.6.
         """
         from durgam.repositories.faculty import FacultyRepository
         from durgam.services.faculty_request import (
@@ -570,7 +571,7 @@ class SubmitRequestState(BaseState):
         process_code = self.selected_process_code
         request_type = process_code[len("faculty_"):]
 
-        # Build payload from NOC fields (only NOC is wired in Phase 7F)
+        # Build payload: NOC has structured fields; all others use generic description.
         payload: dict[str, Any] = {}
         if request_type == "noc":
             if not self.noc_purpose.strip():
@@ -586,6 +587,11 @@ class SubmitRequestState(BaseState):
                 payload["date_required_by"] = self.noc_date_required_by
             if self.noc_additional_notes.strip():
                 payload["additional_notes"] = self.noc_additional_notes.strip()
+        else:
+            # Q-P5.6: generic description-only payload for the 9 non-NOC faculty
+            # request types. Per-type payload schemas deferred to post-gate polish.
+            if self.description.strip():
+                payload = {"description": self.description.strip()}
 
         try:
             with open_session() as session:

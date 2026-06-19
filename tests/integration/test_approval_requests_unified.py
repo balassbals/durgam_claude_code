@@ -26,6 +26,7 @@ Covers:
   W. Issue F — UTC→IST display: _format_dt delegates to format_ist (7G.5)
   X. Issue G — actions column sticky-right so wide tables don't push it off-screen (7G.6)
   Y. Debug paint cleanup — no "red" background or "3px solid blue" in approval_processes._row_actions (7G.6)
+  Z. Phase 5D description capture — _submit_faculty_request else-branch for non-NOC faculty_* types
 
 DB strategy (Phase 7F.1 fix — 7F contamination correction):
   ALL DB tests use `db_session` (function-scoped, rolled back at teardown).
@@ -1553,3 +1554,34 @@ class TestDebugPaintCleanup:
         assert "3px solid blue" not in src, (
             "Commented '# border=\"3px solid blue\"' must be deleted from the file"
         )
+
+
+# ── Z. Phase 5D — description capture for non-NOC faculty_* types ────────────
+
+
+class TestPhase5DDescriptionCapture:
+    """Verify _submit_faculty_request captures description for non-NOC types per Q-P5.6.
+
+    Source inspection: Reflex child states cannot be instantiated outside the runtime.
+    """
+
+    def _get_source(self) -> str:
+        import inspect
+        from durgam.states.approval_requests import SubmitRequestState
+        return inspect.getsource(SubmitRequestState._submit_faculty_request)
+
+    def test_else_branch_present(self) -> None:
+        """Non-NOC path must have an else branch after the NOC if block."""
+        src = self._get_source()
+        assert "else:" in src, "_submit_faculty_request must have else branch for non-NOC types"
+
+    def test_description_captured_in_else(self) -> None:
+        """Else branch must capture self.description.strip() per Q-P5.6."""
+        src = self._get_source()
+        assert 'payload = {"description": self.description.strip()}' in src
+
+    def test_noc_payload_fields_unchanged(self) -> None:
+        """NOC structured payload keys must still be present in source."""
+        src = self._get_source()
+        assert '"purpose"' in src
+        assert '"to_whom"' in src

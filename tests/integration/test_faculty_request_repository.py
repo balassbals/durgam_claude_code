@@ -20,7 +20,7 @@ from durgam.models.department import Department
 from durgam.models.faculty import Faculty
 from durgam.models.faculty_request import (
     FACULTY_REQUEST_TYPES,
-    REQUEST_TYPE_ADDRESS_CHANGE,
+    REQUEST_TYPE_INVITED_TALK,
     REQUEST_TYPE_NOC,
     STATUS_DRAFT,
     STATUS_SUBMITTED,
@@ -136,7 +136,7 @@ class TestFacultyRequestRepository:
         time.sleep(0.01)
         r2 = repo.create(
             faculty_id=faculty.id,
-            request_type=REQUEST_TYPE_ADDRESS_CHANGE,
+            request_type=REQUEST_TYPE_INVITED_TALK,
             payload=None,
             actor_id=actor,
         )
@@ -161,7 +161,7 @@ class TestFacultyRequestRepository:
         # Manually advance one to submitted
         submitted_req = repo.create(
             faculty_id=faculty.id,
-            request_type=REQUEST_TYPE_ADDRESS_CHANGE,
+            request_type=REQUEST_TYPE_INVITED_TALK,
             payload=None,
             actor_id=actor,
         )
@@ -190,7 +190,7 @@ class TestFacultyRequestRepository:
         )
         repo.create(
             faculty_id=faculty.id,
-            request_type=REQUEST_TYPE_ADDRESS_CHANGE,
+            request_type=REQUEST_TYPE_INVITED_TALK,
             payload=None,
             actor_id=actor,
         )
