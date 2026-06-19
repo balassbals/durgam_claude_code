@@ -31,6 +31,7 @@ from durgam.services.faculty import (
     PhotoInvalidMimeError,
     PhotoTooLargeError,
 )
+from durgam.api import DOWNLOAD_PREFIX
 from durgam.states.base import BaseState
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -245,9 +246,15 @@ class FacultyProfileState(BaseState):
             self.phd_awarding_institution = faculty.phd_awarding_institution or ""
             self.phd_year_str = str(faculty.phd_year) if faculty.phd_year else ""
 
-            # Photo URL — read attribute while session is still open
+            # Photo URL — read attribute while session is still open.
+            # DOWNLOAD_PREFIX is "" when frontend and backend share the same port
+            # (production reverse proxy), or the absolute backend origin otherwise
+            # (dev: http://localhost:8000). Bare "/api/files/" is port-3000 (Next.js);
+            # the download endpoint lives on port-8000 (FastAPI).
             if faculty.photo_file_id is not None:
-                self.current_photo_url = "/api/files/" + str(faculty.photo_file_id)
+                self.current_photo_url = (
+                    DOWNLOAD_PREFIX + "/api/files/" + str(faculty.photo_file_id)
+                )
             else:
                 self.current_photo_url = ""
 
