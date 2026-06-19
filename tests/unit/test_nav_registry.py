@@ -139,3 +139,40 @@ class TestApprovalsNavGate:
         )
         assert my_req_entry is not None
         assert my_req_entry.permission_action is None
+
+
+class TestFacultyNavGate:
+    @classmethod
+    def setup_class(cls):
+        import durgam.pages.faculty  # noqa: F401 — triggers nav registration
+
+    def test_faculty_profile_nav_entry_registered(self):
+        """'My Profile' entry must be present in the registry after module import."""
+        entries = get_all()
+        entry = next(
+            (e for e in entries if e.label == "My Profile" and e.href == "/faculty/profile"),
+            None,
+        )
+        assert entry is not None, "'My Profile' nav entry not found in registry"
+
+    def test_faculty_profile_gated_by_faculty_write_own(self):
+        """Entry must be gated by faculty:write:own — visible only to FACULTY role holders."""
+        entries = get_all()
+        entry = next(
+            (e for e in entries if e.label == "My Profile" and e.href == "/faculty/profile"),
+            None,
+        )
+        assert entry is not None
+        assert entry.permission_action == "write"
+        assert entry.permission_resource == "faculty"
+        assert entry.permission_scope_type == "own"
+
+    def test_faculty_profile_nav_group_is_faculty(self):
+        """Entry must be in the 'Faculty' nav group."""
+        entries = get_all()
+        entry = next(
+            (e for e in entries if e.label == "My Profile" and e.href == "/faculty/profile"),
+            None,
+        )
+        assert entry is not None
+        assert entry.group == "Faculty"

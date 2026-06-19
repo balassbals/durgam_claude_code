@@ -88,6 +88,18 @@ class EmployeeIdConflictError(FacultyServiceError):
     """Raised when the requested employee_id is already taken by another faculty."""
 
 
+class FacultyNotFoundError(FacultyServiceError):
+    """Raised when no Faculty row exists for the given faculty_id."""
+
+
+class NotOwnerError(FacultyServiceError):
+    """Raised when actor_id is not the faculty's user_id (self-edit guard)."""
+
+
+class InvalidPhdYearError(FacultyServiceError):
+    """Raised when phd_year is outside [1900, current_year + 1]."""
+
+
 class FacultyService:
     def __init__(
         self,
@@ -426,6 +438,103 @@ class FacultyService:
         if wl is None:
             raise FacultyServiceError(f"Workload record {wl_id} not found.")
         return self._workload.soft_delete(wl_id, actor_id)
+
+    # ── Private validators ────────────────────────────────────────────────────
+
+    # ── Section-specific self-edit methods (P1) ──────────────────────────────
+
+    def update_contact(
+        self,
+        faculty_id: UUID,
+        *,
+        phone: str,
+        whatsapp: str | None,
+        alt_phone: str | None,
+        alt_email: str | None,
+        emergency_contact_name: str,
+        emergency_contact_relation: str,
+        emergency_contact_phone: str,
+        actor_id: UUID,
+    ) -> Faculty:
+        """Update contact + emergency contact fields. Other fields untouched."""
+        faculty = self._faculty.get(faculty_id)
+        if faculty is None:
+            raise FacultyNotFoundError(f"Faculty {faculty_id} not found.")
+        if faculty.user_id != actor_id:
+            raise NotOwnerError("You can only edit your own Faculty profile.")
+        return self._faculty.update(faculty_id, {
+            "phone": phone.strip(),
+            "whatsapp": whatsapp.strip() if whatsapp else None,
+            "alt_phone": alt_phone.strip() if alt_phone else None,
+            "alt_email": alt_email.strip() if alt_email else None,
+            "emergency_contact_name": emergency_contact_name.strip(),
+            "emergency_contact_relation": emergency_contact_relation.strip(),
+            "emergency_contact_phone": emergency_contact_phone.strip(),
+        }, actor_id)
+
+    def update_external_ids(
+        self,
+        faculty_id: UUID,
+        *,
+        orcid: str | None,
+        linkedin: str | None,
+        google_scholar: str | None,
+        researchgate: str | None,
+        actor_id: UUID,
+    ) -> Faculty:
+        """Update external IDs. Other fields untouched."""
+        faculty = self._faculty.get(faculty_id)
+        if faculty is None:
+            raise FacultyNotFoundError(f"Faculty {faculty_id} not found.")
+        if faculty.user_id != actor_id:
+            raise NotOwnerError("You can only edit your own Faculty profile.")
+        return self._faculty.update(faculty_id, {
+            "orcid": orcid.strip() if orcid else None,
+            "linkedin": linkedin.strip() if linkedin else None,
+            "google_scholar": google_scholar.strip() if google_scholar else None,
+            "researchgate": researchgate.strip() if researchgate else None,
+        }, actor_id)
+
+    def update_phd_section(
+        self,
+        faculty_id: UUID,
+        *,
+        is_phd: bool,
+        phd_thesis_title: str | None,
+        phd_registration_number: str | None,
+        phd_awarding_institution: str | None,
+        phd_year: int | None,
+        actor_id: UUID,
+    ) -> Faculty:
+        """Update PhD section. If is_phd=False, clears all 4 phd_* fields."""
+        faculty = self._faculty.get(faculty_id)
+        if faculty is None:
+            raise FacultyNotFoundError(f"Faculty {faculty_id} not found.")
+        if faculty.user_id != actor_id:
+            raise NotOwnerError("You can only edit your own Faculty profile.")
+        if not is_phd:
+            fields: dict = {
+                "is_phd": False,
+                "phd_thesis_title": None,
+                "phd_registration_number": None,
+                "phd_awarding_institution": None,
+                "phd_year": None,
+            }
+        else:
+            if phd_year is not None:
+                current_year = datetime.now(UTC).year
+                if not (1900 <= phd_year <= current_year + 1):
+                    raise InvalidPhdYearError(
+                        f"PhD year {phd_year} must be in [1900, {current_year + 1}]."
+                    )
+            fields = {
+                "is_phd": True,
+                "phd_thesis_title": phd_thesis_title.strip() if phd_thesis_title else None,
+                "phd_registration_number": phd_registration_number.strip() if phd_registration_number else None,
+                "phd_awarding_institution": phd_awarding_institution.strip() if phd_awarding_institution else None,
+                "phd_year": phd_year,
+            }
+        return self._faculty.update(faculty_id, fields, actor_id)
 
     # ── Private validators ────────────────────────────────────────────────────
 
