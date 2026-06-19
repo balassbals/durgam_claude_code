@@ -4,7 +4,7 @@
 **Spec**: `docs/durgam_rfp_v3.pdf` — all section references (§8, §12, etc.) point to this file.
 **Python**: 3.13 (pinned via `.python-version`).
 **Theme**: Puttaparthi Saffron–Indigo–Ivory (§15.1). Single committed theme; no alternatives in v3.
-**Current milestone**: M10 (Faculty Module) — in progress. M9 closed 2026-06-14, merged as 2d819c4, tag m9-close. M10 branch: m10-faculty. Phase P1 shipped (`27d323a`) + P1.1 fix (`f2b671b`) + P2 photo upload (`d3ba34d`) + P2.1 + P2.2 fixes (TBD); Phase P3 next.
+**Current milestone**: M10 (Faculty Module) — in progress. M9 closed 2026-06-14, merged as 2d819c4, tag m9-close. M10 branch: m10-faculty. Phase P1 shipped (`27d323a`) + P1.1 fix (`f2b671b`) + P2 photo upload (`d3ba34d`) + P2.1 (`2aba531`) + P2.2 (`637b7bb`); Phase P3 next.
 **Previous milestone**: M9 closed 2026-06-14, merged as 2d819c4, tag m9-close.
 
 ## Authority files (binding, in priority order)
@@ -1630,7 +1630,7 @@ the code and seed content are syntactically correct. This is the third occurrenc
 bug class: M3 (course:delete:*), M8.1 Phase 8 (leave_request_admin:write:*), and M9 Phase 5 (announcement permissions).
 
 ## Current milestone
-**M10 (Faculty Module) — in progress on branch `m10-faculty`. M9 (Announcement Module) closed 2026-06-14, merged as 2d819c4, tag m9-close on afc1f4b. Post-merge docs commit `7842eb9`. Phase P1 shipped (`27d323a`) + P1.1 fix (`f2b671b`) + P2 photo upload (`d3ba34d`) + P2.1 + P2.2 fixes (TBD); Phase P3 next.**
+**M10 (Faculty Module) — in progress on branch `m10-faculty`. M9 (Announcement Module) closed 2026-06-14, merged as 2d819c4, tag m9-close on afc1f4b. Post-merge docs commit `7842eb9`. Phase P1 shipped (`27d323a`) + P1.1 fix (`f2b671b`) + P2 photo upload (`d3ba34d`) + P2.1 (`2aba531`) + P2.2 (`637b7bb`); Phase P3 next.**
 
 **Previous milestone:** M9 closed 2026-06-14, merged as 2d819c4, tag m9-close on afc1f4b.
 
