@@ -329,6 +329,8 @@ app.add_page(
 # ── M10 Faculty self-service profile ──────────────────────────────────────────
 from durgam.pages.faculty import __init__ as _faculty_nav_register  # noqa: F401
 from durgam.pages.faculty.profile import faculty_profile_page
+from durgam.pages.faculty.profile_education import faculty_education_page
+from durgam.states.faculty_education import FacultyEducationState
 from durgam.states.faculty_profile import FacultyProfileState
 
 app.add_page(
@@ -336,5 +338,12 @@ app.add_page(
     route="/faculty/profile",
     on_load=FacultyProfileState.load_profile,
     title="My Profile — DURGAM",
+)
+
+app.add_page(
+    faculty_education_page,
+    route="/faculty/profile/education",
+    on_load=FacultyEducationState.load_education,
+    title="My Education — DURGAM",
 )
 

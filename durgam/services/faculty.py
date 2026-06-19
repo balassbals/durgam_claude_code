@@ -112,6 +112,14 @@ class PhotoTooLargeError(FacultyServiceError):
     """Raised when uploaded photo exceeds 1MB."""
 
 
+class EducationNotFoundError(FacultyServiceError):
+    """Raised when an education record is not found or already deleted."""
+
+
+class InvalidYearError(FacultyServiceError):
+    """Raised when year_of_award is outside [1950, current_year + 1]."""
+
+
 _PHOTO_ALLOWED_MIMES: frozenset[str] = frozenset({"image/jpeg", "image/png"})
 _PHOTO_MAX_BYTES: int = 1024 * 1024  # 1MB
 
@@ -249,7 +257,16 @@ class FacultyService:
         specialization: str | None = None,
         distinction: str | None = None,
     ) -> FacultyEducation:
-        self._assert_faculty_exists(faculty_id)
+        faculty = self._faculty.get(faculty_id)
+        if faculty is None:
+            raise FacultyNotFoundError(f"Faculty {faculty_id} not found.")
+        if faculty.user_id != actor_id:
+            raise NotOwnerError("You can only edit your own education records.")
+        current_year = datetime.now(UTC).year
+        if not (1950 <= year_of_award <= current_year + 1):
+            raise InvalidYearError(
+                f"Year of award must be between 1950 and {current_year + 1}."
+            )
         now = datetime.now(UTC)
         edu = FacultyEducation(
             faculty_id=faculty_id,
@@ -270,17 +287,31 @@ class FacultyService:
     ) -> FacultyEducation:
         edu = self._education.get(edu_id)
         if edu is None:
-            raise FacultyServiceError(f"Education record {edu_id} not found.")
+            raise EducationNotFoundError(f"Education record {edu_id} not found.")
+        faculty = self._faculty.get(edu.faculty_id)
+        if faculty is None or faculty.user_id != actor_id:
+            raise NotOwnerError("You can only edit your own education records.")
+        if "year_of_award" in fields:
+            year = fields["year_of_award"]
+            current_year = datetime.now(UTC).year
+            if not (1950 <= year <= current_year + 1):
+                raise InvalidYearError(
+                    f"Year of award must be between 1950 and {current_year + 1}."
+                )
         return self._education.update(edu_id, fields, actor_id)
 
     def remove_education(self, edu_id: UUID, actor_id: UUID) -> FacultyEducation:
         edu = self._education.get(edu_id)
         if edu is None:
-            raise FacultyServiceError(f"Education record {edu_id} not found.")
+            raise EducationNotFoundError(f"Education record {edu_id} not found.")
+        faculty = self._faculty.get(edu.faculty_id)
+        if faculty is None or faculty.user_id != actor_id:
+            raise NotOwnerError("You can only delete your own education records.")
         return self._education.soft_delete(edu_id, actor_id)
 
     def list_education(self, faculty_id: UUID) -> list[FacultyEducation]:
-        return self._education.list_by_faculty(faculty_id)
+        records = self._education.list_by_faculty(faculty_id)
+        return sorted(records, key=lambda e: e.year_of_award, reverse=True)
 
     # ── Experience ────────────────────────────────────────────────────────────
 

@@ -14,9 +14,11 @@ import pytest
 
 from durgam.models.faculty import Faculty
 from durgam.services.faculty import (
+    EducationNotFoundError,
     FacultyNotFoundError,
     FacultyService,
     InvalidPhdYearError,
+    InvalidYearError,
     NotOwnerError,
     OrcidRequiredError,
     PhotoInvalidMimeError,
@@ -477,3 +479,179 @@ class TestPhotoMimeWhitelist:
         from durgam.services.faculty import _PHOTO_ALLOWED_MIMES
 
         assert "application/pdf" not in _PHOTO_ALLOWED_MIMES
+
+
+# ── Education CRUD (P3a) ──────────────────────────────────────────────────────
+
+
+def _make_svc_with_edu(
+    faculty=None, edu=None
+) -> tuple[FacultyService, object, object]:
+    """Return (svc, faculty_repo_mock, edu_repo_mock)."""
+    faculty_repo = MagicMock()
+    faculty_repo.get.return_value = faculty
+    faculty_repo.update.return_value = faculty
+
+    edu_repo = MagicMock()
+    edu_repo.get.return_value = edu
+    edu_repo.update.return_value = edu
+    edu_repo.soft_delete.return_value = edu
+    edu_repo.list_by_faculty.return_value = []
+
+    svc = FacultyService.__new__(FacultyService)
+    svc._faculty = faculty_repo
+    svc._education = edu_repo
+    svc._experience = MagicMock()
+    svc._expertise = MagicMock()
+    svc._document = MagicMock()
+    svc._workload = MagicMock()
+    return svc, faculty_repo, edu_repo
+
+
+class TestAddEducation:
+    def test_faculty_not_found_raises(self):
+        svc, _, _ = _make_svc_with_edu(faculty=None)
+        with pytest.raises(FacultyNotFoundError):
+            svc.add_education(
+                uuid4(), degree_name="B.Tech", awarding_institution="IIT",
+                year_of_award=2010, actor_id=uuid4(),
+            )
+
+    def test_not_owner_raises(self):
+        actor = uuid4()
+        faculty = _make_faculty(user_id=uuid4())
+        svc, _, _ = _make_svc_with_edu(faculty=faculty)
+        with pytest.raises(NotOwnerError):
+            svc.add_education(
+                faculty.id, degree_name="B.Tech", awarding_institution="IIT",
+                year_of_award=2010, actor_id=actor,  # different user
+            )
+
+    def test_year_too_early_raises(self):
+        actor = uuid4()
+        faculty = _make_faculty(user_id=actor)
+        svc, _, _ = _make_svc_with_edu(faculty=faculty)
+        with pytest.raises(InvalidYearError, match="1950"):
+            svc.add_education(
+                faculty.id, degree_name="B.Tech", awarding_institution="IIT",
+                year_of_award=1900, actor_id=actor,
+            )
+
+    def test_year_too_late_raises(self):
+        from datetime import UTC, datetime
+        actor = uuid4()
+        faculty = _make_faculty(user_id=actor)
+        svc, _, _ = _make_svc_with_edu(faculty=faculty)
+        future_year = datetime.now(UTC).year + 5
+        with pytest.raises(InvalidYearError):
+            svc.add_education(
+                faculty.id, degree_name="B.Tech", awarding_institution="IIT",
+                year_of_award=future_year, actor_id=actor,
+            )
+
+    def test_valid_succeeds_calls_create(self):
+        actor = uuid4()
+        faculty = _make_faculty(user_id=actor)
+        svc, _, edu_repo = _make_svc_with_edu(faculty=faculty)
+        from datetime import UTC, datetime
+        current_year = datetime.now(UTC).year
+        svc.add_education(
+            faculty.id, degree_name="B.Tech", awarding_institution="IIT",
+            year_of_award=current_year - 5, actor_id=actor,
+        )
+        edu_repo.create.assert_called_once()
+        created = edu_repo.create.call_args.args[0]
+        assert created.degree_name == "B.Tech"
+        assert created.year_of_award == current_year - 5
+
+
+class TestUpdateEducation:
+    def _make_edu(self, faculty_id):
+        e = MagicMock()
+        e.id = uuid4()
+        e.faculty_id = faculty_id
+        return e
+
+    def test_not_found_raises(self):
+        svc, _, _ = _make_svc_with_edu(faculty=_make_faculty(), edu=None)
+        with pytest.raises(EducationNotFoundError):
+            svc.update_education(uuid4(), {}, uuid4())
+
+    def test_not_owner_raises(self):
+        actor = uuid4()
+        faculty = _make_faculty(user_id=uuid4())
+        edu = self._make_edu(faculty.id)
+        svc, faculty_repo, edu_repo = _make_svc_with_edu(faculty=faculty, edu=edu)
+        edu_repo.get.return_value = edu
+        faculty_repo.get.return_value = faculty
+        with pytest.raises(NotOwnerError):
+            svc.update_education(edu.id, {}, actor)
+
+    def test_year_invalid_in_fields_raises(self):
+        actor = uuid4()
+        faculty = _make_faculty(user_id=actor)
+        edu = self._make_edu(faculty.id)
+        svc, faculty_repo, edu_repo = _make_svc_with_edu(faculty=faculty, edu=edu)
+        edu_repo.get.return_value = edu
+        faculty_repo.get.return_value = faculty
+        with pytest.raises(InvalidYearError):
+            svc.update_education(edu.id, {"year_of_award": 1800}, actor)
+
+    def test_valid_calls_repo_update(self):
+        actor = uuid4()
+        faculty = _make_faculty(user_id=actor)
+        edu = self._make_edu(faculty.id)
+        svc, faculty_repo, edu_repo = _make_svc_with_edu(faculty=faculty, edu=edu)
+        edu_repo.get.return_value = edu
+        faculty_repo.get.return_value = faculty
+        svc.update_education(edu.id, {"degree_name": "M.Tech"}, actor)
+        edu_repo.update.assert_called_once()
+
+
+class TestRemoveEducation:
+    def _make_edu(self, faculty_id):
+        e = MagicMock()
+        e.id = uuid4()
+        e.faculty_id = faculty_id
+        return e
+
+    def test_not_found_raises(self):
+        svc, _, edu_repo = _make_svc_with_edu(faculty=_make_faculty(), edu=None)
+        with pytest.raises(EducationNotFoundError):
+            svc.remove_education(uuid4(), uuid4())
+
+    def test_not_owner_raises(self):
+        actor = uuid4()
+        faculty = _make_faculty(user_id=uuid4())
+        edu = self._make_edu(faculty.id)
+        svc, faculty_repo, edu_repo = _make_svc_with_edu(faculty=faculty, edu=edu)
+        edu_repo.get.return_value = edu
+        faculty_repo.get.return_value = faculty
+        with pytest.raises(NotOwnerError):
+            svc.remove_education(edu.id, actor)
+
+    def test_valid_calls_soft_delete(self):
+        actor = uuid4()
+        faculty = _make_faculty(user_id=actor)
+        edu = self._make_edu(faculty.id)
+        svc, faculty_repo, edu_repo = _make_svc_with_edu(faculty=faculty, edu=edu)
+        edu_repo.get.return_value = edu
+        faculty_repo.get.return_value = faculty
+        svc.remove_education(edu.id, actor)
+        edu_repo.soft_delete.assert_called_once_with(edu.id, actor)
+
+
+class TestListEducationSorted:
+    def test_sorted_year_desc(self):
+        actor = uuid4()
+        faculty = _make_faculty(user_id=actor)
+        svc, _, edu_repo = _make_svc_with_edu(faculty=faculty)
+
+        def _edu(year):
+            e = MagicMock()
+            e.year_of_award = year
+            return e
+
+        edu_repo.list_by_faculty.return_value = [_edu(2010), _edu(2020), _edu(1995)]
+        result = svc.list_education(faculty.id)
+        assert [e.year_of_award for e in result] == [2020, 2010, 1995]

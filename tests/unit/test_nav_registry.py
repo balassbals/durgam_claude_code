@@ -176,3 +176,20 @@ class TestFacultyNavGate:
         )
         assert entry is not None
         assert entry.group == "Faculty"
+
+    def test_faculty_education_nav_entry_registered(self):
+        """'My Education' entry must be present after module import."""
+        entries = get_all()
+        entry = next(
+            (
+                e
+                for e in entries
+                if e.label == "My Education" and e.href == "/faculty/profile/education"
+            ),
+            None,
+        )
+        assert entry is not None, "'My Education' nav entry not found in registry"
+        assert entry.permission_action == "write"
+        assert entry.permission_resource == "faculty"
+        assert entry.permission_scope_type == "own"
+        assert entry.group == "Faculty"
