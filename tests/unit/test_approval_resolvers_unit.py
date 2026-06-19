@@ -1,7 +1,8 @@
-"""Unit tests for approval_resolvers — M10 Phase 3A (mock session, no DB).
+"""Unit tests for approval_resolvers — M10 Phase 3A + 5F (mock session, no DB).
 
 Tests dispatch logic, UnknownResolverError, and the
-dept_head_at_requestor_campus resolver edge cases via mocked session.
+dept_head_at_requestor_campus, director_at_requestor_campus, and
+dean_at_requestor_campus resolver edge cases via mocked session.
 """
 
 from unittest.mock import MagicMock, patch
@@ -13,7 +14,9 @@ from durgam.services.approval_resolvers import (
     RESOLVERS,
     ResolverContext,
     UnknownResolverError,
+    _resolve_dean_at_requestor_campus,
     _resolve_dept_head_at_requestor_campus,
+    _resolve_director_at_requestor_campus,
     resolve,
 )
 
@@ -110,6 +113,11 @@ class TestResolverDispatch:
         """The registry exposes dept_head_at_requestor_campus."""
         assert "dept_head_at_requestor_campus" in RESOLVERS
 
+    def test_resolvers_registry_contains_phase5f_keys(self):
+        """Phase 5F resolvers are registered."""
+        assert "director_at_requestor_campus" in RESOLVERS
+        assert "dean_at_requestor_campus" in RESOLVERS
+
 
 # ── Tests: dept_head_at_requestor_campus ─────────────────────────────────────
 
@@ -168,3 +176,150 @@ class TestDeptHeadAtRequestorCampus:
         result = _resolve_dept_head_at_requestor_campus(_ctx(), session)
 
         assert result == []
+
+
+# ── Tests: director_at_requestor_campus (Phase 5F) ───────────────────────────
+
+
+class TestDirectorAtRequestorCampus:
+    def test_no_faculty_record_returns_empty(self):
+        """Requestor has no Faculty row → [] immediately."""
+        session = _seq_session(([], None))  # 0: Faculty lookup → first()=None
+        result = _resolve_director_at_requestor_campus(_ctx(), session)
+        assert result == []
+
+    def test_role_not_found_returns_empty(self):
+        """DIRECTOR role absent from DB → []."""
+        campus_id = uuid4()
+        faculty = MagicMock()
+        faculty.campus_id = campus_id
+        faculty.is_deleted = False
+
+        session = _seq_session(
+            ([], faculty),  # 0: Faculty lookup
+            ([], None),     # 1: Role lookup → first()=None
+        )
+        result = _resolve_director_at_requestor_campus(_ctx(), session)
+        assert result == []
+
+    def test_no_director_at_campus_returns_empty(self):
+        """DIRECTOR role exists but nobody holds it at requestor's campus → []."""
+        campus_id = uuid4()
+        faculty = MagicMock()
+        faculty.campus_id = campus_id
+        faculty.is_deleted = False
+
+        role = _make_role()
+        session = _seq_session(
+            ([], faculty),  # 0: Faculty lookup
+            ([], role),     # 1: Role lookup
+            ([], None),     # 2: User join query → all()=[]
+        )
+        result = _resolve_director_at_requestor_campus(_ctx(), session)
+        assert result == []
+
+    def test_returns_director_at_matching_campus(self):
+        """One DIRECTOR scoped to requestor's campus → returned."""
+        campus_id = uuid4()
+        director_id = uuid4()
+
+        faculty = MagicMock()
+        faculty.campus_id = campus_id
+        faculty.is_deleted = False
+
+        role = _make_role()
+        director = _make_user(user_id=director_id)
+
+        session = _seq_session(
+            ([], faculty),       # 0: Faculty lookup
+            ([], role),          # 1: Role lookup
+            ([director], None),  # 2: User join query → all()=[director]
+        )
+        result = _resolve_director_at_requestor_campus(_ctx(), session)
+        assert len(result) == 1
+        assert result[0].id == director_id
+
+
+# ── Tests: dean_at_requestor_campus (Phase 5F) ───────────────────────────────
+
+
+class TestDeanAtRequestorCampus:
+    def test_no_faculty_record_returns_empty(self):
+        """Requestor has no Faculty row → [] immediately."""
+        session = _seq_session(([], None))  # 0: Faculty lookup → first()=None
+        result = _resolve_dean_at_requestor_campus(_ctx(), session)
+        assert result == []
+
+    def test_role_not_found_returns_empty(self):
+        """DEAN role absent from DB → []."""
+        campus_id = uuid4()
+        faculty = MagicMock()
+        faculty.campus_id = campus_id
+        faculty.is_deleted = False
+
+        session = _seq_session(
+            ([], faculty),  # 0: Faculty lookup
+            ([], None),     # 1: Role lookup → first()=None
+        )
+        result = _resolve_dean_at_requestor_campus(_ctx(), session)
+        assert result == []
+
+    def test_no_dean_at_campus_returns_empty(self):
+        """DEAN role exists but nobody with Faculty.campus_id match → []."""
+        campus_id = uuid4()
+        faculty = MagicMock()
+        faculty.campus_id = campus_id
+        faculty.is_deleted = False
+
+        role = _make_role()
+        session = _seq_session(
+            ([], faculty),  # 0: Faculty lookup
+            ([], role),     # 1: Role lookup
+            ([], None),     # 2: User join query → all()=[]
+        )
+        result = _resolve_dean_at_requestor_campus(_ctx(), session)
+        assert result == []
+
+    def test_returns_single_dean_at_campus(self):
+        """One DEAN with Faculty at requestor's campus → returned."""
+        campus_id = uuid4()
+        dean_id = uuid4()
+
+        faculty = MagicMock()
+        faculty.campus_id = campus_id
+        faculty.is_deleted = False
+
+        role = _make_role()
+        dean = _make_user(user_id=dean_id)
+
+        session = _seq_session(
+            ([], faculty),    # 0: Faculty lookup
+            ([], role),       # 1: Role lookup
+            ([dean], None),   # 2: User join query → all()=[dean]
+        )
+        result = _resolve_dean_at_requestor_campus(_ctx(), session)
+        assert len(result) == 1
+        assert result[0].id == dean_id
+
+    def test_returns_multiple_deans_at_campus(self):
+        """Multiple DEANs at same campus → all returned (engine handles OR-set)."""
+        campus_id = uuid4()
+        dean1_id = uuid4()
+        dean2_id = uuid4()
+
+        faculty = MagicMock()
+        faculty.campus_id = campus_id
+        faculty.is_deleted = False
+
+        role = _make_role()
+        dean1 = _make_user(user_id=dean1_id)
+        dean2 = _make_user(user_id=dean2_id)
+
+        session = _seq_session(
+            ([], faculty),           # 0: Faculty lookup
+            ([], role),              # 1: Role lookup
+            ([dean1, dean2], None),  # 2: User join query → all()=[dean1, dean2]
+        )
+        result = _resolve_dean_at_requestor_campus(_ctx(), session)
+        assert len(result) == 2
+        assert {u.id for u in result} == {dean1_id, dean2_id}

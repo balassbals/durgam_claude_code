@@ -29,6 +29,9 @@ REQUEST_TYPE_FIELD_VISIT = "field_visit"
 REQUEST_TYPE_APC = "apc"
 REQUEST_TYPE_TRAVEL = "travel"
 REQUEST_TYPE_EXTERNAL_GRANT_PROPOSAL = "external_grant_proposal"
+REQUEST_TYPE_FDP = "fdp"
+REQUEST_TYPE_CONFERENCE = "conference"
+REQUEST_TYPE_INHOUSE_RESEARCH_FUNDING = "inhouse_research_funding"
 
 FACULTY_REQUEST_TYPES: frozenset[str] = frozenset({
     REQUEST_TYPE_NOC,
@@ -39,6 +42,9 @@ FACULTY_REQUEST_TYPES: frozenset[str] = frozenset({
     REQUEST_TYPE_APC,
     REQUEST_TYPE_TRAVEL,
     REQUEST_TYPE_EXTERNAL_GRANT_PROPOSAL,
+    REQUEST_TYPE_FDP,
+    REQUEST_TYPE_CONFERENCE,
+    REQUEST_TYPE_INHOUSE_RESEARCH_FUNDING,
 })
 
 # ── Status lifecycle (stable; enforced via DB CHECK constraint) ──

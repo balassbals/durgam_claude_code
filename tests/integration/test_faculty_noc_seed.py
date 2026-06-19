@@ -148,6 +148,7 @@ class TestPhase5DLinearSeeds:
 
 # ── Phase 5E: 3 terminal-variant faculty processes ───────────────────────────
 
+
 _PHASE_5E_PROCESSES = [
     ("faculty_apc", "Faculty Article Processing Charge Request", ["HOD", "FINANCE_OFFICER", "VC"]),
     ("faculty_travel", "Faculty Travel Request", ["HOD", "DIRECTOR", "VC"]),
@@ -226,6 +227,160 @@ class TestPhase5ETerminalSeeds:
                 code=code,
                 title=title,
                 channel_role_codes=channel,
+            )
+            seeded_session.flush()
+            assert result == 0, f"Second seed call for {code} must be idempotent (got {result})"
+
+            count = len(seeded_session.exec(
+                select(ApprovalProcess).where(
+                    ApprovalProcess.code == code,
+                    ApprovalProcess.is_deleted == False,  # noqa: E712
+                )
+            ).all())
+            assert count == 1, f"Idempotent: must not create duplicate process for {code}"
+
+
+# ── Phase 5F: 3 OR-set faculty processes ─────────────────────────────────────
+
+_PHASE_5F_PROCESSES = [
+    (
+        "faculty_fdp",
+        "Faculty Development Programme Request",
+        ["HOD", "DIRECTOR", "VC"],
+        {"director_at_requestor_campus", "dean_at_requestor_campus"},
+    ),
+    (
+        "faculty_conference",
+        "Faculty Conference/Symposium/Seminar/Workshop Request",
+        ["HOD", "DIRECTOR", "VC"],
+        {"director_at_requestor_campus", "dean_at_requestor_campus"},
+    ),
+    (
+        "faculty_inhouse_research_funding",
+        "Faculty In-house Research Funding Request",
+        ["HOD", "DEAN", "REGISTRAR", "VC"],
+        {"dean_at_requestor_campus", "director_at_requestor_campus"},
+    ),
+]
+
+
+class TestPhase5FOrSetSeeds:
+    @pytest.mark.parametrize("code,title,channel,_", _PHASE_5F_PROCESSES)
+    def test_process_seeded(
+        self, seeded_session: Session, code: str, title: str, channel: list, _: set
+    ) -> None:
+        """Each Phase 5F process exists with correct metadata."""
+        process = seeded_session.exec(
+            select(ApprovalProcess).where(
+                ApprovalProcess.code == code,
+                ApprovalProcess.is_deleted == False,  # noqa: E712
+            )
+        ).first()
+
+        assert process is not None, f"{code} process must be seeded"
+        assert process.title == title
+        assert process.requestor_role_codes == ["FACULTY"]
+        assert process.channel_role_codes == channel
+        assert not process.is_finance
+        assert process.max_upward_attachments == 3
+        assert process.allowed_attachment_mime_types_json == ["application/pdf"]
+        assert process.max_downward_attachments == 0
+
+    @pytest.mark.parametrize("code,_,__,___", _PHASE_5F_PROCESSES)
+    def test_stage_pick_modes_json(
+        self, seeded_session: Session, code: str, _: str, __: list, ___: set
+    ) -> None:
+        """stage_pick_modes_json contains both stage 1 and stage 2 as 'approver'."""
+        process = seeded_session.exec(
+            select(ApprovalProcess).where(
+                ApprovalProcess.code == code,
+                ApprovalProcess.is_deleted == False,  # noqa: E712
+            )
+        ).first()
+        assert process is not None
+        assert process.stage_pick_modes_json is not None
+        assert process.stage_pick_modes_json.get("1") == "approver"
+        assert process.stage_pick_modes_json.get("2") == "approver"
+
+    @pytest.mark.parametrize("code,_,__,___", _PHASE_5F_PROCESSES)
+    def test_stage1_option_seeded(
+        self, seeded_session: Session, code: str, _: str, __: list, ___: set
+    ) -> None:
+        """Each Phase 5F process has exactly one Stage 1 resolver option."""
+        process = seeded_session.exec(
+            select(ApprovalProcess).where(
+                ApprovalProcess.code == code,
+                ApprovalProcess.is_deleted == False,  # noqa: E712
+            )
+        ).first()
+        assert process is not None
+
+        option = seeded_session.exec(
+            select(ApprovalStageOption).where(
+                ApprovalStageOption.approval_process_id == process.id,
+                ApprovalStageOption.stage_index == 1,
+                ApprovalStageOption.is_deleted == False,  # noqa: E712
+            )
+        ).first()
+
+        assert option is not None, f"Stage 1 option must be seeded for {code}"
+        assert option.resolver_name == "dept_head_at_requestor_campus"
+        assert option.label == "Head of Department"
+        assert option.sort_order == 0
+
+    @pytest.mark.parametrize("code,_,__,expected_resolvers", _PHASE_5F_PROCESSES)
+    def test_stage2_or_set_options_seeded(
+        self,
+        seeded_session: Session,
+        code: str,
+        _: str,
+        __: list,
+        expected_resolvers: set,
+    ) -> None:
+        """Each Phase 5F process has exactly two Stage 2 OR-set options."""
+        process = seeded_session.exec(
+            select(ApprovalProcess).where(
+                ApprovalProcess.code == code,
+                ApprovalProcess.is_deleted == False,  # noqa: E712
+            )
+        ).first()
+        assert process is not None
+
+        options = seeded_session.exec(
+            select(ApprovalStageOption).where(
+                ApprovalStageOption.approval_process_id == process.id,
+                ApprovalStageOption.stage_index == 2,
+                ApprovalStageOption.is_deleted == False,  # noqa: E712
+            )
+        ).all()
+
+        assert len(options) == 2, f"Stage 2 must have exactly 2 options for {code}"
+        actual_resolvers = {opt.resolver_name for opt in options}
+        assert actual_resolvers == expected_resolvers
+        for opt in options:
+            assert opt.resolver_name in {"director_at_requestor_campus", "dean_at_requestor_campus"}
+            assert opt.label in {"Director", "Dean"}
+
+    def test_phase5f_seeds_idempotent(self, seeded_session: Session) -> None:
+        """Calling _seed_faculty_simple_linear_process on already-seeded data returns 0."""
+        from scripts.seed import _seed_faculty_simple_linear_process
+
+        fdp_or_set: dict = {2: [("director_at_requestor_campus", "Director"), ("dean_at_requestor_campus", "Dean")]}
+        inhouse_or_set: dict = {2: [("dean_at_requestor_campus", "Dean"), ("director_at_requestor_campus", "Director")]}
+        per_code_or_set = {
+            "faculty_fdp": fdp_or_set,
+            "faculty_conference": fdp_or_set,
+            "faculty_inhouse_research_funding": inhouse_or_set,
+        }
+
+        for code, title, channel, _ in _PHASE_5F_PROCESSES:
+            result = _seed_faculty_simple_linear_process(
+                seeded_session,
+                code=code,
+                title=title,
+                channel_role_codes=channel,
+                or_set_stages=per_code_or_set[code],
+                stage_pick_modes_json={"1": "approver", "2": "approver"},
             )
             seeded_session.flush()
             assert result == 0, f"Second seed call for {code} must be idempotent (got {result})"

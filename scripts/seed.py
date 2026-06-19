@@ -2712,6 +2712,32 @@ def seed(session: Session) -> dict[str, int]:
         channel_role_codes=["HOD", "REGISTRAR"],
     )
 
+    # ── ApprovalProcess — 3 OR-set faculty processes (M10 Phase 5F) ──────────
+    counts["faculty_fdp_process"] = _seed_faculty_simple_linear_process(
+        session,
+        code="faculty_fdp",
+        title="Faculty Development Programme Request",
+        channel_role_codes=["HOD", "DIRECTOR", "VC"],
+        or_set_stages={2: [("director_at_requestor_campus", "Director"), ("dean_at_requestor_campus", "Dean")]},
+        stage_pick_modes_json={"1": "approver", "2": "approver"},
+    )
+    counts["faculty_conference_process"] = _seed_faculty_simple_linear_process(
+        session,
+        code="faculty_conference",
+        title="Faculty Conference/Symposium/Seminar/Workshop Request",
+        channel_role_codes=["HOD", "DIRECTOR", "VC"],
+        or_set_stages={2: [("director_at_requestor_campus", "Director"), ("dean_at_requestor_campus", "Dean")]},
+        stage_pick_modes_json={"1": "approver", "2": "approver"},
+    )
+    counts["faculty_inhouse_research_funding_process"] = _seed_faculty_simple_linear_process(
+        session,
+        code="faculty_inhouse_research_funding",
+        title="Faculty In-house Research Funding Request",
+        channel_role_codes=["HOD", "DEAN", "REGISTRAR", "VC"],
+        or_set_stages={2: [("dean_at_requestor_campus", "Dean"), ("director_at_requestor_campus", "Director")]},
+        stage_pick_modes_json={"1": "approver", "2": "approver"},
+    )
+
     session.commit()
     return counts
 
@@ -2801,18 +2827,29 @@ def _seed_faculty_simple_linear_process(
     code: str,
     title: str,
     channel_role_codes: list[str],
+    or_set_stages: "dict[int, list[tuple[str, str]]] | None" = None,
+    stage_pick_modes_json: "dict[str, str] | None" = None,
 ) -> int:
-    """Seed a faculty_* ApprovalProcess with Stage 1 resolver + linear channel (idempotent).
+    """Seed a faculty_* ApprovalProcess with Stage 1 resolver + optional OR-set stages (idempotent).
 
-    Channel shape: dept_head_at_requestor_campus → remaining channel_role_codes.
-    Used for the 4 Phase 5D linear-channel seeds (INVITED_TALK, PROFESSIONAL_MEMBERSHIP,
-    WFH, FIELD_VISIT). Mirrors _seed_faculty_noc_process idempotency pattern.
+    Channel shape: dept_head_at_requestor_campus resolver at Stage 1; remaining
+    channel_role_codes drive legacy linear routing for subsequent stages unless
+    or_set_stages is provided.
 
-    Returns total rows inserted (0–2).
+    or_set_stages: dict mapping stage_index → list of (resolver_name, label) tuples.
+    Each tuple becomes one ApprovalStageOption row. Idempotent: guarded by
+    (approval_process_id, stage_index, resolver_name).
+
+    stage_pick_modes_json: used in the INSERT values (default {"1": "approver"}).
+    Existing callers omit both new params — behavior unchanged (backward-compatible).
+
+    Returns total rows inserted (0–N where N = 1 stage-1 option + len(or_set options)).
     """
     from datetime import UTC, datetime
 
     from durgam.models.crosscutting import ApprovalProcess, ApprovalStageOption
+
+    pick_modes = stage_pick_modes_json if stage_pick_modes_json is not None else {"1": "approver"}
 
     inserted = _exec_insert(
         session,
@@ -2823,7 +2860,7 @@ def _seed_faculty_simple_linear_process(
             requestor_role_codes=["FACULTY"],
             channel_role_codes=channel_role_codes,
             is_finance=False,
-            stage_pick_modes_json={"1": "approver"},
+            stage_pick_modes_json=pick_modes,
         )
         .on_conflict_do_nothing(constraint="uq_approval_processes_code"),
     )
@@ -2843,6 +2880,7 @@ def _seed_faculty_simple_linear_process(
             session.add(process)
             session.flush()
 
+        # Stage 1: resolver option (always seeded).
         existing_option = session.exec(
             select(ApprovalStageOption).where(
                 ApprovalStageOption.approval_process_id == process.id,
@@ -2865,6 +2903,33 @@ def _seed_faculty_simple_linear_process(
             session.add(option)
             session.flush()
             inserted += 1
+
+        # OR-set stages: one ApprovalStageOption per (resolver_name, label) tuple.
+        if or_set_stages:
+            for stage_idx, members in or_set_stages.items():
+                for sort_order, (resolver_nm, label) in enumerate(members):
+                    exists = session.exec(
+                        select(ApprovalStageOption).where(
+                            ApprovalStageOption.approval_process_id == process.id,
+                            ApprovalStageOption.stage_index == stage_idx,
+                            ApprovalStageOption.resolver_name == resolver_nm,
+                            ApprovalStageOption.is_deleted == False,  # noqa: E712
+                        )
+                    ).first()
+                    if exists is None:
+                        now = datetime.now(UTC)
+                        opt = ApprovalStageOption(
+                            approval_process_id=process.id,
+                            stage_index=stage_idx,
+                            resolver_name=resolver_nm,
+                            label=label,
+                            sort_order=sort_order,
+                            created_at=now,
+                            updated_at=now,
+                        )
+                        session.add(opt)
+                        session.flush()
+                        inserted += 1
 
     return inserted
 

@@ -97,8 +97,104 @@ def _resolve_dept_head_at_requestor_campus(
     return []
 
 
+def _resolve_director_at_requestor_campus(
+    ctx: ResolverContext, session: Session
+) -> list[User]:
+    """Resolve DIRECTOR role at requestor's Faculty.campus_id (partial E-019, Phase 5F).
+
+    Returns all users holding DIRECTOR role (campus-scoped) whose Faculty.campus_id
+    matches the requestor's Faculty.campus_id. Returns [] if requestor has no Faculty
+    record or no DIRECTOR role exists in DB.
+    """
+    from durgam.models.faculty import Faculty
+
+    faculty = session.exec(
+        select(Faculty).where(
+            Faculty.user_id == ctx.requestor_user_id,
+            Faculty.is_deleted == False,  # noqa: E712
+        )
+    ).first()
+
+    if faculty is None or faculty.campus_id is None:
+        return []
+
+    campus_id = faculty.campus_id
+
+    role = session.exec(
+        select(Role).where(
+            Role.code == "DIRECTOR",
+            Role.is_deleted == False,  # noqa: E712
+        )
+    ).first()
+    if role is None:
+        return []
+
+    stmt = (
+        select(User)
+        .join(UserRole, UserRole.user_id == User.id)
+        .join(Faculty, Faculty.user_id == User.id)
+        .where(UserRole.role_id == role.id)
+        .where(UserRole.scope_type == "campus")
+        .where(UserRole.scope_id == campus_id)
+        .where(User.is_deleted == False)  # noqa: E712
+        .where(User.is_active == True)  # noqa: E712
+        .where(Faculty.campus_id == campus_id)
+        .where(Faculty.is_deleted == False)  # noqa: E712
+    )
+    return list(session.exec(stmt).all())
+
+
+def _resolve_dean_at_requestor_campus(
+    ctx: ResolverContext, session: Session
+) -> list[User]:
+    """Resolve DEAN role at requestor's Faculty.campus_id (partial E-019, Phase 5F).
+
+    Returns all users holding DEAN role whose Faculty.campus_id matches the
+    requestor's Faculty.campus_id. Multiple Deans at the same campus all qualify;
+    the engine OR-set machinery routes to all of them and any can act.
+    DEAN is school-scoped (UserRole); campus matching is via Faculty.campus_id.
+    Returns [] if requestor has no Faculty record or no DEAN role exists in DB.
+    """
+    from durgam.models.faculty import Faculty
+
+    faculty = session.exec(
+        select(Faculty).where(
+            Faculty.user_id == ctx.requestor_user_id,
+            Faculty.is_deleted == False,  # noqa: E712
+        )
+    ).first()
+
+    if faculty is None or faculty.campus_id is None:
+        return []
+
+    campus_id = faculty.campus_id
+
+    role = session.exec(
+        select(Role).where(
+            Role.code == "DEAN",
+            Role.is_deleted == False,  # noqa: E712
+        )
+    ).first()
+    if role is None:
+        return []
+
+    stmt = (
+        select(User)
+        .join(UserRole, UserRole.user_id == User.id)
+        .join(Faculty, Faculty.user_id == User.id)
+        .where(UserRole.role_id == role.id)
+        .where(User.is_deleted == False)  # noqa: E712
+        .where(User.is_active == True)  # noqa: E712
+        .where(Faculty.campus_id == campus_id)
+        .where(Faculty.is_deleted == False)  # noqa: E712
+    )
+    return list(session.exec(stmt).all())
+
+
 RESOLVERS: dict[str, ResolverFn] = {
     "dept_head_at_requestor_campus": _resolve_dept_head_at_requestor_campus,
+    "director_at_requestor_campus": _resolve_director_at_requestor_campus,
+    "dean_at_requestor_campus": _resolve_dean_at_requestor_campus,
 }
 
 

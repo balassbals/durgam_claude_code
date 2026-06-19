@@ -14,8 +14,11 @@ from durgam.models.faculty_request import (
     FACULTY_REQUEST_STATUSES,
     FACULTY_REQUEST_TYPES,
     REQUEST_TYPE_APC,
+    REQUEST_TYPE_CONFERENCE,
     REQUEST_TYPE_EXTERNAL_GRANT_PROPOSAL,
+    REQUEST_TYPE_FDP,
     REQUEST_TYPE_FIELD_VISIT,
+    REQUEST_TYPE_INHOUSE_RESEARCH_FUNDING,
     REQUEST_TYPE_INVITED_TALK,
     REQUEST_TYPE_NOC,
     REQUEST_TYPE_PROFESSIONAL_MEMBERSHIP,
@@ -91,6 +94,9 @@ class TestCreateValidation:
             REQUEST_TYPE_APC,
             REQUEST_TYPE_TRAVEL,
             REQUEST_TYPE_EXTERNAL_GRANT_PROPOSAL,
+            REQUEST_TYPE_FDP,
+            REQUEST_TYPE_CONFERENCE,
+            REQUEST_TYPE_INHOUSE_RESEARCH_FUNDING,
         ],
     )
     def test_create_accepts_known_types(self, rtype):
@@ -142,10 +148,13 @@ class TestConstants:
             REQUEST_TYPE_APC,
             REQUEST_TYPE_TRAVEL,
             REQUEST_TYPE_EXTERNAL_GRANT_PROPOSAL,
+            REQUEST_TYPE_FDP,
+            REQUEST_TYPE_CONFERENCE,
+            REQUEST_TYPE_INHOUSE_RESEARCH_FUNDING,
         })
 
-    def test_types_has_exactly_eight_entries(self):
-        assert len(FACULTY_REQUEST_TYPES) == 8
+    def test_types_has_exactly_eleven_entries(self):
+        assert len(FACULTY_REQUEST_TYPES) == 11
 
     @pytest.mark.parametrize("rtype", [
         REQUEST_TYPE_INVITED_TALK,
@@ -155,6 +164,9 @@ class TestConstants:
         REQUEST_TYPE_APC,
         REQUEST_TYPE_TRAVEL,
         REQUEST_TYPE_EXTERNAL_GRANT_PROPOSAL,
+        REQUEST_TYPE_FDP,
+        REQUEST_TYPE_CONFERENCE,
+        REQUEST_TYPE_INHOUSE_RESEARCH_FUNDING,
     ])
     def test_new_types_in_frozenset(self, rtype):
         assert rtype in FACULTY_REQUEST_TYPES
@@ -176,6 +188,9 @@ class TestConstants:
         (REQUEST_TYPE_APC, "apc"),
         (REQUEST_TYPE_TRAVEL, "travel"),
         (REQUEST_TYPE_EXTERNAL_GRANT_PROPOSAL, "external_grant_proposal"),
+        (REQUEST_TYPE_FDP, "fdp"),
+        (REQUEST_TYPE_CONFERENCE, "conference"),
+        (REQUEST_TYPE_INHOUSE_RESEARCH_FUNDING, "inhouse_research_funding"),
     ])
     def test_new_constant_string_values(self, constant, expected):
         assert constant == expected
