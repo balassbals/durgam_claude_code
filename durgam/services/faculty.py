@@ -100,6 +100,10 @@ class InvalidPhdYearError(FacultyServiceError):
     """Raised when phd_year is outside [1900, current_year + 1]."""
 
 
+class OrcidRequiredError(FacultyServiceError):
+    """Raised when update_external_ids is called without a non-empty ORCID iD."""
+
+
 class FacultyService:
     def __init__(
         self,
@@ -488,8 +492,10 @@ class FacultyService:
             raise FacultyNotFoundError(f"Faculty {faculty_id} not found.")
         if faculty.user_id != actor_id:
             raise NotOwnerError("You can only edit your own Faculty profile.")
+        if not orcid or not orcid.strip():
+            raise OrcidRequiredError("ORCID iD is required.")
         return self._faculty.update(faculty_id, {
-            "orcid": orcid.strip() if orcid else None,
+            "orcid": orcid.strip(),
             "linkedin": linkedin.strip() if linkedin else None,
             "google_scholar": google_scholar.strip() if google_scholar else None,
             "researchgate": researchgate.strip() if researchgate else None,

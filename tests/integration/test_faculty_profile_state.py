@@ -33,6 +33,7 @@ from durgam.services.faculty import (
     FacultyService,
     InvalidPhdYearError,
     NotOwnerError,
+    OrcidRequiredError,
 )
 
 
@@ -206,6 +207,32 @@ class TestUpdateExternalIdsIntegration:
         assert updated.orcid == "https://orcid.org/0000-0001-2345-6789"
         assert updated.linkedin == "https://linkedin.com/in/testfaculty"
         assert updated.google_scholar is None
+
+    def test_orcid_required_raises_when_none(self, db_session: Session) -> None:
+        faculty = _make_faculty(db_session)
+        svc = _make_svc(db_session)
+        with pytest.raises(OrcidRequiredError):
+            svc.update_external_ids(
+                faculty.id,
+                orcid=None,
+                linkedin=None,
+                google_scholar=None,
+                researchgate=None,
+                actor_id=faculty.user_id,
+            )
+
+    def test_orcid_required_raises_when_empty(self, db_session: Session) -> None:
+        faculty = _make_faculty(db_session)
+        svc = _make_svc(db_session)
+        with pytest.raises(OrcidRequiredError):
+            svc.update_external_ids(
+                faculty.id,
+                orcid="",
+                linkedin=None,
+                google_scholar=None,
+                researchgate=None,
+                actor_id=faculty.user_id,
+            )
 
     def test_external_ids_phone_unchanged(self, db_session: Session) -> None:
         faculty = _make_faculty(db_session)

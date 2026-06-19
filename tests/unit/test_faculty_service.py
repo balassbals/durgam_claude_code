@@ -18,6 +18,7 @@ from durgam.services.faculty import (
     FacultyService,
     InvalidPhdYearError,
     NotOwnerError,
+    OrcidRequiredError,
 )
 
 
@@ -157,6 +158,68 @@ class TestUpdateExternalIds:
         assert set(fields_arg.keys()) == {"orcid", "linkedin", "google_scholar", "researchgate"}
         assert "phone" not in fields_arg
         assert "is_phd" not in fields_arg
+
+
+# ── update_external_ids — ORCID required (P1.1) ──────────────────────────────
+
+
+class TestUpdateExternalIdsOrcidValidation:
+    def test_orcid_required_raises_when_none(self):
+        actor = uuid4()
+        faculty = _make_faculty(user_id=actor)
+        svc = _make_svc(faculty)
+        with pytest.raises(OrcidRequiredError):
+            svc.update_external_ids(
+                faculty.id,
+                orcid=None,
+                linkedin=None,
+                google_scholar=None,
+                researchgate=None,
+                actor_id=actor,
+            )
+
+    def test_orcid_required_raises_when_empty(self):
+        actor = uuid4()
+        faculty = _make_faculty(user_id=actor)
+        svc = _make_svc(faculty)
+        with pytest.raises(OrcidRequiredError):
+            svc.update_external_ids(
+                faculty.id,
+                orcid="",
+                linkedin=None,
+                google_scholar=None,
+                researchgate=None,
+                actor_id=actor,
+            )
+
+    def test_orcid_required_raises_when_whitespace_only(self):
+        actor = uuid4()
+        faculty = _make_faculty(user_id=actor)
+        svc = _make_svc(faculty)
+        with pytest.raises(OrcidRequiredError):
+            svc.update_external_ids(
+                faculty.id,
+                orcid="   ",
+                linkedin=None,
+                google_scholar=None,
+                researchgate=None,
+                actor_id=actor,
+            )
+
+    def test_orcid_valid_succeeds(self):
+        actor = uuid4()
+        faculty = _make_faculty(user_id=actor)
+        svc = _make_svc(faculty)
+        svc.update_external_ids(
+            faculty.id,
+            orcid="https://orcid.org/0000-0001-2345-6789",
+            linkedin=None,
+            google_scholar=None,
+            researchgate=None,
+            actor_id=actor,
+        )
+        fields_arg = svc._faculty.update.call_args.args[1]
+        assert fields_arg["orcid"] == "https://orcid.org/0000-0001-2345-6789"
 
 
 # ── update_phd_section ────────────────────────────────────────────────────────

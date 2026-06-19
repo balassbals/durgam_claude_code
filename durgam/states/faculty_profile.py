@@ -27,6 +27,7 @@ from durgam.services.faculty import (
     FacultyService,
     InvalidPhdYearError,
     NotOwnerError,
+    OrcidRequiredError,
 )
 from durgam.states.base import BaseState
 
@@ -58,8 +59,6 @@ class FacultyProfileState(BaseState):
     success_message: str = ""
     has_faculty_record: bool = False
     faculty_id: str = ""
-    flash: str = ""
-    flash_type: str = "info"
 
     # Identity readonly (populated on load)
     employee_id: str = ""
@@ -145,10 +144,6 @@ class FacultyProfileState(BaseState):
     def set_phd_year_str(self, value: str) -> None:
         self.phd_year_str = value
 
-    def dismiss_flash(self) -> None:
-        self.flash = ""
-        self.flash_type = "info"
-
     # ── PhD confirm-clear dialog ─────────────────────────────────────────────
 
     def set_is_phd_with_confirm(self, value: bool) -> None:
@@ -160,14 +155,14 @@ class FacultyProfileState(BaseState):
     def open_clear_phd_confirm(self) -> None:
         self.show_clear_phd_confirm = True
 
-    async def confirm_clear_phd(self) -> None:
+    def confirm_clear_phd(self) -> list:
         self.is_phd = False
         self.phd_thesis_title = ""
         self.phd_registration_number = ""
         self.phd_awarding_institution = ""
         self.phd_year_str = ""
         self.show_clear_phd_confirm = False
-        await self.save_phd()
+        return [FacultyProfileState.save_phd]
 
     def cancel_clear_phd(self) -> None:
         self.is_phd = True
@@ -182,8 +177,6 @@ class FacultyProfileState(BaseState):
 
         self.loading = True
         self.error = ""
-        self.flash = ""
-        self.flash_type = "info"
         self.has_faculty_record = False
         self.faculty_id = ""
         self._load_nav_entries()
@@ -252,27 +245,17 @@ class FacultyProfileState(BaseState):
 
     @require_role(action="write", resource="faculty", scope="own")
     @audit_action(action="write", resource="faculty")
-    async def save_contact(self) -> None:
+    async def save_contact(self) -> rx.event.EventSpec | None:
         if not self.phone.strip():
-            self.flash = "Phone number is required."
-            self.flash_type = "error"
-            return
+            return rx.toast.error("Phone number is required.")
         if not self.emergency_contact_name.strip():
-            self.flash = "Emergency contact name is required."
-            self.flash_type = "error"
-            return
+            return rx.toast.error("Emergency contact name is required.")
         if not self.emergency_contact_relation.strip():
-            self.flash = "Emergency contact relation is required."
-            self.flash_type = "error"
-            return
+            return rx.toast.error("Emergency contact relation is required.")
         if not self.emergency_contact_phone.strip():
-            self.flash = "Emergency contact phone is required."
-            self.flash_type = "error"
-            return
+            return rx.toast.error("Emergency contact phone is required.")
         if self.alt_email.strip() and not _EMAIL_RE.match(self.alt_email.strip()):
-            self.flash = "Alternate email address is not valid."
-            self.flash_type = "error"
-            return
+            return rx.toast.error("Alternate email address is not valid.")
 
         with open_session() as session:
             svc = _build_svc(session)
@@ -292,16 +275,13 @@ class FacultyProfileState(BaseState):
                 after_snap = audit_snapshot(entity)
                 session.commit()
             except (FacultyNotFoundError, NotOwnerError) as exc:
-                self.flash = str(exc)
-                self.flash_type = "error"
-                return
+                return rx.toast.error(str(exc))
         self._set_audit(resource_id=self.faculty_id, before=before_snap, after=after_snap)
-        self.flash = "Contact information saved."
-        self.flash_type = "success"
+        return rx.toast.success("Contact information saved.")
 
     @require_role(action="write", resource="faculty", scope="own")
     @audit_action(action="write", resource="faculty")
-    async def save_external_ids(self) -> None:
+    async def save_external_ids(self) -> rx.event.EventSpec | None:
         with open_session() as session:
             svc = _build_svc(session)
             before_snap = audit_snapshot(svc.get_faculty(UUID(self.faculty_id)))
@@ -316,25 +296,22 @@ class FacultyProfileState(BaseState):
                 )
                 after_snap = audit_snapshot(entity)
                 session.commit()
+            except OrcidRequiredError as exc:
+                return rx.toast.error(str(exc))
             except (FacultyNotFoundError, NotOwnerError) as exc:
-                self.flash = str(exc)
-                self.flash_type = "error"
-                return
+                return rx.toast.error(str(exc))
         self._set_audit(resource_id=self.faculty_id, before=before_snap, after=after_snap)
-        self.flash = "External IDs saved."
-        self.flash_type = "success"
+        return rx.toast.success("External IDs saved.")
 
     @require_role(action="write", resource="faculty", scope="own")
     @audit_action(action="write", resource="faculty")
-    async def save_phd(self) -> None:
+    async def save_phd(self) -> rx.event.EventSpec | None:
         phd_year: int | None = None
         if self.phd_year_str.strip():
             try:
                 phd_year = int(self.phd_year_str.strip())
             except ValueError:
-                self.flash = "PhD year must be a 4-digit number."
-                self.flash_type = "error"
-                return
+                return rx.toast.error("PhD year must be a 4-digit number.")
 
         with open_session() as session:
             svc = _build_svc(session)
@@ -351,14 +328,7 @@ class FacultyProfileState(BaseState):
                 )
                 after_snap = audit_snapshot(entity)
                 session.commit()
-            except InvalidPhdYearError as exc:
-                self.flash = str(exc)
-                self.flash_type = "error"
-                return
-            except (FacultyNotFoundError, NotOwnerError) as exc:
-                self.flash = str(exc)
-                self.flash_type = "error"
-                return
+            except (InvalidPhdYearError, FacultyNotFoundError, NotOwnerError) as exc:
+                return rx.toast.error(str(exc))
         self._set_audit(resource_id=self.faculty_id, before=before_snap, after=after_snap)
-        self.flash = "PhD section saved."
-        self.flash_type = "success"
+        return rx.toast.success("PhD section saved.")

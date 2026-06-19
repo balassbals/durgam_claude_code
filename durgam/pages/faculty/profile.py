@@ -12,7 +12,6 @@ from __future__ import annotations
 import reflex as rx
 
 from durgam.pages.components import (
-    config_toast,
     nav_shell,
     primary_btn,
 )
@@ -192,10 +191,11 @@ def _external_ids_card() -> rx.Component:
         "External Profiles & IDs",
         rx.vstack(
             _input_row(
-                "ORCID",
+                "ORCID iD (required)",
                 FacultyProfileState.orcid,
                 FacultyProfileState.set_orcid,
                 placeholder="https://orcid.org/0000-0000-0000-0000",
+                required=True,
             ),
             _input_row(
                 "LinkedIn",
@@ -342,6 +342,7 @@ def faculty_profile_page() -> rx.Component:
     return rx.cond(
         AuthState.current_user_id != "",
         rx.vstack(
+            rx.toast.provider(),
             nav_shell(),
             rx.box(
                 rx.vstack(
@@ -372,11 +373,6 @@ def faculty_profile_page() -> rx.Component:
                 width="100%",
                 min_height="calc(100vh - 56px)",
                 background="var(--color-surface)",
-            ),
-            config_toast(
-                FacultyProfileState.flash,
-                FacultyProfileState.flash_type,
-                FacultyProfileState.dismiss_flash,
             ),
             spacing="0",
             width="100%",
