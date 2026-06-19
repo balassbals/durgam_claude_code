@@ -389,7 +389,7 @@ class FacultyProfileState(BaseState):
         self._set_audit(
             resource_id=self.faculty_id, before=before_snap, after=after_snap
         )
-        return [rx.toast.success("Photo uploaded."), FacultyProfileState.load_profile]
+        return [rx.toast.success("Photo uploaded."), rx.call_script("window.location.reload()")]
 
     @require_role(action="write", resource="faculty", scope="own")
     @audit_action(action="write", resource="faculty")
