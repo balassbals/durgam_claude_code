@@ -385,13 +385,11 @@ class FacultyProfileState(BaseState):
                 self.photo_uploading = False
                 return rx.toast.error(str(exc))
 
-        if new_photo_file_id:
-            self.current_photo_url = "/api/files/" + new_photo_file_id
         self.photo_uploading = False
         self._set_audit(
             resource_id=self.faculty_id, before=before_snap, after=after_snap
         )
-        return rx.toast.success("Photo uploaded.")
+        return [rx.toast.success("Photo uploaded."), FacultyProfileState.load_profile]
 
     @require_role(action="write", resource="faculty", scope="own")
     @audit_action(action="write", resource="faculty")
@@ -412,8 +410,7 @@ class FacultyProfileState(BaseState):
             except (FacultyNotFoundError, NotOwnerError) as exc:
                 return rx.toast.error(str(exc))
 
-        self.current_photo_url = ""
         self._set_audit(
             resource_id=self.faculty_id, before=before_snap, after=after_snap
         )
-        return rx.toast.success("Photo removed.")
+        return [rx.toast.success("Photo removed."), FacultyProfileState.load_profile]
