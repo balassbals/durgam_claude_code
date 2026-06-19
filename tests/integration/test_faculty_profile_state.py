@@ -9,6 +9,7 @@ persist to the real DB and enforce service rules.
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
+from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
@@ -16,6 +17,7 @@ from sqlmodel import Session
 
 from durgam.models.campus import Campus
 from durgam.models.config_anchors import Designation
+from durgam.models.crosscutting import FileAsset
 from durgam.models.department import Department
 from durgam.models.faculty import Faculty
 from durgam.models.identity import User
@@ -34,7 +36,10 @@ from durgam.services.faculty import (
     InvalidPhdYearError,
     NotOwnerError,
     OrcidRequiredError,
+    PhotoInvalidMimeError,
+    PhotoTooLargeError,
 )
+from durgam.storage.local import LocalFilesystemBackend
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -322,3 +327,104 @@ class TestUpdatePhdSectionIntegration:
                 phd_year=current_year + 10,
                 actor_id=faculty.user_id,
             )
+
+
+# ── update_photo (P2) ─────────────────────────────────────────────────────────
+
+
+_SMALL_JPEG = b"\xff\xd8\xff" + b"x" * 200
+_SMALL_PNG = b"\x89PNG\r\n\x1a\n" + b"x" * 200
+_OVER_1MB = b"x" * (1024 * 1024 + 1)
+
+
+class TestUpdatePhotoIntegration:
+    def test_jpeg_upload_sets_photo_file_id(self, db_session: Session, tmp_path) -> None:
+        faculty = _make_faculty(db_session)
+        svc = _make_svc(db_session)
+
+        with patch("durgam.storage.get_storage_backend",
+                   return_value=LocalFilesystemBackend(str(tmp_path))):
+            updated = svc.update_photo(
+                faculty.id,
+                file_bytes=_SMALL_JPEG,
+                original_filename="portrait.jpg",
+                mime_type="image/jpeg",
+                actor_id=faculty.user_id,
+            )
+
+        assert updated.photo_file_id is not None
+
+    def test_replaces_existing_photo_soft_deletes_old(
+        self, db_session: Session, tmp_path
+    ) -> None:
+        faculty = _make_faculty(db_session)
+        svc = _make_svc(db_session)
+        backend = LocalFilesystemBackend(str(tmp_path))
+
+        with patch("durgam.storage.get_storage_backend", return_value=backend):
+            first = svc.update_photo(
+                faculty.id,
+                file_bytes=_SMALL_JPEG,
+                original_filename="first.jpg",
+                mime_type="image/jpeg",
+                actor_id=faculty.user_id,
+            )
+            first_asset_id = first.photo_file_id
+            db_session.flush()
+
+            svc.update_photo(
+                faculty.id,
+                file_bytes=_SMALL_PNG,
+                original_filename="second.png",
+                mime_type="image/png",
+                actor_id=faculty.user_id,
+            )
+            db_session.flush()
+
+        old_asset = db_session.get(FileAsset, first_asset_id)
+        assert old_asset is not None
+        assert old_asset.is_deleted is True
+
+    def test_update_photo_invalid_mime_raises(
+        self, db_session: Session, tmp_path
+    ) -> None:
+        faculty = _make_faculty(db_session)
+        svc = _make_svc(db_session)
+
+        with patch("durgam.storage.get_storage_backend",
+                   return_value=LocalFilesystemBackend(str(tmp_path))):
+            with pytest.raises(PhotoInvalidMimeError):
+                svc.update_photo(
+                    faculty.id,
+                    file_bytes=b"%PDF-1.4",
+                    original_filename="doc.pdf",
+                    mime_type="application/pdf",
+                    actor_id=faculty.user_id,
+                )
+
+    def test_remove_photo_clears_field(
+        self, db_session: Session, tmp_path
+    ) -> None:
+        faculty = _make_faculty(db_session)
+        svc = _make_svc(db_session)
+        backend = LocalFilesystemBackend(str(tmp_path))
+
+        with patch("durgam.storage.get_storage_backend", return_value=backend):
+            svc.update_photo(
+                faculty.id,
+                file_bytes=_SMALL_JPEG,
+                original_filename="photo.jpg",
+                mime_type="image/jpeg",
+                actor_id=faculty.user_id,
+            )
+            db_session.flush()
+            removed = svc.remove_photo(faculty.id, actor_id=faculty.user_id)
+
+        assert removed.photo_file_id is None
+
+    def test_remove_photo_no_photo_is_noop(self, db_session: Session) -> None:
+        faculty = _make_faculty(db_session)
+        svc = _make_svc(db_session)
+        # faculty has no photo; should return without error
+        result = svc.remove_photo(faculty.id, actor_id=faculty.user_id)
+        assert result.id == faculty.id

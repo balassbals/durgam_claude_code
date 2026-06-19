@@ -12,10 +12,12 @@ from __future__ import annotations
 import reflex as rx
 
 from durgam.pages.components import (
+    destructive_btn,
     nav_shell,
     primary_btn,
 )
 from durgam.pages.shared.confirmation_dialog import confirmation_dialog
+from durgam.pages.shared.file_upload import file_upload_zone
 from durgam.states.auth import AuthState
 from durgam.states.faculty_profile import FacultyProfileState
 
@@ -304,6 +306,56 @@ def _phd_card() -> rx.Component:
     )
 
 
+def _photo_card() -> rx.Component:
+    return _card(
+        "Profile Photo",
+        rx.vstack(
+            rx.cond(
+                FacultyProfileState.current_photo_url != "",
+                rx.vstack(
+                    rx.image(
+                        src=FacultyProfileState.current_photo_url,
+                        width="120px",
+                        height="120px",
+                        object_fit="cover",
+                        border_radius="8px",
+                        border="1px solid var(--color-rule)",
+                    ),
+                    rx.text(
+                        "Current photo",
+                        font_size="0.75rem",
+                        color="var(--color-muted)",
+                    ),
+                    align="center",
+                    gap="0.5rem",
+                    margin_bottom="1rem",
+                ),
+                rx.fragment(),
+            ),
+            file_upload_zone(
+                on_drop=FacultyProfileState.handle_photo_upload(rx.upload_files()),
+                accept={"image/jpeg": [".jpg", ".jpeg"], "image/png": [".png"]},
+                label="Upload photo (JPEG or PNG, max 1MB)",
+            ),
+            rx.cond(
+                FacultyProfileState.current_photo_url != "",
+                rx.hstack(
+                    destructive_btn(
+                        "Remove Photo",
+                        on_click=FacultyProfileState.remove_photo,
+                        type="button",
+                    ),
+                    margin_top="0.5rem",
+                ),
+                rx.fragment(),
+            ),
+            align="start",
+            gap="0.75rem",
+            width="100%",
+        ),
+    )
+
+
 def _no_faculty_record_message() -> rx.Component:
     return rx.box(
         rx.heading("No Faculty Profile", size="5", margin_bottom="0.75rem"),
@@ -355,6 +407,7 @@ def faculty_profile_page() -> rx.Component:
                             _no_faculty_record_message(),
                             rx.vstack(
                                 _identity_card(),
+                                _photo_card(),
                                 _contact_card(),
                                 _external_ids_card(),
                                 _phd_card(),

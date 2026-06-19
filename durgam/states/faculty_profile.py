@@ -28,6 +28,8 @@ from durgam.services.faculty import (
     InvalidPhdYearError,
     NotOwnerError,
     OrcidRequiredError,
+    PhotoInvalidMimeError,
+    PhotoTooLargeError,
 )
 from durgam.states.base import BaseState
 
@@ -96,6 +98,10 @@ class FacultyProfileState(BaseState):
 
     # PhD confirm-clear dialog
     show_clear_phd_confirm: bool = False
+
+    # Photo
+    current_photo_url: str = ""
+    photo_uploading: bool = False
 
     # ── Setters (M7 rule: explicit setters for form-bound vars) ──────────────
 
@@ -239,6 +245,12 @@ class FacultyProfileState(BaseState):
             self.phd_awarding_institution = faculty.phd_awarding_institution or ""
             self.phd_year_str = str(faculty.phd_year) if faculty.phd_year else ""
 
+            # Photo URL — read attribute while session is still open
+            if faculty.photo_file_id is not None:
+                self.current_photo_url = "/api/files/" + str(faculty.photo_file_id)
+            else:
+                self.current_photo_url = ""
+
         self.loading = False
 
     # ── Save handlers ────────────────────────────────────────────────────────
@@ -332,3 +344,76 @@ class FacultyProfileState(BaseState):
                 return rx.toast.error(str(exc))
         self._set_audit(resource_id=self.faculty_id, before=before_snap, after=after_snap)
         return rx.toast.success("PhD section saved.")
+
+    @require_role(action="write", resource="faculty", scope="own")
+    @audit_action(action="write", resource="faculty")
+    async def handle_photo_upload(
+        self, files: list[rx.UploadFile]
+    ) -> rx.event.EventSpec | None:
+        if not self.has_faculty_record:
+            return rx.toast.error("No Faculty profile found.")
+        if not files:
+            return rx.toast.error("No file received.")
+
+        self.photo_uploading = True
+        f = files[0]
+        file_bytes = await f.read()
+
+        new_photo_file_id: str | None = None
+        with open_session() as session:
+            svc = _build_svc(session)
+            before_snap = audit_snapshot(svc.get_faculty(UUID(self.faculty_id)))
+            try:
+                entity = svc.update_photo(
+                    UUID(self.faculty_id),
+                    file_bytes=file_bytes,
+                    original_filename=f.filename or "photo.jpg",
+                    mime_type=f.content_type or "image/jpeg",
+                    actor_id=UUID(self.current_user_id),
+                )
+                after_snap = audit_snapshot(entity)
+                new_photo_file_id = (
+                    str(entity.photo_file_id) if entity.photo_file_id else None
+                )
+                session.commit()
+            except (
+                PhotoInvalidMimeError,
+                PhotoTooLargeError,
+                FacultyNotFoundError,
+                NotOwnerError,
+            ) as exc:
+                self.photo_uploading = False
+                return rx.toast.error(str(exc))
+
+        if new_photo_file_id:
+            self.current_photo_url = "/api/files/" + new_photo_file_id
+        self.photo_uploading = False
+        self._set_audit(
+            resource_id=self.faculty_id, before=before_snap, after=after_snap
+        )
+        return rx.toast.success("Photo uploaded.")
+
+    @require_role(action="write", resource="faculty", scope="own")
+    @audit_action(action="write", resource="faculty")
+    async def remove_photo(self) -> rx.event.EventSpec | None:
+        if not self.has_faculty_record:
+            return rx.toast.error("No Faculty profile found.")
+
+        with open_session() as session:
+            svc = _build_svc(session)
+            before_snap = audit_snapshot(svc.get_faculty(UUID(self.faculty_id)))
+            try:
+                entity = svc.remove_photo(
+                    UUID(self.faculty_id),
+                    actor_id=UUID(self.current_user_id),
+                )
+                after_snap = audit_snapshot(entity)
+                session.commit()
+            except (FacultyNotFoundError, NotOwnerError) as exc:
+                return rx.toast.error(str(exc))
+
+        self.current_photo_url = ""
+        self._set_audit(
+            resource_id=self.faculty_id, before=before_snap, after=after_snap
+        )
+        return rx.toast.success("Photo removed.")

@@ -104,6 +104,18 @@ class OrcidRequiredError(FacultyServiceError):
     """Raised when update_external_ids is called without a non-empty ORCID iD."""
 
 
+class PhotoInvalidMimeError(FacultyServiceError):
+    """Raised when uploaded photo MIME is not image/jpeg or image/png."""
+
+
+class PhotoTooLargeError(FacultyServiceError):
+    """Raised when uploaded photo exceeds 1MB."""
+
+
+_PHOTO_ALLOWED_MIMES: frozenset[str] = frozenset({"image/jpeg", "image/png"})
+_PHOTO_MAX_BYTES: int = 1024 * 1024  # 1MB
+
+
 class FacultyService:
     def __init__(
         self,
@@ -541,6 +553,91 @@ class FacultyService:
                 "phd_year": phd_year,
             }
         return self._faculty.update(faculty_id, fields, actor_id)
+
+    # ── Photo management ──────────────────────────────────────────────────────
+
+    def update_photo(
+        self,
+        faculty_id: UUID,
+        *,
+        file_bytes: bytes,
+        original_filename: str,
+        mime_type: str,
+        actor_id: UUID,
+    ) -> Faculty:
+        """Validate MIME + size, soft-delete previous photo, upload new, update FK.
+
+        Raises PhotoInvalidMimeError for non-image MIME.
+        Raises PhotoTooLargeError when file_bytes exceeds 1MB.
+        Raises FacultyNotFoundError / NotOwnerError when appropriate.
+        """
+        if mime_type not in _PHOTO_ALLOWED_MIMES:
+            raise PhotoInvalidMimeError(
+                f"Photo must be JPEG or PNG, got '{mime_type}'."
+            )
+        if len(file_bytes) > _PHOTO_MAX_BYTES:
+            raise PhotoTooLargeError("Photo must be 1MB or less.")
+
+        faculty = self._faculty.get(faculty_id)
+        if faculty is None:
+            raise FacultyNotFoundError(f"Faculty {faculty_id} not found.")
+        if faculty.user_id != actor_id:
+            raise NotOwnerError("You can only edit your own Faculty profile.")
+
+        from durgam.models.crosscutting import FileAsset
+        from durgam.repositories.file_asset import FileAssetRepository
+        from durgam.services.upload import UploadService
+        from durgam.storage import get_storage_backend
+
+        file_repo = FileAssetRepository(self._faculty._session)
+        upload_svc = UploadService(
+            file_repo=file_repo,
+            backend=get_storage_backend(),
+            allowed_mimes=_PHOTO_ALLOWED_MIMES,
+            max_size_mb=1,
+        )
+
+        if faculty.photo_file_id is not None:
+            old_asset = self._faculty._session.get(FileAsset, faculty.photo_file_id)
+            if old_asset is not None and not old_asset.is_deleted:
+                file_repo.soft_delete(old_asset, actor_id)
+
+        new_asset = upload_svc.upload(
+            data=file_bytes,
+            original_name=original_filename,
+            mime_type=mime_type,
+            actor_id=actor_id,
+            purpose="faculty_photo",
+        )
+        return self._faculty.update(faculty_id, {"photo_file_id": new_asset.id}, actor_id)
+
+    def remove_photo(
+        self,
+        faculty_id: UUID,
+        *,
+        actor_id: UUID,
+    ) -> Faculty:
+        """Soft-delete current photo FileAsset and clear Faculty.photo_file_id.
+
+        No-op (no error) if no photo is currently set.
+        """
+        faculty = self._faculty.get(faculty_id)
+        if faculty is None:
+            raise FacultyNotFoundError(f"Faculty {faculty_id} not found.")
+        if faculty.user_id != actor_id:
+            raise NotOwnerError("You can only edit your own Faculty profile.")
+
+        if faculty.photo_file_id is not None:
+            from durgam.models.crosscutting import FileAsset
+            from durgam.repositories.file_asset import FileAssetRepository
+
+            file_repo = FileAssetRepository(self._faculty._session)
+            old_asset = self._faculty._session.get(FileAsset, faculty.photo_file_id)
+            if old_asset is not None and not old_asset.is_deleted:
+                file_repo.soft_delete(old_asset, actor_id)
+            return self._faculty.update(faculty_id, {"photo_file_id": None}, actor_id)
+
+        return faculty
 
     # ── Private validators ────────────────────────────────────────────────────
 
