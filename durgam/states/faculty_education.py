@@ -234,6 +234,13 @@ class FacultyEducationState(BaseState):
                 return rx.toast.error(str(exc))
 
         self._set_audit(resource_id=resource_id_for_audit, after=after_snap)
+        self.show_form = False
+        self.form_edu_id = ""
+        self.form_degree_name = ""
+        self.form_specialization = ""
+        self.form_awarding_institution = ""
+        self.form_year_str = ""
+        self.form_distinction = ""
         return [
             rx.toast.success("Education record saved."),
             rx.call_script("window.location.reload()"),
