@@ -262,6 +262,9 @@ class FacultyEducationState(BaseState):
                 return rx.toast.error(str(exc))
 
         self._set_audit(resource_id=self.deleting_id, before=before_snap)
+        self.show_delete_confirm = False
+        self.deleting_id = ""
+        self.deleting_degree = ""
         return [
             rx.toast.success("Education record deleted."),
             rx.call_script("window.location.reload()"),
