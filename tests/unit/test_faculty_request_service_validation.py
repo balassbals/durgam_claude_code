@@ -13,10 +13,13 @@ import pytest
 from durgam.models.faculty_request import (
     FACULTY_REQUEST_STATUSES,
     FACULTY_REQUEST_TYPES,
+    REQUEST_TYPE_APC,
+    REQUEST_TYPE_EXTERNAL_GRANT_PROPOSAL,
     REQUEST_TYPE_FIELD_VISIT,
     REQUEST_TYPE_INVITED_TALK,
     REQUEST_TYPE_NOC,
     REQUEST_TYPE_PROFESSIONAL_MEMBERSHIP,
+    REQUEST_TYPE_TRAVEL,
     REQUEST_TYPE_WFH,
     STATUS_APPROVED,
     STATUS_DRAFT,
@@ -85,6 +88,9 @@ class TestCreateValidation:
             REQUEST_TYPE_PROFESSIONAL_MEMBERSHIP,
             REQUEST_TYPE_WFH,
             REQUEST_TYPE_FIELD_VISIT,
+            REQUEST_TYPE_APC,
+            REQUEST_TYPE_TRAVEL,
+            REQUEST_TYPE_EXTERNAL_GRANT_PROPOSAL,
         ],
     )
     def test_create_accepts_known_types(self, rtype):
@@ -133,16 +139,22 @@ class TestConstants:
             REQUEST_TYPE_PROFESSIONAL_MEMBERSHIP,
             REQUEST_TYPE_WFH,
             REQUEST_TYPE_FIELD_VISIT,
+            REQUEST_TYPE_APC,
+            REQUEST_TYPE_TRAVEL,
+            REQUEST_TYPE_EXTERNAL_GRANT_PROPOSAL,
         })
 
-    def test_types_has_exactly_five_entries(self):
-        assert len(FACULTY_REQUEST_TYPES) == 5
+    def test_types_has_exactly_eight_entries(self):
+        assert len(FACULTY_REQUEST_TYPES) == 8
 
     @pytest.mark.parametrize("rtype", [
         REQUEST_TYPE_INVITED_TALK,
         REQUEST_TYPE_PROFESSIONAL_MEMBERSHIP,
         REQUEST_TYPE_WFH,
         REQUEST_TYPE_FIELD_VISIT,
+        REQUEST_TYPE_APC,
+        REQUEST_TYPE_TRAVEL,
+        REQUEST_TYPE_EXTERNAL_GRANT_PROPOSAL,
     ])
     def test_new_types_in_frozenset(self, rtype):
         assert rtype in FACULTY_REQUEST_TYPES
@@ -161,6 +173,9 @@ class TestConstants:
         (REQUEST_TYPE_PROFESSIONAL_MEMBERSHIP, "professional_membership"),
         (REQUEST_TYPE_WFH, "wfh"),
         (REQUEST_TYPE_FIELD_VISIT, "field_visit"),
+        (REQUEST_TYPE_APC, "apc"),
+        (REQUEST_TYPE_TRAVEL, "travel"),
+        (REQUEST_TYPE_EXTERNAL_GRANT_PROPOSAL, "external_grant_proposal"),
     ])
     def test_new_constant_string_values(self, constant, expected):
         assert constant == expected

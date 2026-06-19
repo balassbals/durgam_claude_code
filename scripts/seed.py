@@ -2692,6 +2692,26 @@ def seed(session: Session) -> dict[str, int]:
         channel_role_codes=["HOD", "DIRECTOR"],
     )
 
+    # ── ApprovalProcess — 3 terminal-variant faculty processes (M10 Phase 5E) ─
+    counts["faculty_apc_process"] = _seed_faculty_simple_linear_process(
+        session,
+        code="faculty_apc",
+        title="Faculty Article Processing Charge Request",
+        channel_role_codes=["HOD", "FINANCE_OFFICER", "VC"],
+    )
+    counts["faculty_travel_process"] = _seed_faculty_simple_linear_process(
+        session,
+        code="faculty_travel",
+        title="Faculty Travel Request",
+        channel_role_codes=["HOD", "DIRECTOR", "VC"],
+    )
+    counts["faculty_external_grant_proposal_process"] = _seed_faculty_simple_linear_process(
+        session,
+        code="faculty_external_grant_proposal",
+        title="Faculty External Grant Proposal Submission Request",
+        channel_role_codes=["HOD", "REGISTRAR"],
+    )
+
     session.commit()
     return counts
 
