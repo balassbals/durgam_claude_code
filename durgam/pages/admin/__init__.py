@@ -30,6 +30,14 @@ register(NavEntry(
     permission_resource="role",
 ))
 register(NavEntry(
+    label="Faculty",
+    href="/admin/faculty",
+    icon="graduation-cap",
+    group="Admin",
+    permission_action="read",
+    permission_resource="faculty",
+))
+register(NavEntry(
     label="Permissions",
     href="/admin/permissions",
     icon="key",

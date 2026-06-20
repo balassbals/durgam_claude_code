@@ -272,6 +272,61 @@ class FacultyService:
     def list_by_campus(self, campus_id: UUID) -> list[Faculty]:
         return self._faculty.list_by_campus(campus_id)
 
+    def list_faculty_for_admin(
+        self,
+        *,
+        search: str | None = None,
+        department_codes: list[str] | None = None,
+        campus_codes: list[str] | None = None,
+        designations: list[str] | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> tuple[list[dict], int]:
+        """Admin directory listing (P6). Returns (rows, total_count). Rows are
+        flat non-PII dicts: faculty_id, employee_id, name, designation,
+        department_code, campus. Active faculty only. Caller asserts read
+        permission upstream. No PAN/Aadhaar or other sensitive fields.
+        """
+        offset = max(page - 1, 0) * page_size
+        raw, total = self._faculty.list_with_filters(
+            search=search,
+            department_codes=department_codes,
+            campus_codes=campus_codes,
+            designations=designations,
+            offset=offset,
+            limit=page_size,
+        )
+        rows: list[dict] = []
+        for (
+            faculty_id,
+            employee_id,
+            title,
+            first_name,
+            middle_name,
+            last_name,
+            designation_name,
+            department_code,
+            campus_code,
+        ) in raw:
+            name_parts = [title, first_name, middle_name, last_name]
+            name = " ".join(p for p in name_parts if p)
+            rows.append(
+                {
+                    "faculty_id": str(faculty_id),
+                    "employee_id": employee_id,
+                    "name": name,
+                    "designation": designation_name,
+                    "department_code": department_code,
+                    "campus": campus_code,
+                }
+            )
+        return rows, total
+
+    def faculty_filter_options(self) -> tuple[list[str], list[str], list[str]]:
+        """Return (department_codes, campus_codes, designation_names) for the
+        admin directory filter dropdowns."""
+        return self._faculty.distinct_filter_options()
+
     # ── Education ─────────────────────────────────────────────────────────────
 
     def add_education(

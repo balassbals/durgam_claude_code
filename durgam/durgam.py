@@ -10,7 +10,9 @@ from durgam.pages.admin.index import admin_index
 from durgam.pages.admin.permissions import AdminPermissionsState, admin_permissions
 from durgam.pages.admin.roles import admin_role_create, admin_role_detail, admin_roles
 from durgam.pages.admin.user_detail import admin_user_create
+from durgam.pages.admin.faculty_list import faculty_admin_list_page
 from durgam.pages.admin.users import admin_users
+from durgam.states.faculty_admin import FacultyAdminListState
 from durgam.pages.audit.index import AuditLogState, audit_log
 from durgam.pages.change_password import change_password
 from durgam.pages.forgot_password import forgot_password
@@ -61,6 +63,8 @@ app.add_page(admin_users, route="/admin/users", on_load=AdminUsersState.load_use
 app.add_page(admin_user_create, route="/admin/users/new",
              on_load=[AdminUsersState.load_available_roles, PermissionCheckState.clear_widget])
 app.add_page(admin_roles, route="/admin/roles", on_load=AdminRolesState.load_roles)
+app.add_page(faculty_admin_list_page, route="/admin/faculty",
+             on_load=FacultyAdminListState.load_records)
 app.add_page(admin_role_create, route="/admin/roles/new",
              on_load=AdminRolesState.load_roles)
 app.add_page(admin_role_detail, route="/admin/roles/[role_id]",

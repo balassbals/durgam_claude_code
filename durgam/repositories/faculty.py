@@ -82,6 +82,102 @@ class FacultyRepository:
         )
         return rows, total
 
+    def list_with_filters(
+        self,
+        *,
+        search: str | None = None,
+        department_codes: list[str] | None = None,
+        campus_codes: list[str] | None = None,
+        designations: list[str] | None = None,
+        offset: int = 0,
+        limit: int = 20,
+    ) -> tuple[list[tuple], int]:
+        """Admin directory listing — joins designation/department/campus for
+        display + filtering. Returns (rows, total). Each row is a tuple:
+        (faculty_id, employee_id, title, first_name, middle_name, last_name,
+         designation_name, department_code, campus_code). No PII fields.
+        Active faculty only.
+        """
+        from durgam.models.campus import Campus
+        from durgam.models.config_anchors import Designation
+        from durgam.models.department import Department
+
+        base = (
+            select(
+                Faculty.id,
+                Faculty.employee_id,
+                Faculty.title,
+                Faculty.first_name,
+                Faculty.middle_name,
+                Faculty.last_name,
+                Designation.name,
+                Department.code,
+                Campus.code,
+            )
+            .join(Designation, Designation.id == Faculty.designation_id)
+            .join(Department, Department.id == Faculty.department_id)
+            .join(Campus, Campus.id == Faculty.campus_id)
+            .where(Faculty.is_deleted == False)  # noqa: E712
+        )
+
+        if search:
+            pattern = f"%{search.strip().lower()}%"
+            base = base.where(
+                func.lower(
+                    Faculty.first_name
+                    + " "
+                    + func.coalesce(Faculty.middle_name, "")
+                    + " "
+                    + Faculty.last_name
+                ).like(pattern)
+                | func.lower(Faculty.employee_id).like(pattern)
+            )
+        if department_codes:
+            base = base.where(Department.code.in_(department_codes))
+        if campus_codes:
+            base = base.where(Campus.code.in_(campus_codes))
+        if designations:
+            base = base.where(Designation.name.in_(designations))
+
+        total = self._session.exec(
+            select(func.count()).select_from(base.subquery())
+        ).one()
+        ordered = base.order_by(Faculty.employee_id).offset(offset).limit(limit)
+        rows = list(self._session.exec(ordered).all())
+        return rows, total
+
+    def distinct_filter_options(self) -> tuple[list[str], list[str], list[str]]:
+        """Return (department_codes, campus_codes, designation_names) for active
+        faculty, each sorted and deduplicated — used to populate filter dropdowns.
+        """
+        from durgam.models.campus import Campus
+        from durgam.models.config_anchors import Designation
+        from durgam.models.department import Department
+
+        dept_rows = self._session.exec(
+            select(Department.code)
+            .join(Faculty, Faculty.department_id == Department.id)
+            .where(Faculty.is_deleted == False)  # noqa: E712
+            .distinct()
+        ).all()
+        campus_rows = self._session.exec(
+            select(Campus.code)
+            .join(Faculty, Faculty.campus_id == Campus.id)
+            .where(Faculty.is_deleted == False)  # noqa: E712
+            .distinct()
+        ).all()
+        desig_rows = self._session.exec(
+            select(Designation.name)
+            .join(Faculty, Faculty.designation_id == Designation.id)
+            .where(Faculty.is_deleted == False)  # noqa: E712
+            .distinct()
+        ).all()
+        return (
+            sorted(dept_rows),
+            sorted(campus_rows),
+            sorted(desig_rows),
+        )
+
     def create(self, faculty: Faculty) -> Faculty:
         self._session.add(faculty)
         self._session.flush()

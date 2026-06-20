@@ -1181,3 +1181,92 @@ class TestListDocumentsSorted:
         result = svc.list_documents(faculty.id)
         ats = [d.created_at for d in result]
         assert ats == sorted(ats, reverse=True)
+
+
+# ── Admin directory listing (P6) ──────────────────────────────────────────────
+
+
+def _make_svc_admin() -> tuple[FacultyService, object]:
+    """Return (svc, faculty_repo_mock) for list_faculty_for_admin tests."""
+    faculty_repo = MagicMock()
+    svc = FacultyService.__new__(FacultyService)
+    svc._faculty = faculty_repo
+    svc._education = MagicMock()
+    svc._experience = MagicMock()
+    svc._expertise = MagicMock()
+    svc._document = MagicMock()
+    svc._workload = MagicMock()
+    return svc, faculty_repo
+
+
+def _admin_row(emp, first, last, desig, dept, campus):
+    # mirrors the repo tuple shape:
+    # (faculty_id, employee_id, title, first, middle, last, desig, dept_code, campus_code)
+    return (uuid4(), emp, "Dr", first, None, last, desig, dept, campus)
+
+
+class TestListFacultyForAdmin:
+    def test_returns_flat_dicts_no_pii(self):
+        svc, repo = _make_svc_admin()
+        repo.list_with_filters.return_value = (
+            [_admin_row("E1", "Asha", "Rao", "Professor", "DMACS", "PSN")],
+            1,
+        )
+        rows, total = svc.list_faculty_for_admin()
+        assert total == 1
+        assert rows[0]["employee_id"] == "E1"
+        assert rows[0]["name"] == "Dr Asha Rao"
+        assert rows[0]["designation"] == "Professor"
+        assert rows[0]["department_code"] == "DMACS"
+        assert rows[0]["campus"] == "PSN"
+        # No PII keys leak
+        for forbidden in ("pan", "aadhaar", "pan_enc", "aadhaar_enc", "phone"):
+            assert forbidden not in rows[0]
+
+    def test_passes_filters_to_repo(self):
+        svc, repo = _make_svc_admin()
+        repo.list_with_filters.return_value = ([], 0)
+        svc.list_faculty_for_admin(
+            search="rao",
+            department_codes=["DMACS"],
+            campus_codes=["PSN"],
+            designations=["Professor"],
+            page=1,
+            page_size=20,
+        )
+        kwargs = repo.list_with_filters.call_args.kwargs
+        assert kwargs["search"] == "rao"
+        assert kwargs["department_codes"] == ["DMACS"]
+        assert kwargs["campus_codes"] == ["PSN"]
+        assert kwargs["designations"] == ["Professor"]
+
+    def test_pagination_offset_computed(self):
+        svc, repo = _make_svc_admin()
+        repo.list_with_filters.return_value = ([], 0)
+        svc.list_faculty_for_admin(page=3, page_size=20)
+        kwargs = repo.list_with_filters.call_args.kwargs
+        assert kwargs["offset"] == 40
+        assert kwargs["limit"] == 20
+
+    def test_page_one_offset_zero(self):
+        svc, repo = _make_svc_admin()
+        repo.list_with_filters.return_value = ([], 0)
+        svc.list_faculty_for_admin(page=1, page_size=25)
+        assert repo.list_with_filters.call_args.kwargs["offset"] == 0
+
+    def test_name_skips_missing_middle(self):
+        svc, repo = _make_svc_admin()
+        repo.list_with_filters.return_value = (
+            [(uuid4(), "E2", "Mr", "Kiran", None, "Das", "Lecturer", "DPHY", "BLR")],
+            1,
+        )
+        rows, _ = svc.list_faculty_for_admin()
+        assert rows[0]["name"] == "Mr Kiran Das"
+
+    def test_filter_options_delegates_to_repo(self):
+        svc, repo = _make_svc_admin()
+        repo.distinct_filter_options.return_value = (["DMACS"], ["PSN"], ["Professor"])
+        depts, campuses, desigs = svc.faculty_filter_options()
+        assert depts == ["DMACS"]
+        assert campuses == ["PSN"]
+        assert desigs == ["Professor"]

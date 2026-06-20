@@ -1419,3 +1419,42 @@ First-action-wins semantics per Q-P5C.1 freeze: any user in the resolved pool ca
 - TD-083.3 (downward attachments — RESOLVED): See description above.
 
 **Filed:** M10 Phase 7C, 2026-06-17. **Partially resolved:** Phase 7C-fix, 2026-06-17.
+
+
+---
+
+### TD-084 — PAN/Aadhaar encryption-at-rest layer required before P5 UI can ship
+
+**Phase:** M10 Phase P5 (attempted during the combined P5+P6 turn). **Status:** Open — blocking P5. **Priority:** Medium-High (sensitive PII).
+
+**Note on numbering:** The originating prompt referenced this as "TD-070", but TD-070 is already in use (Migration test isolation). Filed as TD-084 (next free number); all P5/P6 code, M10.md, and CLAUDE.md references point to TD-084.
+
+**What it is:** `User.pan_enc` + `User.aadhaar_enc` are declared with the `_enc`
+suffix indicating encryption-at-rest intent (also listed in `User._audit_redact_fields`,
+and sized 128/512 — far wider than plaintext PAN(10)/Aadhaar(12), i.e. sized for
+ciphertext). No encryption layer (Fernet, KMS, or otherwise) currently exists in the
+codebase, and the two fields are never read or written by any code — they are
+unimplemented Phase 1A placeholders.
+
+**Why P5 is blocked:** Phase P5 (sensitive section UI on `/faculty/profile`) assumed
+plain PAN/Aadhaar fields on the `Faculty` model. Reality: the fields live on `User`,
+encrypted-by-intent. Every path forward hits a wall:
+- Adding `pan`/`aadhaar` to the `Faculty` model is a schema change (out of P5 scope).
+- Writing plaintext into `User.pan_enc`/`aadhaar_enc` is a security regression — it
+  defeats the at-rest-encryption intent for the system's most sensitive identifiers.
+- Building an encryption module + config key + crypto dependency is a milestone-boundary
+  decision needing its own design.
+
+**Blocking decisions:**
+a) Key storage strategy (env var minimum; ideally external secret store).
+b) Key rotation policy.
+c) Audit-on-decrypt (likely required for sensitive PII access; relates to deferred audit-on-reveal).
+d) Fixture key for tests.
+e) Schema validation that existing column types/widths accommodate ciphertext + IV/nonce.
+
+**Suggested execution:** separate "Security Foundations" mini-milestone OR an M11 prelude.
+
+**Resolution path:** Resolve (a)–(e), implement the crypto module + decrypt-on-read
+path, then ship Phase P5 (sensitive section UI) against `User.pan_enc`/`aadhaar_enc`.
+
+**Filed:** M10 Phase P5+P6 attempt, 2026-06-20. P5 deferred; P6 (`/admin/faculty`) shipped independently.

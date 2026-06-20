@@ -244,3 +244,25 @@ class TestFacultyNavGate:
         assert entry.permission_resource == "faculty"
         assert entry.permission_scope_type == "own"
         assert entry.group == "Faculty"
+
+
+class TestAdminFacultyNavGate:
+    @classmethod
+    def setup_class(cls):
+        import durgam.pages.admin  # noqa: F401 — triggers admin nav registration
+
+    def test_admin_faculty_nav_entry_registered(self):
+        """'Faculty' admin directory entry gated by faculty:read:* (P6)."""
+        entries = get_all()
+        entry = next(
+            (
+                e
+                for e in entries
+                if e.label == "Faculty" and e.href == "/admin/faculty"
+            ),
+            None,
+        )
+        assert entry is not None, "'Faculty' admin nav entry not found in registry"
+        assert entry.permission_action == "read"
+        assert entry.permission_resource == "faculty"
+        assert entry.group == "Admin"
