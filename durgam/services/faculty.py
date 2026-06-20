@@ -327,6 +327,169 @@ class FacultyService:
         admin directory filter dropdowns."""
         return self._faculty.distinct_filter_options()
 
+    def list_faculty_for_directory(
+        self,
+        *,
+        search: str | None = None,
+        department_codes: list[str] | None = None,
+        campus_codes: list[str] | None = None,
+        designations: list[str] | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> tuple[list[dict], int]:
+        """Peer-view directory listing (Phase 8A). Returns (rows, total_count).
+        Rows are flat non-PII dicts: faculty_id, employee_id, name, designation,
+        department_code, campus_code, photo_file_id ("" when none). Active faculty
+        only. The caller (state) builds the download URL from photo_file_id —
+        URL construction stays out of the service layer. No PAN/Aadhaar.
+        """
+        offset = max(page - 1, 0) * page_size
+        raw, total = self._faculty.list_for_directory_with_filters(
+            search=search,
+            department_codes=department_codes,
+            campus_codes=campus_codes,
+            designations=designations,
+            offset=offset,
+            limit=page_size,
+        )
+        rows: list[dict] = []
+        for (
+            faculty_id,
+            employee_id,
+            title,
+            first_name,
+            middle_name,
+            last_name,
+            designation_name,
+            department_code,
+            campus_code,
+            photo_file_id,
+        ) in raw:
+            name = " ".join(
+                p for p in (title, first_name, middle_name, last_name) if p
+            )
+            rows.append(
+                {
+                    "faculty_id": str(faculty_id),
+                    "employee_id": employee_id,
+                    "name": name,
+                    "designation": designation_name,
+                    "department_code": department_code,
+                    "campus_code": campus_code,
+                    "photo_file_id": str(photo_file_id) if photo_file_id else "",
+                }
+            )
+        return rows, total
+
+    def get_faculty_detail(
+        self, faculty_id: UUID, *, viewer_user_id: UUID
+    ) -> dict:
+        """Peer-view read-only detail (Phase 8A). Faculty identity + contact +
+        external IDs + PhD + Education/Experience/Expertise. NO PAN/Aadhaar
+        (deferred per TD-084 + Q-PP.7), NO FacultyDocuments (private). The state
+        builds the photo download URL from photo_file_id. Raises
+        FacultyNotFoundError when absent.
+        """
+        from durgam.models.campus import Campus
+        from durgam.models.config_anchors import Designation
+        from durgam.models.department import Department
+        from durgam.models.identity import User
+
+        faculty = self._faculty.get(faculty_id)
+        if faculty is None:
+            raise FacultyNotFoundError(f"Faculty {faculty_id} not found.")
+
+        session = self._faculty._session
+        desig = session.get(Designation, faculty.designation_id)
+        dept = session.get(Department, faculty.department_id)
+        campus = session.get(Campus, faculty.campus_id)
+        user = session.get(User, faculty.user_id)
+
+        phd: dict | None = None
+        if faculty.is_phd:
+            phd = {
+                "thesis_title": faculty.phd_thesis_title or "",
+                "registration_number": faculty.phd_registration_number or "",
+                "awarding_institution": faculty.phd_awarding_institution or "",
+                "year": str(faculty.phd_year) if faculty.phd_year else "",
+            }
+
+        education = [
+            {
+                "id": str(e.id),
+                "degree_name": e.degree_name,
+                "specialization": e.specialization or "",
+                "awarding_institution": e.awarding_institution,
+                "year_of_award": str(e.year_of_award),
+                "distinction": e.distinction or "",
+            }
+            for e in self.list_education(faculty_id)
+        ]
+        experience = [
+            {
+                "id": str(x.id),
+                "organization": x.organization,
+                "designation_held": x.designation_held,
+                "date_range": (
+                    x.from_date.isoformat()
+                    + " – "
+                    + (x.to_date.isoformat() if x.to_date else "Present")
+                ),
+                "responsibilities": x.responsibilities or "",
+            }
+            for x in self.list_experience(faculty_id)
+        ]
+        expertise = [
+            {
+                "id": str(a.id),
+                "area": a.area,
+                "proficiency": a.proficiency or "",
+            }
+            for a in self.list_expertise(faculty_id)
+        ]
+
+        return {
+            "faculty_id": str(faculty.id),
+            "employee_id": faculty.employee_id,
+            "title": faculty.title,
+            "first_name": faculty.first_name,
+            "middle_name": faculty.middle_name or "",
+            "last_name": faculty.last_name,
+            "name": " ".join(
+                p
+                for p in (
+                    faculty.title,
+                    faculty.first_name,
+                    faculty.middle_name,
+                    faculty.last_name,
+                )
+                if p
+            ),
+            "designation": desig.name if desig else "",
+            "department_code": dept.code if dept else "",
+            "campus_code": campus.code if campus else "",
+            "joining_date": (
+                faculty.joining_date.isoformat() if faculty.joining_date else ""
+            ),
+            "employee_type": user.employee_type if user else "",
+            "is_vacation_employee": faculty.is_vacation_employee,
+            "phone": faculty.phone or "",
+            "whatsapp": faculty.whatsapp or "",
+            "alt_phone": faculty.alt_phone or "",
+            "alt_email": faculty.alt_email or "",
+            "orcid": faculty.orcid or "",
+            "linkedin": faculty.linkedin or "",
+            "google_scholar": faculty.google_scholar or "",
+            "researchgate": faculty.researchgate or "",
+            "phd": phd,
+            "photo_file_id": (
+                str(faculty.photo_file_id) if faculty.photo_file_id else ""
+            ),
+            "education": education,
+            "experience": experience,
+            "expertise": expertise,
+        }
+
     # ── Education ─────────────────────────────────────────────────────────────
 
     def add_education(

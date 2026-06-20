@@ -337,10 +337,14 @@ from durgam.pages.faculty.profile_education import faculty_education_page
 from durgam.pages.faculty.profile_documents import faculty_documents_page
 from durgam.pages.faculty.profile_experience import faculty_experience_page
 from durgam.pages.faculty.profile_expertise import faculty_expertise_page
+from durgam.pages.faculty.directory import faculty_directory_page
+from durgam.pages.faculty.detail import faculty_detail_page
 from durgam.states.faculty_document import FacultyDocumentState
 from durgam.states.faculty_education import FacultyEducationState
 from durgam.states.faculty_experience import FacultyExperienceState
 from durgam.states.faculty_expertise import FacultyExpertiseState
+from durgam.states.faculty_directory import FacultyDirectoryState
+from durgam.states.faculty_detail import FacultyDetailState
 from durgam.states.faculty_profile import FacultyProfileState
 
 app.add_page(
@@ -376,5 +380,23 @@ app.add_page(
     route="/faculty/profile/documents",
     on_load=FacultyDocumentState.load_documents,
     title="My Documents — DURGAM",
+)
+
+# Phase 8A: peer-view directory + detail
+app.add_page(
+    faculty_directory_page,
+    route="/faculty",
+    on_load=FacultyDirectoryState.load_records,
+    title="Faculty Directory — DURGAM",
+)
+
+app.add_page(
+    faculty_detail_page,
+    # URL segment named 'fid' (not 'faculty_id') — a dynamic route arg is injected
+    # as a state var on every state, and 'faculty_id' already exists on several
+    # faculty states (FacultyProfileState etc.). 'fid' avoids that collision.
+    route="/faculty/[fid]",
+    on_load=FacultyDetailState.load_detail,
+    title="Faculty — DURGAM",
 )
 

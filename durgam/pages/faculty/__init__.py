@@ -76,3 +76,16 @@ register(
         permission_scope_type="own",
     )
 )
+
+# Phase 8A: peer-view directory of all active faculty (read-only). Detail view
+# at /faculty/{faculty_id} is reached by clicking a card, not via the nav.
+register(
+    NavEntry(
+        label="Faculty Directory",
+        href="/faculty",
+        icon="users",
+        group="Faculty",
+        permission_action="read",
+        permission_resource="faculty",
+    )
+)

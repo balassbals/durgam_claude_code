@@ -1270,3 +1270,79 @@ class TestListFacultyForAdmin:
         assert depts == ["DMACS"]
         assert campuses == ["PSN"]
         assert desigs == ["Professor"]
+
+
+# ── Directory + detail (Phase 8A) ─────────────────────────────────────────────
+
+
+def _dir_row(fid, emp, first, last, desig, dept, campus, photo=None):
+    # repo list_for_directory_with_filters tuple shape:
+    # (faculty_id, employee_id, title, first, middle, last, desig, dept, campus, photo_file_id)
+    return (fid, emp, "Dr", first, None, last, desig, dept, campus, photo)
+
+
+class TestListFacultyForDirectory:
+    def _svc(self):
+        faculty_repo = MagicMock()
+        svc = FacultyService.__new__(FacultyService)
+        svc._faculty = faculty_repo
+        svc._education = MagicMock()
+        svc._experience = MagicMock()
+        svc._expertise = MagicMock()
+        svc._document = MagicMock()
+        svc._workload = MagicMock()
+        return svc, faculty_repo
+
+    def test_rows_include_photo_file_id_no_pii(self):
+        svc, repo = self._svc()
+        pid = uuid4()
+        repo.list_for_directory_with_filters.return_value = (
+            [_dir_row(uuid4(), "E1", "Asha", "Rao", "Professor", "DMACS", "PSN", pid)],
+            1,
+        )
+        rows, total = svc.list_faculty_for_directory()
+        assert total == 1
+        assert rows[0]["name"] == "Dr Asha Rao"
+        assert rows[0]["photo_file_id"] == str(pid)
+        assert rows[0]["department_code"] == "DMACS"
+        assert rows[0]["campus_code"] == "PSN"
+        for forbidden in ("pan", "aadhaar", "pan_enc", "aadhaar_enc", "photo_url"):
+            assert forbidden not in rows[0]
+
+    def test_no_photo_yields_empty_string(self):
+        svc, repo = self._svc()
+        repo.list_for_directory_with_filters.return_value = (
+            [_dir_row(uuid4(), "E2", "Kiran", "Das", "Lecturer", "DPHY", "BLR", None)],
+            1,
+        )
+        rows, _ = svc.list_faculty_for_directory()
+        assert rows[0]["photo_file_id"] == ""
+
+    def test_passes_filters_and_pagination(self):
+        svc, repo = self._svc()
+        repo.list_for_directory_with_filters.return_value = ([], 0)
+        svc.list_faculty_for_directory(
+            search="rao", department_codes=["DMACS"], campus_codes=["PSN"],
+            designations=["Professor"], page=3, page_size=12,
+        )
+        kw = repo.list_for_directory_with_filters.call_args.kwargs
+        assert kw["search"] == "rao"
+        assert kw["department_codes"] == ["DMACS"]
+        assert kw["offset"] == 24
+        assert kw["limit"] == 12
+
+
+class TestGetFacultyDetail:
+    def test_not_found_raises(self):
+        from durgam.services.faculty import FacultyNotFoundError
+        faculty_repo = MagicMock()
+        faculty_repo.get.return_value = None
+        svc = FacultyService.__new__(FacultyService)
+        svc._faculty = faculty_repo
+        svc._education = MagicMock()
+        svc._experience = MagicMock()
+        svc._expertise = MagicMock()
+        svc._document = MagicMock()
+        svc._workload = MagicMock()
+        with pytest.raises(FacultyNotFoundError):
+            svc.get_faculty_detail(uuid4(), viewer_user_id=uuid4())

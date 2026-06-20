@@ -263,6 +263,22 @@ class TestFacultyNavGate:
         assert entry.permission_scope_type == "own"
         assert entry.group == "Faculty"
 
+    def test_faculty_directory_nav_entry_registered(self):
+        """Phase 8A: 'Faculty Directory' peer-view entry under Faculty, faculty:read."""
+        entries = get_all()
+        entry = next(
+            (
+                e
+                for e in entries
+                if e.label == "Faculty Directory" and e.href == "/faculty"
+            ),
+            None,
+        )
+        assert entry is not None, "'Faculty Directory' nav entry not found in registry"
+        assert entry.permission_action == "read"
+        assert entry.permission_resource == "faculty"
+        assert entry.group == "Faculty"
+
 
 class TestAdminFacultyNavGate:
     @classmethod
