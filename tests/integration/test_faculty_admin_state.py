@@ -219,3 +219,28 @@ class TestListFacultyForAdminIntegration:
         assert depts == sorted(depts)
         assert campuses == sorted(campuses)
         assert desigs == sorted(desigs)
+
+
+class TestFacultyAdminStateVarTypes:
+    """P6.1 regression: the three filter-option vars must be list[str].
+
+    desig_options must NOT collide with the inherited BaseState.designation_options
+    (typed list[dict[str, str]]); a same-name redeclaration keeps the parent's dict
+    type and Reflex rejects the list[str] assignment at runtime, blanking the group.
+    """
+
+    def test_option_vars_are_list_str(self) -> None:
+        from durgam.states.faculty_admin import FacultyAdminListState
+
+        assert FacultyAdminListState.dept_options._var_type == list[str]
+        assert FacultyAdminListState.campus_options._var_type == list[str]
+        assert FacultyAdminListState.desig_options._var_type == list[str]
+
+    def test_no_designation_options_collision(self) -> None:
+        """The renamed var exists; the colliding name is not redeclared here."""
+        from durgam.states.faculty_admin import FacultyAdminListState
+
+        assert hasattr(FacultyAdminListState, "desig_options")
+        # The inherited designation_options keeps its BaseState dict type; this
+        # subclass must not have re-typed it to list[str].
+        assert FacultyAdminListState.designation_options._var_type == list[dict[str, str]]

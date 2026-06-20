@@ -27,33 +27,57 @@ _COLUMNS = [
 ]
 
 
-def _filter_chip(label: rx.Var, selected: rx.Var, on_click) -> rx.Component:
-    return rx.button(
-        label,
-        on_click=on_click,
-        size="1",
-        variant=rx.cond(selected, "solid", "soft"),
-        color_scheme=rx.cond(selected, "indigo", "gray"),
-        cursor="pointer",
-    )
-
-
-def _filter_group(title: str, options: rx.Var, selected: rx.Var, toggle) -> rx.Component:
-    return rx.vstack(
-        rx.text(title, font_size="0.8rem", font_weight="600", color="var(--color-muted)"),
-        rx.hstack(
-            rx.foreach(
-                options,
-                lambda opt: _filter_chip(
-                    opt, selected.contains(opt), toggle(opt)
+def _filter_dropdown(
+    label: str, options: rx.Var, selected: rx.Var, toggle
+) -> rx.Component:
+    """Popover + checkbox multi-select. Trigger shows a selected-count badge."""
+    return rx.popover.root(
+        rx.popover.trigger(
+            rx.button(
+                rx.hstack(
+                    rx.text(label),
+                    rx.cond(
+                        selected.length() > 0,
+                        rx.badge(selected.length().to_string(), color_scheme="indigo"),
+                        rx.fragment(),
+                    ),
+                    rx.icon("chevron-down", size=16),
+                    align="center",
+                    spacing="2",
                 ),
+                variant="outline",
+                size="2",
+                cursor="pointer",
+                type="button",
             ),
-            gap="0.4rem",
-            wrap="wrap",
         ),
-        align="start",
-        gap="0.3rem",
-        width="100%",
+        rx.popover.content(
+            rx.vstack(
+                rx.cond(
+                    options.length() == 0,
+                    rx.text("No options available", color="gray", size="2"),
+                    rx.foreach(
+                        options,
+                        lambda opt: rx.hstack(
+                            rx.checkbox(
+                                checked=selected.contains(opt),
+                                on_change=toggle(opt),
+                            ),
+                            rx.text(opt, size="2"),
+                            spacing="2",
+                            align="center",
+                            width="100%",
+                        ),
+                    ),
+                ),
+                spacing="2",
+                max_height="320px",
+                overflow_y="auto",
+                padding="2",
+                min_width="240px",
+                align="start",
+            ),
+        ),
     )
 
 
@@ -125,23 +149,29 @@ def _content() -> rx.Component:
                     margin_bottom="0.75rem",
                 ),
                 _search_bar(),
-                _filter_group(
-                    "Department",
-                    FacultyAdminListState.dept_options,
-                    FacultyAdminListState.selected_departments,
-                    FacultyAdminListState.toggle_department,
-                ),
-                _filter_group(
-                    "Campus",
-                    FacultyAdminListState.campus_options,
-                    FacultyAdminListState.selected_campuses,
-                    FacultyAdminListState.toggle_campus,
-                ),
-                _filter_group(
-                    "Designation",
-                    FacultyAdminListState.designation_options,
-                    FacultyAdminListState.selected_designations,
-                    FacultyAdminListState.toggle_designation,
+                rx.hstack(
+                    _filter_dropdown(
+                        "Department",
+                        FacultyAdminListState.dept_options,
+                        FacultyAdminListState.selected_departments,
+                        FacultyAdminListState.toggle_department,
+                    ),
+                    _filter_dropdown(
+                        "Campus",
+                        FacultyAdminListState.campus_options,
+                        FacultyAdminListState.selected_campuses,
+                        FacultyAdminListState.toggle_campus,
+                    ),
+                    _filter_dropdown(
+                        "Designation",
+                        FacultyAdminListState.desig_options,
+                        FacultyAdminListState.selected_designations,
+                        FacultyAdminListState.toggle_designation,
+                    ),
+                    gap="0.6rem",
+                    wrap="wrap",
+                    align="center",
+                    width="100%",
                 ),
                 rx.cond(
                     FacultyAdminListState.loading,

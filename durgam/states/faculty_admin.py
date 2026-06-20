@@ -49,7 +49,11 @@ class FacultyAdminListState(BaseState):
 
     dept_options: list[str] = []
     campus_options: list[str] = []
-    designation_options: list[str] = []
+    # NOTE: named desig_options (not designation_options) to avoid colliding with
+    # the inherited BaseState.designation_options, which is typed list[dict[str,str]]
+    # for config pages. A same-name redeclaration keeps the parent's dict type and
+    # Reflex rejects this list[str] assignment at runtime. See M10 P6.1 / base.py:56.
+    desig_options: list[str] = []
 
     # ── Derived ────────────────────────────────────────────────────────────────
 
@@ -90,7 +94,7 @@ class FacultyAdminListState(BaseState):
             depts, campuses, desigs = svc.faculty_filter_options()
             self.dept_options = depts
             self.campus_options = campuses
-            self.designation_options = desigs
+            self.desig_options = desigs
         self._run_query()
         self.loading = False
         self._load_nav_entries()
