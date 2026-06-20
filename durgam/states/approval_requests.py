@@ -411,6 +411,17 @@ class SubmitRequestState(BaseState):
                 })
             self.process_options = eligible
 
+        # Phase 6: optional deep-link pre-selection via ?process=<code>
+        # (e.g. /approvals/submit?process=faculty_fdp). Falls through to the
+        # default "none" when the param is absent or matches no eligible process,
+        # preserving the unchanged manual-selection behaviour.
+        requested_code = self.router.page.params.get("process", "")
+        if requested_code:
+            for opt in self.process_options:
+                if opt["code"] == requested_code:
+                    self.selected_process_id = opt["id"]
+                    break
+
         self._load_nav_entries()
 
     def on_process_change(self, value: str) -> None:

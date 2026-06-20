@@ -99,3 +99,45 @@ class TestProcessOptionsFilter:
         assert len(result) == 1
         assert result[0]["requires_upward"] is True
         assert result[0]["max_upward"] == 5
+
+
+# ── Phase 6: deep-link process pre-selection ──────────────────────────────────
+
+
+def _preselect_process_id(process_options, requested_code, default="none"):
+    """Replicates the ?process=<code> pre-selection logic from load_submit.
+
+    Returns the matching process's id, or `default` ("none") when the param is
+    absent or matches no eligible process — preserving manual-selection behaviour.
+    """
+    selected = default
+    if requested_code:
+        for opt in process_options:
+            if opt["code"] == requested_code:
+                selected = opt["id"]
+                break
+    return selected
+
+
+class TestDeepLinkPreselection:
+    def _options(self):
+        return _filter_processes(
+            [
+                _make_process("faculty_noc", "Faculty NOC"),
+                _make_process("faculty_fdp", "Faculty FDP"),
+            ],
+            {"FACULTY"},
+        )
+
+    def test_matching_param_preselects_process_id(self):
+        opts = self._options()
+        fdp_id = next(o["id"] for o in opts if o["code"] == "faculty_fdp")
+        assert _preselect_process_id(opts, "faculty_fdp") == fdp_id
+
+    def test_absent_param_falls_through_to_none(self):
+        opts = self._options()
+        assert _preselect_process_id(opts, "") == "none"
+
+    def test_unmatched_param_falls_through_to_none(self):
+        opts = self._options()
+        assert _preselect_process_id(opts, "faculty_does_not_exist") == "none"

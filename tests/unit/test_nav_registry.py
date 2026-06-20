@@ -245,6 +245,24 @@ class TestFacultyNavGate:
         assert entry.permission_scope_type == "own"
         assert entry.group == "Faculty"
 
+    def test_raise_fdp_request_nav_entry_registered(self):
+        """Phase 6: 'Raise FDP Request' deep-link under Faculty, faculty:write:own."""
+        entries = get_all()
+        entry = next(
+            (
+                e
+                for e in entries
+                if e.label == "Raise FDP Request"
+                and e.href == "/approvals/submit?process=faculty_fdp"
+            ),
+            None,
+        )
+        assert entry is not None, "'Raise FDP Request' nav entry not found in registry"
+        assert entry.permission_action == "write"
+        assert entry.permission_resource == "faculty"
+        assert entry.permission_scope_type == "own"
+        assert entry.group == "Faculty"
+
 
 class TestAdminFacultyNavGate:
     @classmethod
