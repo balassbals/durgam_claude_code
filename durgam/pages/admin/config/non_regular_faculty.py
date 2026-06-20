@@ -87,7 +87,7 @@ def _kebab(row: dict) -> rx.Component:
                 rx.menu.item(
                     "Renew contract",
                     on_click=NonRegularFacultyConfigState.open_renew(  # type: ignore[call-arg, func-returns-value]
-                        row["id"], row["name"], row["available_to"]
+                        row["id"]
                     ),
                 ),
                 rx.menu.item(

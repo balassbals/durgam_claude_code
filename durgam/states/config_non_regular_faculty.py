@@ -232,10 +232,18 @@ class NonRegularFacultyConfigState(BaseState):
 
     # ── Phase 9A: contract renewal ───────────────────────────────────────────
 
-    def open_renew(self, record_id: str, name: str, current_to: str) -> None:
+    def open_renew(self, record_id: str) -> None:
+        # Single-arg lookup (M9 / P3a convention): bind only row["id"]; resolve the
+        # display fields from the already-loaded visitors list. Multi-arg menu.item
+        # on_click binding was unreliable and left renew_id empty (9A.1 fix).
         self.renew_id = record_id
-        self.renew_name = name
-        self.renew_current_to = current_to
+        self.renew_name = ""
+        self.renew_current_to = ""
+        for v in self.visitors:
+            if v["id"] == record_id:
+                self.renew_name = v["name"]
+                self.renew_current_to = v["available_to"]
+                break
         self.form_renew_to = ""
         self.show_renew = True
         self.flash = ""

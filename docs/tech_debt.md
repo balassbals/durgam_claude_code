@@ -1460,3 +1460,16 @@ e) Schema validation that existing column types/widths accommodate ciphertext + 
 path, then ship Phase P5 (sensitive section UI) against `User.pan_enc`/`aadhaar_enc`.
 
 **Filed:** M10 Phase P5+P6 attempt, 2026-06-20. P5 deferred; P6 (`/admin/faculty`) shipped independently.
+
+---
+
+### TD-085 — NonRegularFaculty extension workflow (HoD-initiated, university-admin-approved)
+
+**Status:** Open — deferred to Phase 11 or M11. **Priority:** Medium. (Prompt referenced this as "TD-086"; filed as TD-085, the next free number.)
+
+Phase 9A shipped sys_admin **direct** NRF renewal (`NonRegularFacultyService.renew` + admin config "Renew contract" modal) as an admin-override capability. The proper workflow per SSSIHL practice is not yet implemented: department HoD raises an NRF **extension request** → university admin approves through the existing approval engine → renewal applied automatically. Needs:
+- (a) `nrf_extension` ApprovalProcess seed with HoD-as-requestor + university-admin approval chain,
+- (b) request-creation UI for the HoD,
+- (c) an approval-on-completion hook that calls `NonRegularFacultyService.renew` on terminal approval.
+
+The direct-renew override stays (parallels the `is_admin_approved` flag). See Q-P9A.1 for context. Discovered at M10 Phase 9A.1 walkthrough.
