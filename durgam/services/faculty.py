@@ -132,8 +132,24 @@ class ExpertiseNotFoundError(FacultyServiceError):
     """Raised when an expertise record is not found or already deleted."""
 
 
+class DocumentNotFoundError(FacultyServiceError):
+    """Raised when a faculty document is not found or already deleted."""
+
+
+class DocumentInvalidMimeError(FacultyServiceError):
+    """Raised when an uploaded document MIME is not application/pdf."""
+
+
+class DocumentTooLargeError(FacultyServiceError):
+    """Raised when an uploaded document exceeds 2MB."""
+
+
 _PHOTO_ALLOWED_MIMES: frozenset[str] = frozenset({"image/jpeg", "image/png"})
 _PHOTO_MAX_BYTES: int = 1024 * 1024  # 1MB
+
+# Document upload whitelist — additive, isolated to purpose="faculty_document".
+_DOCUMENT_ALLOWED_MIMES: frozenset[str] = frozenset({"application/pdf"})
+_DOCUMENT_MAX_BYTES: int = 2 * 1024 * 1024  # 2MB
 
 
 class FacultyService:
@@ -495,7 +511,111 @@ class FacultyService:
         return self._document.soft_delete(doc_id, actor_id)
 
     def list_documents(self, faculty_id: UUID) -> list[FacultyDocument]:
-        return self._document.list_by_faculty(faculty_id)
+        records = self._document.list_by_faculty(faculty_id)
+        return sorted(records, key=lambda d: d.created_at, reverse=True)
+
+    # ── Document upload path (P4 — free-form type + file bytes) ───────────────
+
+    def upload_document(
+        self,
+        faculty_id: UUID,
+        *,
+        document_type: str,
+        description: str | None,
+        file_bytes: bytes,
+        original_filename: str,
+        mime_type: str,
+        actor_id: UUID,
+    ) -> FacultyDocument:
+        """Validate PDF MIME + 2MB cap, upload bytes, create FileAsset + FacultyDocument.
+
+        Mirrors update_photo's storage flow (P2.3 corrected path).
+        Raises DocumentInvalidMimeError / DocumentTooLargeError / FacultyNotFoundError /
+        NotOwnerError.
+        """
+        if mime_type not in _DOCUMENT_ALLOWED_MIMES:
+            raise DocumentInvalidMimeError("Document must be PDF.")
+        if len(file_bytes) > _DOCUMENT_MAX_BYTES:
+            raise DocumentTooLargeError("Document must be 2MB or less.")
+
+        faculty = self._faculty.get(faculty_id)
+        if faculty is None:
+            raise FacultyNotFoundError(f"Faculty {faculty_id} not found.")
+        if faculty.user_id != actor_id:
+            raise NotOwnerError("You can only edit your own Faculty profile.")
+
+        from durgam.repositories.file_asset import FileAssetRepository
+        from durgam.services.upload import UploadService
+        from durgam.storage import get_storage_backend
+
+        file_repo = FileAssetRepository(self._faculty._session)
+        upload_svc = UploadService(
+            file_repo=file_repo,
+            backend=get_storage_backend(),
+            allowed_mimes=_DOCUMENT_ALLOWED_MIMES,
+            max_size_mb=2,
+        )
+        new_asset = upload_svc.upload(
+            data=file_bytes,
+            original_name=original_filename,
+            mime_type=mime_type,
+            actor_id=actor_id,
+            purpose="faculty_document",
+        )
+
+        now = datetime.now(UTC)
+        doc = FacultyDocument(
+            faculty_id=faculty_id,
+            file_asset_id=new_asset.id,
+            doc_type=document_type.strip(),
+            description=description,
+            created_by=actor_id,
+            updated_by=actor_id,
+            created_at=now,
+            updated_at=now,
+        )
+        return self._document.create(doc)
+
+    def update_document_metadata(
+        self,
+        doc_id: UUID,
+        *,
+        document_type: str,
+        description: str | None,
+        actor_id: UUID,
+    ) -> FacultyDocument:
+        """Update document type + description only. File is immutable post-upload."""
+        doc = self._document.get(doc_id)
+        if doc is None:
+            raise DocumentNotFoundError(f"Document record {doc_id} not found.")
+        faculty = self._faculty.get(doc.faculty_id)
+        if faculty is None or faculty.user_id != actor_id:
+            raise NotOwnerError("You can only edit your own documents.")
+        return self._document.update(
+            doc_id,
+            {"doc_type": document_type.strip(), "description": description},
+            actor_id,
+        )
+
+    def remove_document_and_file(
+        self, doc_id: UUID, actor_id: UUID
+    ) -> FacultyDocument:
+        """Soft-delete both the FacultyDocument and its linked FileAsset."""
+        doc = self._document.get(doc_id)
+        if doc is None:
+            raise DocumentNotFoundError(f"Document record {doc_id} not found.")
+        faculty = self._faculty.get(doc.faculty_id)
+        if faculty is None or faculty.user_id != actor_id:
+            raise NotOwnerError("You can only delete your own documents.")
+
+        from durgam.models.crosscutting import FileAsset
+        from durgam.repositories.file_asset import FileAssetRepository
+
+        file_repo = FileAssetRepository(self._faculty._session)
+        asset = self._faculty._session.get(FileAsset, doc.file_asset_id)
+        if asset is not None and not asset.is_deleted:
+            file_repo.soft_delete(asset, actor_id)
+        return self._document.soft_delete(doc_id, actor_id)
 
     # ── Workload ──────────────────────────────────────────────────────────────
 

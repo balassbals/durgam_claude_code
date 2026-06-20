@@ -14,6 +14,9 @@ import pytest
 
 from durgam.models.faculty import Faculty
 from durgam.services.faculty import (
+    DocumentInvalidMimeError,
+    DocumentNotFoundError,
+    DocumentTooLargeError,
     EducationNotFoundError,
     ExperienceNotFoundError,
     ExpertiseNotFoundError,
@@ -968,3 +971,213 @@ class TestListExpertiseSorted:
         xp_repo.list_by_faculty.return_value = [_xp("Networks"), _xp("AI"), _xp("ml")]
         result = svc.list_expertise(faculty.id)
         assert [e.area for e in result] == ["AI", "ml", "Networks"]
+
+
+# ── Document upload (P4) ──────────────────────────────────────────────────────
+
+_SMALL_PDF = b"%PDF-1.4\n" + b"x" * 100
+_OVER_2MB = b"x" * (2 * 1024 * 1024 + 1)
+
+
+def _make_svc_with_doc(faculty=None, doc=None) -> tuple[FacultyService, object, object]:
+    """Return (svc, faculty_repo_mock, document_repo_mock)."""
+    faculty_repo = MagicMock()
+    faculty_repo.get.return_value = faculty
+
+    doc_repo = MagicMock()
+    doc_repo.get.return_value = doc
+    doc_repo.update.return_value = doc
+    doc_repo.soft_delete.return_value = doc
+    doc_repo.list_by_faculty.return_value = []
+
+    svc = FacultyService.__new__(FacultyService)
+    svc._faculty = faculty_repo
+    svc._education = MagicMock()
+    svc._experience = MagicMock()
+    svc._expertise = MagicMock()
+    svc._document = doc_repo
+    svc._workload = MagicMock()
+    return svc, faculty_repo, doc_repo
+
+
+class TestUploadDocument:
+    def test_invalid_mime_raises(self):
+        actor = uuid4()
+        faculty = _make_faculty(user_id=actor)
+        svc, _, _ = _make_svc_with_doc(faculty=faculty)
+        with pytest.raises(DocumentInvalidMimeError, match="PDF"):
+            svc.upload_document(
+                faculty.id, document_type="Cert", description=None,
+                file_bytes=b"\xff\xd8\xff", original_filename="x.jpg",
+                mime_type="image/jpeg", actor_id=actor,
+            )
+
+    def test_oversized_raises(self):
+        actor = uuid4()
+        faculty = _make_faculty(user_id=actor)
+        svc, _, _ = _make_svc_with_doc(faculty=faculty)
+        with pytest.raises(DocumentTooLargeError, match="2MB"):
+            svc.upload_document(
+                faculty.id, document_type="Cert", description=None,
+                file_bytes=_OVER_2MB, original_filename="big.pdf",
+                mime_type="application/pdf", actor_id=actor,
+            )
+
+    def test_faculty_not_found_raises(self):
+        svc, _, _ = _make_svc_with_doc(faculty=None)
+        with pytest.raises(FacultyNotFoundError):
+            svc.upload_document(
+                uuid4(), document_type="Cert", description=None,
+                file_bytes=_SMALL_PDF, original_filename="x.pdf",
+                mime_type="application/pdf", actor_id=uuid4(),
+            )
+
+    def test_not_owner_raises(self):
+        actor = uuid4()
+        faculty = _make_faculty(user_id=uuid4())
+        svc, _, _ = _make_svc_with_doc(faculty=faculty)
+        with pytest.raises(NotOwnerError):
+            svc.upload_document(
+                faculty.id, document_type="Cert", description=None,
+                file_bytes=_SMALL_PDF, original_filename="x.pdf",
+                mime_type="application/pdf", actor_id=actor,
+            )
+
+    def test_valid_pdf_creates_file_asset_and_document(self):
+        actor = uuid4()
+        new_asset_id = uuid4()
+        faculty = _make_faculty(user_id=actor)
+        svc, faculty_repo, doc_repo = _make_svc_with_doc(faculty=faculty)
+        faculty_repo._session = MagicMock()
+
+        mock_asset = MagicMock()
+        mock_asset.id = new_asset_id
+        mock_upload = MagicMock()
+        mock_upload.upload.return_value = mock_asset
+        doc_repo.create.side_effect = lambda d: d
+
+        with patch("durgam.repositories.file_asset.FileAssetRepository"), \
+             patch("durgam.services.upload.UploadService", return_value=mock_upload), \
+             patch("durgam.storage.get_storage_backend"):
+            doc = svc.upload_document(
+                faculty.id, document_type="PhD Certificate",
+                description="Awarded 2018", file_bytes=_SMALL_PDF,
+                original_filename="phd.pdf", mime_type="application/pdf",
+                actor_id=actor,
+            )
+
+        mock_upload.upload.assert_called_once()
+        assert mock_upload.upload.call_args.kwargs["purpose"] == "faculty_document"
+        doc_repo.create.assert_called_once()
+        assert doc.file_asset_id == new_asset_id
+        assert doc.doc_type == "PhD Certificate"
+
+
+class TestUpdateDocumentMetadata:
+    def _make_doc(self, faculty_id):
+        d = MagicMock()
+        d.id = uuid4()
+        d.faculty_id = faculty_id
+        d.file_asset_id = uuid4()
+        return d
+
+    def test_not_found_raises(self):
+        svc, _, _ = _make_svc_with_doc(faculty=_make_faculty(), doc=None)
+        with pytest.raises(DocumentNotFoundError):
+            svc.update_document_metadata(
+                uuid4(), document_type="X", description=None, actor_id=uuid4()
+            )
+
+    def test_not_owner_raises(self):
+        actor = uuid4()
+        faculty = _make_faculty(user_id=uuid4())
+        doc = self._make_doc(faculty.id)
+        svc, faculty_repo, doc_repo = _make_svc_with_doc(faculty=faculty, doc=doc)
+        doc_repo.get.return_value = doc
+        faculty_repo.get.return_value = faculty
+        with pytest.raises(NotOwnerError):
+            svc.update_document_metadata(
+                doc.id, document_type="X", description=None, actor_id=actor
+            )
+
+    def test_valid_updates_type_and_desc_only(self):
+        actor = uuid4()
+        faculty = _make_faculty(user_id=actor)
+        doc = self._make_doc(faculty.id)
+        svc, faculty_repo, doc_repo = _make_svc_with_doc(faculty=faculty, doc=doc)
+        doc_repo.get.return_value = doc
+        faculty_repo.get.return_value = faculty
+        svc.update_document_metadata(
+            doc.id, document_type="New Type", description="New desc", actor_id=actor
+        )
+        doc_repo.update.assert_called_once()
+        fields = doc_repo.update.call_args.args[1]
+        assert set(fields.keys()) == {"doc_type", "description"}
+        assert "file_asset_id" not in fields
+
+
+class TestRemoveDocumentAndFile:
+    def _make_doc(self, faculty_id):
+        d = MagicMock()
+        d.id = uuid4()
+        d.faculty_id = faculty_id
+        d.file_asset_id = uuid4()
+        return d
+
+    def test_not_found_raises(self):
+        svc, _, _ = _make_svc_with_doc(faculty=_make_faculty(), doc=None)
+        with pytest.raises(DocumentNotFoundError):
+            svc.remove_document_and_file(uuid4(), uuid4())
+
+    def test_not_owner_raises(self):
+        actor = uuid4()
+        faculty = _make_faculty(user_id=uuid4())
+        doc = self._make_doc(faculty.id)
+        svc, faculty_repo, doc_repo = _make_svc_with_doc(faculty=faculty, doc=doc)
+        doc_repo.get.return_value = doc
+        faculty_repo.get.return_value = faculty
+        with pytest.raises(NotOwnerError):
+            svc.remove_document_and_file(doc.id, actor)
+
+    def test_valid_soft_deletes_doc_and_asset(self):
+        actor = uuid4()
+        faculty = _make_faculty(user_id=actor)
+        doc = self._make_doc(faculty.id)
+        svc, faculty_repo, doc_repo = _make_svc_with_doc(faculty=faculty, doc=doc)
+        doc_repo.get.return_value = doc
+        faculty_repo.get.return_value = faculty
+
+        mock_asset = MagicMock()
+        mock_asset.is_deleted = False
+        session = MagicMock()
+        session.get.return_value = mock_asset
+        faculty_repo._session = session
+
+        mock_file_repo = MagicMock()
+        with patch(
+            "durgam.repositories.file_asset.FileAssetRepository",
+            return_value=mock_file_repo,
+        ):
+            svc.remove_document_and_file(doc.id, actor)
+
+        mock_file_repo.soft_delete.assert_called_once_with(mock_asset, actor)
+        doc_repo.soft_delete.assert_called_once_with(doc.id, actor)
+
+
+class TestListDocumentsSorted:
+    def test_sorted_created_at_desc(self):
+        from datetime import UTC, datetime, timedelta
+        actor = uuid4()
+        faculty = _make_faculty(user_id=actor)
+        svc, _, doc_repo = _make_svc_with_doc(faculty=faculty)
+        base = datetime.now(UTC)
+
+        def _doc(offset_days):
+            d = MagicMock()
+            d.created_at = base - timedelta(days=offset_days)
+            return d
+
+        doc_repo.list_by_faculty.return_value = [_doc(5), _doc(0), _doc(2)]
+        result = svc.list_documents(faculty.id)
+        ats = [d.created_at for d in result]
+        assert ats == sorted(ats, reverse=True)

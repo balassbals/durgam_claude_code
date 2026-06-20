@@ -330,8 +330,10 @@ app.add_page(
 from durgam.pages.faculty import __init__ as _faculty_nav_register  # noqa: F401
 from durgam.pages.faculty.profile import faculty_profile_page
 from durgam.pages.faculty.profile_education import faculty_education_page
+from durgam.pages.faculty.profile_documents import faculty_documents_page
 from durgam.pages.faculty.profile_experience import faculty_experience_page
 from durgam.pages.faculty.profile_expertise import faculty_expertise_page
+from durgam.states.faculty_document import FacultyDocumentState
 from durgam.states.faculty_education import FacultyEducationState
 from durgam.states.faculty_experience import FacultyExperienceState
 from durgam.states.faculty_expertise import FacultyExpertiseState
@@ -363,5 +365,12 @@ app.add_page(
     route="/faculty/profile/expertise",
     on_load=FacultyExpertiseState.load_expertise,
     title="My Expertise — DURGAM",
+)
+
+app.add_page(
+    faculty_documents_page,
+    route="/faculty/profile/documents",
+    on_load=FacultyDocumentState.load_documents,
+    title="My Documents — DURGAM",
 )
 

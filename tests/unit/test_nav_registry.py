@@ -227,3 +227,20 @@ class TestFacultyNavGate:
         assert entry.permission_resource == "faculty"
         assert entry.permission_scope_type == "own"
         assert entry.group == "Faculty"
+
+    def test_faculty_documents_nav_entry_registered(self):
+        """'My Documents' entry must be present after module import."""
+        entries = get_all()
+        entry = next(
+            (
+                e
+                for e in entries
+                if e.label == "My Documents" and e.href == "/faculty/profile/documents"
+            ),
+            None,
+        )
+        assert entry is not None, "'My Documents' nav entry not found in registry"
+        assert entry.permission_action == "write"
+        assert entry.permission_resource == "faculty"
+        assert entry.permission_scope_type == "own"
+        assert entry.group == "Faculty"

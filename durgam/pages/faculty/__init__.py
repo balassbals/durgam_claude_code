@@ -49,3 +49,15 @@ register(
         permission_scope_type="own",
     )
 )
+
+register(
+    NavEntry(
+        label="My Documents",
+        href="/faculty/profile/documents",
+        icon="file-text",
+        group="Faculty",
+        permission_action="write",
+        permission_resource="faculty",
+        permission_scope_type="own",
+    )
+)
