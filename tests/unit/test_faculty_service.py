@@ -15,8 +15,11 @@ import pytest
 from durgam.models.faculty import Faculty
 from durgam.services.faculty import (
     EducationNotFoundError,
+    ExperienceNotFoundError,
+    ExpertiseNotFoundError,
     FacultyNotFoundError,
     FacultyService,
+    InvalidDateError,
     InvalidPhdYearError,
     InvalidYearError,
     NotOwnerError,
@@ -655,3 +658,313 @@ class TestListEducationSorted:
         edu_repo.list_by_faculty.return_value = [_edu(2010), _edu(2020), _edu(1995)]
         result = svc.list_education(faculty.id)
         assert [e.year_of_award for e in result] == [2020, 2010, 1995]
+
+
+# ── Experience CRUD (P3b) ─────────────────────────────────────────────────────
+
+
+def _make_svc_with_exp(faculty=None, exp=None) -> tuple[FacultyService, object, object]:
+    """Return (svc, faculty_repo_mock, experience_repo_mock)."""
+    faculty_repo = MagicMock()
+    faculty_repo.get.return_value = faculty
+
+    exp_repo = MagicMock()
+    exp_repo.get.return_value = exp
+    exp_repo.update.return_value = exp
+    exp_repo.soft_delete.return_value = exp
+    exp_repo.list_by_faculty.return_value = []
+
+    svc = FacultyService.__new__(FacultyService)
+    svc._faculty = faculty_repo
+    svc._education = MagicMock()
+    svc._experience = exp_repo
+    svc._expertise = MagicMock()
+    svc._document = MagicMock()
+    svc._workload = MagicMock()
+    return svc, faculty_repo, exp_repo
+
+
+class TestAddExperience:
+    def test_faculty_not_found_raises(self):
+        svc, _, _ = _make_svc_with_exp(faculty=None)
+        with pytest.raises(FacultyNotFoundError):
+            svc.add_experience(
+                uuid4(), organization="Org", designation_held="Eng",
+                from_date=date(2018, 1, 1), actor_id=uuid4(),
+            )
+
+    def test_not_owner_raises(self):
+        actor = uuid4()
+        faculty = _make_faculty(user_id=uuid4())
+        svc, _, _ = _make_svc_with_exp(faculty=faculty)
+        with pytest.raises(NotOwnerError):
+            svc.add_experience(
+                faculty.id, organization="Org", designation_held="Eng",
+                from_date=date(2018, 1, 1), actor_id=actor,
+            )
+
+    def test_future_from_date_raises(self):
+        from datetime import UTC, datetime, timedelta
+        actor = uuid4()
+        faculty = _make_faculty(user_id=actor)
+        svc, _, _ = _make_svc_with_exp(faculty=faculty)
+        future = datetime.now(UTC).date() + timedelta(days=30)
+        with pytest.raises(InvalidDateError, match="future"):
+            svc.add_experience(
+                faculty.id, organization="Org", designation_held="Eng",
+                from_date=future, actor_id=actor,
+            )
+
+    def test_from_after_to_raises(self):
+        actor = uuid4()
+        faculty = _make_faculty(user_id=actor)
+        svc, _, _ = _make_svc_with_exp(faculty=faculty)
+        with pytest.raises(InvalidDateError, match="after"):
+            svc.add_experience(
+                faculty.id, organization="Org", designation_held="Eng",
+                from_date=date(2020, 1, 1), to_date=date(2019, 1, 1),
+                actor_id=actor,
+            )
+
+    def test_valid_open_ended_succeeds(self):
+        actor = uuid4()
+        faculty = _make_faculty(user_id=actor)
+        svc, _, exp_repo = _make_svc_with_exp(faculty=faculty)
+        svc.add_experience(
+            faculty.id, organization="Org", designation_held="Eng",
+            from_date=date(2018, 1, 1), to_date=None, actor_id=actor,
+        )
+        exp_repo.create.assert_called_once()
+        created = exp_repo.create.call_args.args[0]
+        assert created.organization == "Org"
+        assert created.to_date is None
+
+
+class TestUpdateExperience:
+    def _make_exp(self, faculty_id):
+        e = MagicMock()
+        e.id = uuid4()
+        e.faculty_id = faculty_id
+        e.from_date = date(2018, 1, 1)
+        e.to_date = None
+        return e
+
+    def test_not_found_raises(self):
+        svc, _, _ = _make_svc_with_exp(faculty=_make_faculty(), exp=None)
+        with pytest.raises(ExperienceNotFoundError):
+            svc.update_experience(uuid4(), {}, uuid4())
+
+    def test_not_owner_raises(self):
+        actor = uuid4()
+        faculty = _make_faculty(user_id=uuid4())
+        exp = self._make_exp(faculty.id)
+        svc, faculty_repo, exp_repo = _make_svc_with_exp(faculty=faculty, exp=exp)
+        exp_repo.get.return_value = exp
+        faculty_repo.get.return_value = faculty
+        with pytest.raises(NotOwnerError):
+            svc.update_experience(exp.id, {}, actor)
+
+    def test_invalid_date_in_fields_raises(self):
+        actor = uuid4()
+        faculty = _make_faculty(user_id=actor)
+        exp = self._make_exp(faculty.id)
+        svc, faculty_repo, exp_repo = _make_svc_with_exp(faculty=faculty, exp=exp)
+        exp_repo.get.return_value = exp
+        faculty_repo.get.return_value = faculty
+        with pytest.raises(InvalidDateError):
+            svc.update_experience(
+                exp.id, {"from_date": date(2020, 1, 1), "to_date": date(2019, 1, 1)}, actor
+            )
+
+    def test_valid_calls_repo_update(self):
+        actor = uuid4()
+        faculty = _make_faculty(user_id=actor)
+        exp = self._make_exp(faculty.id)
+        svc, faculty_repo, exp_repo = _make_svc_with_exp(faculty=faculty, exp=exp)
+        exp_repo.get.return_value = exp
+        faculty_repo.get.return_value = faculty
+        svc.update_experience(exp.id, {"organization": "New Org"}, actor)
+        exp_repo.update.assert_called_once()
+
+
+class TestRemoveExperience:
+    def _make_exp(self, faculty_id):
+        e = MagicMock()
+        e.id = uuid4()
+        e.faculty_id = faculty_id
+        return e
+
+    def test_not_found_raises(self):
+        svc, _, _ = _make_svc_with_exp(faculty=_make_faculty(), exp=None)
+        with pytest.raises(ExperienceNotFoundError):
+            svc.remove_experience(uuid4(), uuid4())
+
+    def test_not_owner_raises(self):
+        actor = uuid4()
+        faculty = _make_faculty(user_id=uuid4())
+        exp = self._make_exp(faculty.id)
+        svc, faculty_repo, exp_repo = _make_svc_with_exp(faculty=faculty, exp=exp)
+        exp_repo.get.return_value = exp
+        faculty_repo.get.return_value = faculty
+        with pytest.raises(NotOwnerError):
+            svc.remove_experience(exp.id, actor)
+
+    def test_valid_calls_soft_delete(self):
+        actor = uuid4()
+        faculty = _make_faculty(user_id=actor)
+        exp = self._make_exp(faculty.id)
+        svc, faculty_repo, exp_repo = _make_svc_with_exp(faculty=faculty, exp=exp)
+        exp_repo.get.return_value = exp
+        faculty_repo.get.return_value = faculty
+        svc.remove_experience(exp.id, actor)
+        exp_repo.soft_delete.assert_called_once_with(exp.id, actor)
+
+
+class TestListExperienceSorted:
+    def test_sorted_from_date_desc(self):
+        actor = uuid4()
+        faculty = _make_faculty(user_id=actor)
+        svc, _, exp_repo = _make_svc_with_exp(faculty=faculty)
+
+        def _exp(d):
+            e = MagicMock()
+            e.from_date = d
+            return e
+
+        exp_repo.list_by_faculty.return_value = [
+            _exp(date(2010, 1, 1)), _exp(date(2020, 1, 1)), _exp(date(2015, 1, 1))
+        ]
+        result = svc.list_experience(faculty.id)
+        assert [e.from_date for e in result] == [
+            date(2020, 1, 1), date(2015, 1, 1), date(2010, 1, 1)
+        ]
+
+
+# ── Expertise CRUD (P3c) ──────────────────────────────────────────────────────
+
+
+def _make_svc_with_xp(faculty=None, xp=None) -> tuple[FacultyService, object, object]:
+    """Return (svc, faculty_repo_mock, expertise_repo_mock)."""
+    faculty_repo = MagicMock()
+    faculty_repo.get.return_value = faculty
+
+    xp_repo = MagicMock()
+    xp_repo.get.return_value = xp
+    xp_repo.update.return_value = xp
+    xp_repo.soft_delete.return_value = xp
+    xp_repo.list_by_faculty.return_value = []
+
+    svc = FacultyService.__new__(FacultyService)
+    svc._faculty = faculty_repo
+    svc._education = MagicMock()
+    svc._experience = MagicMock()
+    svc._expertise = xp_repo
+    svc._document = MagicMock()
+    svc._workload = MagicMock()
+    return svc, faculty_repo, xp_repo
+
+
+class TestAddExpertise:
+    def test_faculty_not_found_raises(self):
+        svc, _, _ = _make_svc_with_xp(faculty=None)
+        with pytest.raises(FacultyNotFoundError):
+            svc.add_expertise(uuid4(), area="ML", actor_id=uuid4())
+
+    def test_not_owner_raises(self):
+        actor = uuid4()
+        faculty = _make_faculty(user_id=uuid4())
+        svc, _, _ = _make_svc_with_xp(faculty=faculty)
+        with pytest.raises(NotOwnerError):
+            svc.add_expertise(faculty.id, area="ML", actor_id=actor)
+
+    def test_valid_succeeds_strips_area(self):
+        actor = uuid4()
+        faculty = _make_faculty(user_id=actor)
+        svc, _, xp_repo = _make_svc_with_xp(faculty=faculty)
+        svc.add_expertise(faculty.id, area="  ML  ", proficiency="Expert", actor_id=actor)
+        xp_repo.create.assert_called_once()
+        created = xp_repo.create.call_args.args[0]
+        assert created.area == "ML"
+        assert created.proficiency == "Expert"
+
+
+class TestUpdateExpertise:
+    def _make_xp(self, faculty_id):
+        e = MagicMock()
+        e.id = uuid4()
+        e.faculty_id = faculty_id
+        return e
+
+    def test_not_found_raises(self):
+        svc, _, _ = _make_svc_with_xp(faculty=_make_faculty(), xp=None)
+        with pytest.raises(ExpertiseNotFoundError):
+            svc.update_expertise(uuid4(), {}, uuid4())
+
+    def test_not_owner_raises(self):
+        actor = uuid4()
+        faculty = _make_faculty(user_id=uuid4())
+        xp = self._make_xp(faculty.id)
+        svc, faculty_repo, xp_repo = _make_svc_with_xp(faculty=faculty, xp=xp)
+        xp_repo.get.return_value = xp
+        faculty_repo.get.return_value = faculty
+        with pytest.raises(NotOwnerError):
+            svc.update_expertise(xp.id, {}, actor)
+
+    def test_valid_calls_repo_update(self):
+        actor = uuid4()
+        faculty = _make_faculty(user_id=actor)
+        xp = self._make_xp(faculty.id)
+        svc, faculty_repo, xp_repo = _make_svc_with_xp(faculty=faculty, xp=xp)
+        xp_repo.get.return_value = xp
+        faculty_repo.get.return_value = faculty
+        svc.update_expertise(xp.id, {"area": "NLP"}, actor)
+        xp_repo.update.assert_called_once()
+
+
+class TestRemoveExpertise:
+    def _make_xp(self, faculty_id):
+        e = MagicMock()
+        e.id = uuid4()
+        e.faculty_id = faculty_id
+        return e
+
+    def test_not_found_raises(self):
+        svc, _, _ = _make_svc_with_xp(faculty=_make_faculty(), xp=None)
+        with pytest.raises(ExpertiseNotFoundError):
+            svc.remove_expertise(uuid4(), uuid4())
+
+    def test_not_owner_raises(self):
+        actor = uuid4()
+        faculty = _make_faculty(user_id=uuid4())
+        xp = self._make_xp(faculty.id)
+        svc, faculty_repo, xp_repo = _make_svc_with_xp(faculty=faculty, xp=xp)
+        xp_repo.get.return_value = xp
+        faculty_repo.get.return_value = faculty
+        with pytest.raises(NotOwnerError):
+            svc.remove_expertise(xp.id, actor)
+
+    def test_valid_calls_soft_delete(self):
+        actor = uuid4()
+        faculty = _make_faculty(user_id=actor)
+        xp = self._make_xp(faculty.id)
+        svc, faculty_repo, xp_repo = _make_svc_with_xp(faculty=faculty, xp=xp)
+        xp_repo.get.return_value = xp
+        faculty_repo.get.return_value = faculty
+        svc.remove_expertise(xp.id, actor)
+        xp_repo.soft_delete.assert_called_once_with(xp.id, actor)
+
+
+class TestListExpertiseSorted:
+    def test_sorted_area_alpha(self):
+        actor = uuid4()
+        faculty = _make_faculty(user_id=actor)
+        svc, _, xp_repo = _make_svc_with_xp(faculty=faculty)
+
+        def _xp(area):
+            e = MagicMock()
+            e.area = area
+            return e
+
+        xp_repo.list_by_faculty.return_value = [_xp("Networks"), _xp("AI"), _xp("ml")]
+        result = svc.list_expertise(faculty.id)
+        assert [e.area for e in result] == ["AI", "ml", "Networks"]

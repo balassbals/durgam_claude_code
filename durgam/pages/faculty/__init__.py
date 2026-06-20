@@ -25,3 +25,27 @@ register(
         permission_scope_type="own",
     )
 )
+
+register(
+    NavEntry(
+        label="My Experience",
+        href="/faculty/profile/experience",
+        icon="briefcase",
+        group="Faculty",
+        permission_action="write",
+        permission_resource="faculty",
+        permission_scope_type="own",
+    )
+)
+
+register(
+    NavEntry(
+        label="My Expertise",
+        href="/faculty/profile/expertise",
+        icon="lightbulb",
+        group="Faculty",
+        permission_action="write",
+        permission_resource="faculty",
+        permission_scope_type="own",
+    )
+)

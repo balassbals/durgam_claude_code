@@ -193,3 +193,37 @@ class TestFacultyNavGate:
         assert entry.permission_resource == "faculty"
         assert entry.permission_scope_type == "own"
         assert entry.group == "Faculty"
+
+    def test_faculty_experience_nav_entry_registered(self):
+        """'My Experience' entry must be present after module import."""
+        entries = get_all()
+        entry = next(
+            (
+                e
+                for e in entries
+                if e.label == "My Experience" and e.href == "/faculty/profile/experience"
+            ),
+            None,
+        )
+        assert entry is not None, "'My Experience' nav entry not found in registry"
+        assert entry.permission_action == "write"
+        assert entry.permission_resource == "faculty"
+        assert entry.permission_scope_type == "own"
+        assert entry.group == "Faculty"
+
+    def test_faculty_expertise_nav_entry_registered(self):
+        """'My Expertise' entry must be present after module import."""
+        entries = get_all()
+        entry = next(
+            (
+                e
+                for e in entries
+                if e.label == "My Expertise" and e.href == "/faculty/profile/expertise"
+            ),
+            None,
+        )
+        assert entry is not None, "'My Expertise' nav entry not found in registry"
+        assert entry.permission_action == "write"
+        assert entry.permission_resource == "faculty"
+        assert entry.permission_scope_type == "own"
+        assert entry.group == "Faculty"

@@ -6,7 +6,7 @@ No session.commit() here — callers (page states) must commit.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from uuid import UUID
 
 import structlog
@@ -118,6 +118,18 @@ class EducationNotFoundError(FacultyServiceError):
 
 class InvalidYearError(FacultyServiceError):
     """Raised when year_of_award is outside [1950, current_year + 1]."""
+
+
+class ExperienceNotFoundError(FacultyServiceError):
+    """Raised when an experience record is not found or already deleted."""
+
+
+class InvalidDateError(FacultyServiceError):
+    """Raised when experience dates are invalid (future from_date, or from > to)."""
+
+
+class ExpertiseNotFoundError(FacultyServiceError):
+    """Raised when an expertise record is not found or already deleted."""
 
 
 _PHOTO_ALLOWED_MIMES: frozenset[str] = frozenset({"image/jpeg", "image/png"})
@@ -315,25 +327,40 @@ class FacultyService:
 
     # ── Experience ────────────────────────────────────────────────────────────
 
+    @staticmethod
+    def _validate_experience_dates(
+        from_date: date, to_date: date | None
+    ) -> None:
+        today = datetime.now(UTC).date()
+        if from_date > today:
+            raise InvalidDateError("From date cannot be in the future.")
+        if to_date is not None and from_date > to_date:
+            raise InvalidDateError("From date cannot be after To date.")
+
     def add_experience(
         self,
         faculty_id: UUID,
         *,
         organization: str,
         designation_held: str,
-        from_date: object,
+        from_date: date,
         actor_id: UUID,
-        to_date: object | None = None,
+        to_date: date | None = None,
         responsibilities: str | None = None,
     ) -> FacultyExperience:
-        self._assert_faculty_exists(faculty_id)
+        faculty = self._faculty.get(faculty_id)
+        if faculty is None:
+            raise FacultyNotFoundError(f"Faculty {faculty_id} not found.")
+        if faculty.user_id != actor_id:
+            raise NotOwnerError("You can only edit your own experience records.")
+        self._validate_experience_dates(from_date, to_date)
         now = datetime.now(UTC)
         exp = FacultyExperience(
             faculty_id=faculty_id,
             organization=organization.strip(),
             designation_held=designation_held.strip(),
-            from_date=from_date,  # type: ignore[arg-type]
-            to_date=to_date,  # type: ignore[arg-type]
+            from_date=from_date,
+            to_date=to_date,
             responsibilities=responsibilities,
             created_by=actor_id,
             updated_by=actor_id,
@@ -347,17 +374,27 @@ class FacultyService:
     ) -> FacultyExperience:
         exp = self._experience.get(exp_id)
         if exp is None:
-            raise FacultyServiceError(f"Experience record {exp_id} not found.")
+            raise ExperienceNotFoundError(f"Experience record {exp_id} not found.")
+        faculty = self._faculty.get(exp.faculty_id)
+        if faculty is None or faculty.user_id != actor_id:
+            raise NotOwnerError("You can only edit your own experience records.")
+        new_from = fields.get("from_date", exp.from_date)
+        new_to = fields.get("to_date", exp.to_date)
+        self._validate_experience_dates(new_from, new_to)
         return self._experience.update(exp_id, fields, actor_id)
 
     def remove_experience(self, exp_id: UUID, actor_id: UUID) -> FacultyExperience:
         exp = self._experience.get(exp_id)
         if exp is None:
-            raise FacultyServiceError(f"Experience record {exp_id} not found.")
+            raise ExperienceNotFoundError(f"Experience record {exp_id} not found.")
+        faculty = self._faculty.get(exp.faculty_id)
+        if faculty is None or faculty.user_id != actor_id:
+            raise NotOwnerError("You can only delete your own experience records.")
         return self._experience.soft_delete(exp_id, actor_id)
 
     def list_experience(self, faculty_id: UUID) -> list[FacultyExperience]:
-        return self._experience.list_by_faculty(faculty_id)
+        records = self._experience.list_by_faculty(faculty_id)
+        return sorted(records, key=lambda e: e.from_date, reverse=True)
 
     # ── Expertise ─────────────────────────────────────────────────────────────
 
@@ -369,7 +406,11 @@ class FacultyService:
         actor_id: UUID,
         proficiency: str | None = None,
     ) -> FacultyExpertise:
-        self._assert_faculty_exists(faculty_id)
+        faculty = self._faculty.get(faculty_id)
+        if faculty is None:
+            raise FacultyNotFoundError(f"Faculty {faculty_id} not found.")
+        if faculty.user_id != actor_id:
+            raise NotOwnerError("You can only edit your own expertise records.")
         now = datetime.now(UTC)
         exp = FacultyExpertise(
             faculty_id=faculty_id,
@@ -387,17 +428,24 @@ class FacultyService:
     ) -> FacultyExpertise:
         exp = self._expertise.get(exp_id)
         if exp is None:
-            raise FacultyServiceError(f"Expertise record {exp_id} not found.")
+            raise ExpertiseNotFoundError(f"Expertise record {exp_id} not found.")
+        faculty = self._faculty.get(exp.faculty_id)
+        if faculty is None or faculty.user_id != actor_id:
+            raise NotOwnerError("You can only edit your own expertise records.")
         return self._expertise.update(exp_id, fields, actor_id)
 
     def remove_expertise(self, exp_id: UUID, actor_id: UUID) -> FacultyExpertise:
         exp = self._expertise.get(exp_id)
         if exp is None:
-            raise FacultyServiceError(f"Expertise record {exp_id} not found.")
+            raise ExpertiseNotFoundError(f"Expertise record {exp_id} not found.")
+        faculty = self._faculty.get(exp.faculty_id)
+        if faculty is None or faculty.user_id != actor_id:
+            raise NotOwnerError("You can only delete your own expertise records.")
         return self._expertise.soft_delete(exp_id, actor_id)
 
     def list_expertise(self, faculty_id: UUID) -> list[FacultyExpertise]:
-        return self._expertise.list_by_faculty(faculty_id)
+        records = self._expertise.list_by_faculty(faculty_id)
+        return sorted(records, key=lambda e: e.area.lower())
 
     # ── Documents ─────────────────────────────────────────────────────────────
 
