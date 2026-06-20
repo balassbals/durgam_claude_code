@@ -131,9 +131,13 @@ def _card(record: dict) -> rx.Component:
 
 
 def _grid() -> rx.Component:
-    return rx.grid(
+    # Plain CSS auto-fill grid: tiles cards into as many 220px+ columns as fit the
+    # viewport. More robust than rx.grid(columns=rx.breakpoints(...)), whose
+    # mobile-first initial="1" was rendering one card per row (looked like rows).
+    return rx.box(
         rx.foreach(FacultyDirectoryState.rows, _card),
-        columns=rx.breakpoints(initial="1", sm="2", md="3", lg="4"),
+        display="grid",
+        grid_template_columns="repeat(auto-fill, minmax(220px, 1fr))",
         gap="1rem",
         width="100%",
     )
