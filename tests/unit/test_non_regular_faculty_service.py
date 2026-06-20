@@ -203,3 +203,88 @@ class TestNonRegularFacultyApproval:
         repo.get_by_id.return_value = None
         with pytest.raises(NonRegularFacultyError, match="not found"):
             svc.set_approval(uuid4(), True, uuid4())
+
+
+# ── Phase 9A: contract-term expansion (renewal) ───────────────────────────────
+
+
+class TestNonRegularFacultyRenewal:
+    def _make_svc(self):
+        repo = MagicMock()
+        return NonRegularFacultyService(repo=repo), repo
+
+    def test_create_accepts_renewal_count_and_contract_file(self):
+        from uuid import uuid4 as _u
+        svc, repo = self._make_svc()
+        repo.save.side_effect = lambda r: r
+        fid = _u()
+        result = svc.create(
+            department_id=_u(), name="Dr. C", designation="Prof",
+            organization="Org", expertise="X",
+            available_from=date(2025, 1, 1), available_to=date(2025, 12, 31),
+            actor_id=_u(), renewal_count=2, latest_contract_file_id=fid,
+        )
+        assert result.renewal_count == 2
+        assert result.latest_contract_file_id == fid
+
+    def test_create_negative_renewal_count_raises(self):
+        from uuid import uuid4 as _u
+        svc, repo = self._make_svc()
+        with pytest.raises(NonRegularFacultyError, match="negative"):
+            svc.create(
+                department_id=_u(), name="Dr. C", designation="Prof",
+                organization="Org", expertise="X",
+                available_from=date(2025, 1, 1), available_to=date(2025, 12, 31),
+                actor_id=_u(), renewal_count=-1,
+            )
+
+    def test_renew_increments_count_and_extends_term(self):
+        from uuid import uuid4 as _u
+        svc, repo = self._make_svc()
+        existing = MagicMock()
+        existing.id = _u()
+        existing.available_to = date(2025, 12, 31)
+        existing.renewal_count = 1
+        existing.latest_contract_file_id = None
+        repo.get_by_id.return_value = existing
+        repo.save.side_effect = lambda r: r
+
+        result = svc.renew(
+            existing.id, new_end_date=date(2026, 12, 31), actor_id=_u(),
+        )
+        assert result.available_to == date(2026, 12, 31)
+        assert result.renewal_count == 2
+
+    def test_renew_with_contract_file(self):
+        from uuid import uuid4 as _u
+        svc, repo = self._make_svc()
+        existing = MagicMock()
+        existing.available_to = date(2025, 12, 31)
+        existing.renewal_count = 0
+        existing.latest_contract_file_id = None
+        repo.get_by_id.return_value = existing
+        repo.save.side_effect = lambda r: r
+        fid = _u()
+        result = svc.renew(
+            _u(), new_end_date=date(2026, 6, 30), actor_id=_u(),
+            latest_contract_file_id=fid,
+        )
+        assert result.latest_contract_file_id == fid
+
+    def test_renew_not_after_current_raises(self):
+        from uuid import uuid4 as _u
+        from durgam.services.non_regular_faculty import RenewalDateInvalidError
+        svc, repo = self._make_svc()
+        existing = MagicMock()
+        existing.available_to = date(2025, 12, 31)
+        existing.renewal_count = 0
+        repo.get_by_id.return_value = existing
+        with pytest.raises(RenewalDateInvalidError, match="after the current end date"):
+            svc.renew(_u(), new_end_date=date(2025, 6, 30), actor_id=_u())
+
+    def test_renew_not_found_raises(self):
+        from uuid import uuid4 as _u
+        svc, repo = self._make_svc()
+        repo.get_by_id.return_value = None
+        with pytest.raises(NonRegularFacultyError, match="not found"):
+            svc.renew(_u(), new_end_date=date(2030, 1, 1), actor_id=_u())

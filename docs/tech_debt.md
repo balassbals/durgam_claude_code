@@ -682,7 +682,9 @@ the direct and table-based pathways.
 
 ### TD-038 — Withdrawal notification recipient resolution is university-wide (no campus-dept scope)
 
-**Location:** `durgam/services/leave_notification.py` (M8.1 Phase 5, not yet created); planned scope: `resolve_withdrawal_notification_recipients()`.
+**STATUS: deferred to Phase 13 docs/TD sweep.** An initial M10 Phase 9 attempt (commit `8923abf`, discarded by hard-reset) implemented the campus/dept filter in `resolve_withdrawal_notification_recipients`, but it introduced order-dependent fixture contamination across the test suite — the production code passed in isolation, yet cross-test session/DB state varied unpredictably between test orderings (non-deterministic suite). The fix was reverted; the M10 Faculty model (`Faculty.campus_id`/`department_id`) now provides the linkage the original trigger waited on, so the remaining work is the filter itself **plus** proper fixture-isolation infrastructure (a separate workstream). Re-scope both together in the Phase 13 sweep.
+
+**Location:** `durgam/services/leave_notification.py`; scope: `resolve_withdrawal_notification_recipients()`.
 
 **What it is:** E-017 withdrawal notifications will notify HOD/AHOD/DIRECTOR roles using `UserRole.scope_type` and `scope_id` matching. The resolution function walks the role list but has no access to the employee-to-campus mapping (which belongs to the M10 Faculty model). In M8.1 the function returns all role-holders at any scope; it cannot filter by the employee's campus or department. Recipients from unrelated campuses or departments will receive notifications they don't need.
 

@@ -85,6 +85,12 @@ def _kebab(row: dict) -> rx.Component:
                     ),
                 ),
                 rx.menu.item(
+                    "Renew contract",
+                    on_click=NonRegularFacultyConfigState.open_renew(  # type: ignore[call-arg, func-returns-value]
+                        row["id"], row["name"], row["available_to"]
+                    ),
+                ),
+                rx.menu.item(
                     "Deactivate",
                     on_click=NonRegularFacultyConfigState.open_deactivate_confirm(  # type: ignore[call-arg, func-returns-value]
                         row["id"], row["name"]
@@ -95,6 +101,58 @@ def _kebab(row: dict) -> rx.Component:
         ),
         align="center",
         gap="0.5rem",
+    )
+
+
+def _renew_modal() -> rx.Component:
+    return form_modal(
+        content=rx.vstack(
+            rx.heading("Renew Contract", size="4", margin_bottom="0.5rem"),
+            rx.text(NonRegularFacultyConfigState.renew_name, font_weight="600"),
+            rx.text(
+                "Current end date: ",
+                NonRegularFacultyConfigState.renew_current_to,
+                font_size="0.85rem",
+                color="var(--color-muted)",
+                margin_bottom="0.5rem",
+            ),
+            rx.form(
+                rx.vstack(
+                    rx.text("New end date *", font_size="0.85rem", color="var(--color-muted)"),
+                    rx.input(
+                        type="date",
+                        name="form_renew_to",
+                        value=NonRegularFacultyConfigState.form_renew_to,
+                        on_change=NonRegularFacultyConfigState.set_form_renew_to,
+                        width="100%",
+                    ),
+                    rx.text(
+                        "Renewing increments the renewal count and extends the "
+                        "contract end date.",
+                        font_size="0.75rem",
+                        color="var(--color-muted)",
+                    ),
+                    rx.hstack(
+                        primary_btn("Renew", type="submit"),
+                        secondary_btn(
+                            "Cancel",
+                            on_click=NonRegularFacultyConfigState.cancel_renew,
+                            type="button",
+                        ),
+                        gap="0.75rem",
+                        margin_top="0.5rem",
+                    ),
+                    gap="0.5rem",
+                    width="100%",
+                ),
+                on_submit=NonRegularFacultyConfigState.renew_visitor,
+                reset_on_submit=False,
+            ),
+            gap="0.25rem",
+            align="start",
+            width="100%",
+        ),
+        is_open=NonRegularFacultyConfigState.show_renew,
     )
 
 
@@ -348,6 +406,7 @@ def admin_config_non_regular_faculty() -> rx.Component:
                             TableColumn(key="expertise", label="Expertise"),
                             TableColumn(key="available_from", label="From"),
                             TableColumn(key="available_to", label="To"),
+                            TableColumn(key="renewal_count", label="Renewals", hidden_on_card=True),
                         ],
                         card_primary_key="name",
                         is_mobile=False,
@@ -355,6 +414,7 @@ def admin_config_non_regular_faculty() -> rx.Component:
                         empty_message="No non-regular faculty records found.",
                     ),
                 ),
+                _renew_modal(),
                 confirmation_dialog(
                     is_open=NonRegularFacultyConfigState.confirm_open,
                     title=NonRegularFacultyConfigState.confirm_title,

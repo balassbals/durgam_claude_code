@@ -289,6 +289,12 @@ class NonRegularFaculty(TimestampedSoftDelete, table=True):
     available_to: date = Field(nullable=False)
     is_admin_approved: bool = Field(default=False, nullable=False)
     non_regular_type: str = Field(max_length=32, default="visiting", nullable=False)
+    # M10 Phase 9A (D-022): contract-term expansion. available_from/available_to
+    # already serve the contract window; non_regular_type is the term type.
+    renewal_count: int = Field(default=0, nullable=False)
+    latest_contract_file_id: UUID | None = Field(
+        default=None, foreign_key="file_assets.id",
+    )
     approved_at: datetime | None = Field(default=None, sa_type=_TIMESTAMPTZ)
     approved_by_user_id: UUID | None = Field(
         default=None, foreign_key="users.id",
