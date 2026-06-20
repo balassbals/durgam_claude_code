@@ -63,7 +63,8 @@ def _doc_card(record: dict) -> rx.Component:
                         color="var(--color-primary)",
                     ),
                     rx.text(
-                        "· uploaded " + record["uploaded_at_str"],
+                        "· uploaded ",
+                        record["uploaded_at_str"],
                         font_size="0.75rem",
                         color="var(--color-muted)",
                     ),
@@ -153,7 +154,8 @@ def _doc_form_modal() -> rx.Component:
                             rx.cond(
                                 FacultyDocumentState.has_staged_file,
                                 rx.text(
-                                    "Selected: " + FacultyDocumentState.staged_file_name,
+                                    "Selected: ",
+                                    FacultyDocumentState.staged_file_name,
                                     font_size="0.8rem",
                                     color="var(--color-success-border)",
                                 ),
