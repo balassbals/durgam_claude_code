@@ -339,6 +339,7 @@ from durgam.pages.faculty.profile_experience import faculty_experience_page
 from durgam.pages.faculty.profile_expertise import faculty_expertise_page
 from durgam.pages.faculty.directory import faculty_directory_page
 from durgam.pages.faculty.detail import faculty_detail_page
+from durgam.pages.faculty.requests_overlay import faculty_requests_overlay
 from durgam.states.faculty_document import FacultyDocumentState
 from durgam.states.faculty_education import FacultyEducationState
 from durgam.states.faculty_experience import FacultyExperienceState
@@ -388,6 +389,13 @@ app.add_page(
     route="/faculty",
     on_load=FacultyDirectoryState.load_records,
     title="Faculty Directory — DURGAM",
+)
+
+app.add_page(
+    faculty_requests_overlay,
+    route="/faculty/requests",
+    on_load=AuthState.resolve_session,
+    title="Faculty Requests — DURGAM",
 )
 
 app.add_page(

@@ -89,3 +89,17 @@ register(
         permission_resource="faculty",
     )
 )
+
+# Phase 8B: thin overlay (Q-P8.2) — two tabs deep-linking to the approvals views
+# filtered to faculty_* processes. No duplicate state.
+register(
+    NavEntry(
+        label="Faculty Requests",
+        href="/faculty/requests",
+        icon="clipboard-list",
+        group="Faculty",
+        permission_action="write",
+        permission_resource="faculty",
+        permission_scope_type="own",
+    )
+)

@@ -279,6 +279,23 @@ class TestFacultyNavGate:
         assert entry.permission_resource == "faculty"
         assert entry.group == "Faculty"
 
+    def test_faculty_requests_nav_entry_registered(self):
+        """Phase 8B: 'Faculty Requests' overlay entry under Faculty, faculty:write:own."""
+        entries = get_all()
+        entry = next(
+            (
+                e
+                for e in entries
+                if e.label == "Faculty Requests" and e.href == "/faculty/requests"
+            ),
+            None,
+        )
+        assert entry is not None, "'Faculty Requests' nav entry not found in registry"
+        assert entry.permission_action == "write"
+        assert entry.permission_resource == "faculty"
+        assert entry.permission_scope_type == "own"
+        assert entry.group == "Faculty"
+
 
 class TestAdminFacultyNavGate:
     @classmethod

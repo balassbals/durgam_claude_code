@@ -98,6 +98,12 @@ class MyRequestsState(BaseState):
                     "submitted_at_display": _format_dt(r.created_at),
                     "decided_at_display": _format_dt(r.decided_at),
                 })
+            # Phase 8B: optional ?type=faculty deep-link filter (Faculty Requests
+            # overlay). Absent/other values leave the full list unchanged.
+            if self.router.page.params.get("type", "") == "faculty":
+                enriched = [
+                    e for e in enriched if e["process_code"].startswith("faculty_")
+                ]
             self.rows = enriched
 
         self.loading = False
@@ -198,6 +204,13 @@ class ApproverInboxState(BaseState):
                     "submitted_at_display": _format_dt(r.created_at),
                     "state": r.state,
                 })
+            # Phase 8B: optional ?type=faculty deep-link filter (Faculty Requests
+            # overlay). Absent/other values leave the full list unchanged.
+            if self.router.page.params.get("type", "") == "faculty":
+                past_enriched = [
+                    e for e in past_enriched
+                    if e["process_code"].startswith("faculty_")
+                ]
             self.past_rows = past_enriched
 
             # ── Pending: active requests awaiting the viewer's decision ────────
@@ -238,6 +251,13 @@ class ApproverInboxState(BaseState):
                     "submitted_at_display": _format_dt(r.created_at),
                     "state": r.state,
                 })
+            # Phase 8B: optional ?type=faculty deep-link filter (Faculty Requests
+            # overlay). Absent/other values leave the full list unchanged.
+            if self.router.page.params.get("type", "") == "faculty":
+                pending_enriched = [
+                    e for e in pending_enriched
+                    if e["process_code"].startswith("faculty_")
+                ]
             self.pending_rows = pending_enriched
 
         self.loading = False

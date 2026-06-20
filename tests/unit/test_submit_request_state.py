@@ -141,3 +141,38 @@ class TestDeepLinkPreselection:
     def test_unmatched_param_falls_through_to_none(self):
         opts = self._options()
         assert _preselect_process_id(opts, "faculty_does_not_exist") == "none"
+
+
+# ── Phase 8B: ?type=faculty deep-link row filter ──────────────────────────────
+
+
+def _filter_faculty_rows(rows, type_param):
+    """Replicates the ?type=faculty filter applied in load_my_requests /
+    load_inbox: when type_param == 'faculty', keep only rows whose process_code
+    starts with 'faculty_'; otherwise leave the list unchanged.
+    """
+    if type_param == "faculty":
+        return [r for r in rows if r["process_code"].startswith("faculty_")]
+    return rows
+
+
+class TestFacultyTypeFilter:
+    def _rows(self):
+        return [
+            {"id": "1", "process_code": "faculty_fdp"},
+            {"id": "2", "process_code": "faculty_noc"},
+            {"id": "3", "process_code": "NRF_APPROVAL"},
+            {"id": "4", "process_code": "CPC_FUND_RELEASE"},
+        ]
+
+    def test_type_faculty_keeps_only_faculty_processes(self):
+        out = _filter_faculty_rows(self._rows(), "faculty")
+        assert {r["id"] for r in out} == {"1", "2"}
+
+    def test_absent_type_leaves_list_unchanged(self):
+        out = _filter_faculty_rows(self._rows(), "")
+        assert len(out) == 4
+
+    def test_other_type_leaves_list_unchanged(self):
+        out = _filter_faculty_rows(self._rows(), "student")
+        assert len(out) == 4
