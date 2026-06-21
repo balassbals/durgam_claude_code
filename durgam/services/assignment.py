@@ -28,6 +28,37 @@ class AssignmentError(OrgServiceError):
     pass
 
 
+def resolve_faculty_id_by_employee_id(session, employee_id: str) -> UUID:
+    """Resolve a faculty employee_id (the Q-P11.2 lookup key) to a Faculty UUID.
+
+    11A bridge: assignment forms accept an employee_id text input until the 11C
+    Faculty picker dropdown replaces it. Raises AssignmentError if no active
+    faculty has that employee_id.
+    """
+    from durgam.repositories.faculty import FacultyRepository
+
+    employee_id = (employee_id or "").strip()
+    if not employee_id:
+        raise AssignmentError("Faculty employee ID is required.")
+    faculty = FacultyRepository(session).get_by_employee_id(employee_id)
+    if faculty is None:
+        raise AssignmentError(f"No faculty found with employee ID '{employee_id}'.")
+    return faculty.id
+
+
+def faculty_display(session, faculty_id: UUID) -> str:
+    """Return a human-readable label for a faculty_id: 'EMP-ID — Title First Last'."""
+    from durgam.repositories.faculty import FacultyRepository
+
+    faculty = FacultyRepository(session).get(faculty_id)
+    if faculty is None:
+        return str(faculty_id)
+    name = " ".join(
+        p for p in (faculty.title, faculty.first_name, faculty.last_name) if p
+    )
+    return f"{faculty.employee_id} — {name}"
+
+
 class FacultyMentorService:
     def __init__(self, repo: AssignmentRepository[FacultyMentorAssignment]) -> None:
         self._repo = repo
@@ -44,15 +75,12 @@ class FacultyMentorService:
         *,
         academic_year_id: UUID,
         campus_id: UUID,
-        faculty_id_placeholder: str,
+        faculty_id: UUID,
         student_id_placeholder: str,
         actor_id: UUID,
         notes: str | None = None,
     ) -> FacultyMentorAssignment:
-        faculty_id_placeholder = faculty_id_placeholder.strip()
         student_id_placeholder = student_id_placeholder.strip()
-        if not faculty_id_placeholder:
-            raise AssignmentError("Faculty identifier is required.")
         if not student_id_placeholder:
             raise AssignmentError("Student identifier is required.")
 
@@ -60,7 +88,7 @@ class FacultyMentorService:
         record = FacultyMentorAssignment(
             academic_year_id=academic_year_id,
             campus_id=campus_id,
-            faculty_id_placeholder=faculty_id_placeholder,
+            faculty_id=faculty_id,
             student_id_placeholder=student_id_placeholder,
             notes=notes,
             created_by=actor_id,

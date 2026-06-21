@@ -93,6 +93,33 @@ def _user(session) -> User:
     return u
 
 
+def _faculty(session, campus: Campus | None = None):
+    """Minimal Faculty row to satisfy assignment.faculty_id FK (M10 Phase 11A)."""
+    from datetime import UTC, datetime
+
+    from durgam.models.config_anchors import Designation
+    from durgam.models.faculty import Faculty
+
+    campus = campus or _campus(session)
+    school = _school(session)
+    dept = _dept(session, school, campus)
+    desig = Designation(code=f"DG{uuid4().hex[:4]}", name="Prof", rank=50)
+    session.add(desig)
+    session.flush()
+    user = _user(session)
+    now = datetime.now(UTC)
+    f = Faculty(
+        user_id=user.id, employee_id=f"FAC-{uuid4().hex[:8]}", title="Dr",
+        first_name="F", last_name="M", designation_id=desig.id,
+        department_id=dept.id, campus_id=campus.id, joining_date=date(2020, 1, 1),
+        phone="9", emergency_contact_name="E", emergency_contact_relation="P",
+        emergency_contact_phone="9", created_at=now, updated_at=now,
+    )
+    session.add(f)
+    session.flush()
+    return f
+
+
 # ── MentalHealthCounsellor AY-lock ──────────────────────────────────────────
 
 
@@ -163,10 +190,11 @@ class TestFacultyMentorAYLock:
     def test_save_on_locked_ay_raises(self, db_session):
         ay = _ay(db_session, locked=True)
         campus = _campus(db_session)
+        fac = _faculty(db_session, campus)
         record = FacultyMentorAssignment(
             academic_year_id=ay.id,
             campus_id=campus.id,
-            faculty_id_placeholder="FAC001",
+            faculty_id=fac.id,
             student_id_placeholder="STU001",
         )
         repo = AssignmentRepository(FacultyMentorAssignment, db_session)
@@ -177,10 +205,11 @@ class TestFacultyMentorAYLock:
         ay = _ay(db_session)
         campus = _campus(db_session)
         user = _user(db_session)
+        fac = _faculty(db_session, campus)
         record = FacultyMentorAssignment(
             academic_year_id=ay.id,
             campus_id=campus.id,
-            faculty_id_placeholder="FAC001",
+            faculty_id=fac.id,
             student_id_placeholder="STU001",
         )
         repo = AssignmentRepository(FacultyMentorAssignment, db_session)
@@ -195,10 +224,11 @@ class TestFacultyMentorAYLock:
     def test_save_on_unlocked_ay_succeeds(self, db_session):
         ay = _ay(db_session)
         campus = _campus(db_session)
+        fac = _faculty(db_session, campus)
         record = FacultyMentorAssignment(
             academic_year_id=ay.id,
             campus_id=campus.id,
-            faculty_id_placeholder="FAC001",
+            faculty_id=fac.id,
             student_id_placeholder="STU001",
         )
         repo = AssignmentRepository(FacultyMentorAssignment, db_session)

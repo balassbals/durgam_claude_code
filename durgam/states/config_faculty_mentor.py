@@ -19,7 +19,12 @@ from durgam.repositories.assignment import AssignmentRepository
 from durgam.repositories.campus import CampusRepository
 from durgam.repositories.document_template import DocumentTemplateRepository
 from durgam.repositories.file_asset import FileAssetRepository
-from durgam.services.assignment import AssignmentError, FacultyMentorService
+from durgam.services.assignment import (
+    AssignmentError,
+    FacultyMentorService,
+    faculty_display,
+    resolve_faculty_id_by_employee_id,
+)
 from durgam.services.org_exceptions import AcademicYearLockedError
 from durgam.states.base import BaseState
 from durgam.storage import get_storage_backend
@@ -129,7 +134,7 @@ class FacultyMentorConfigState(BaseState):
         ):
             self.mentors.append({
                 "id": str(m.id),
-                "faculty": m.faculty_id_placeholder,
+                "faculty": faculty_display(session, m.faculty_id),
                 "student": m.student_id_placeholder,
                 "notes": m.notes or "",
             })
@@ -204,11 +209,12 @@ class FacultyMentorConfigState(BaseState):
                 svc = _svc(session)
                 repo = AssignmentRepository(FacultyMentorAssignment, session)
                 actor_id = UUID(self.current_user_id)
+                faculty_id = resolve_faculty_id_by_employee_id(session, faculty)
                 if not editing_id:
                     entity = svc.create(
                         academic_year_id=UUID(self.selected_ay_id),
                         campus_id=UUID(self.selected_campus_id),
-                        faculty_id_placeholder=faculty,
+                        faculty_id=faculty_id,
                         student_id_placeholder=student,
                         actor_id=actor_id,
                         notes=notes,
@@ -221,7 +227,7 @@ class FacultyMentorConfigState(BaseState):
                     entity = svc.update(
                         UUID(editing_id),
                         {
-                            "faculty_id_placeholder": faculty,
+                            "faculty_id": faculty_id,
                             "student_id_placeholder": student,
                             "notes": notes,
                         },
@@ -365,7 +371,7 @@ class FacultyMentorConfigState(BaseState):
                 mentor_list = [
                     {
                         "sno": i + 1,
-                        "faculty": m.faculty_id_placeholder,
+                        "faculty": faculty_display(session, m.faculty_id),
                         "student": m.student_id_placeholder,
                         "notes": m.notes or "",
                     }

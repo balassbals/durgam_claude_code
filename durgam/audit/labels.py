@@ -175,7 +175,7 @@ def _resolve_fma(ids: list[str], session: Session) -> dict[str, str]:
     from durgam.models.config_anchors import FacultyMentorAssignment
     return _simple_resolver(
         FacultyMentorAssignment,
-        lambda f: f"{f.faculty_id_placeholder} → {f.student_id_placeholder}",
+        lambda f: f"{f.faculty_id} → {f.student_id_placeholder}",
     )(ids, session)
 
 

@@ -29,26 +29,16 @@ class TestFacultyMentorCreate:
     def test_create_success(self):
         svc, repo = self._make_svc()
         repo.save.side_effect = lambda r: r
+        fid = uuid4()
         result = svc.create(
             academic_year_id=uuid4(),
             campus_id=uuid4(),
-            faculty_id_placeholder="FAC001",
+            faculty_id=fid,
             student_id_placeholder="STU001",
             actor_id=uuid4(),
         )
         repo.save.assert_called_once()
-        assert result.faculty_id_placeholder == "FAC001"
-
-    def test_create_blank_faculty_raises(self):
-        svc, repo = self._make_svc()
-        with pytest.raises(AssignmentError, match="Faculty identifier"):
-            svc.create(
-                academic_year_id=uuid4(),
-                campus_id=uuid4(),
-                faculty_id_placeholder="  ",
-                student_id_placeholder="STU001",
-                actor_id=uuid4(),
-            )
+        assert result.faculty_id == fid  # 11A: FK, not placeholder string
 
     def test_create_blank_student_raises(self):
         svc, repo = self._make_svc()
@@ -56,7 +46,7 @@ class TestFacultyMentorCreate:
             svc.create(
                 academic_year_id=uuid4(),
                 campus_id=uuid4(),
-                faculty_id_placeholder="FAC001",
+                faculty_id=uuid4(),
                 student_id_placeholder="",
                 actor_id=uuid4(),
             )
