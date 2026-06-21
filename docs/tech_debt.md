@@ -1473,3 +1473,11 @@ Phase 9A shipped sys_admin **direct** NRF renewal (`NonRegularFacultyService.ren
 - (c) an approval-on-completion hook that calls `NonRegularFacultyService.renew` on terminal approval.
 
 The direct-renew override stays (parallels the `is_admin_approved` flag). See Q-P9A.1 for context. Discovered at M10 Phase 9A.1 walkthrough.
+
+---
+
+### TD-086 — Leave-balance seed gap (blocks manual leave-flow walkthroughs)
+
+**Status:** Open — defer to Phase 14 gate ritual (sooner if a phase needs a leave-flow walkthrough as gate criterion). **Priority:** Low-Medium.
+
+The dev DB has no `leave_balances` seeded for faculty users (test fixtures seed balances per-test, but `scripts/seed.py` does not). This blocks manual UI walkthroughs of any leave-submit flow (e.g. Phase 10B's HoD recommend-via scenarios) because balance checks fail before routing is exercised. Resolution: either (a) extend `scripts/seed.py` to seed initial balances for the seeded faculty users, or (b) accept and require explicit balance seeding before walkthroughs. Discovered during the Phase 10B/11 block.
