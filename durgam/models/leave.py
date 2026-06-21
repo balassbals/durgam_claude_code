@@ -215,6 +215,25 @@ class LeaveSanctionAuthorityRule(TimestampedSoftDelete, table=True):
     # If set, this role is a recommend-only stage preceding the sanctioner.
     # Used for SCL: Director recommends → VC approves.
 
+    # ── M10 Phase 10B (Q-P10) — designation/employee-type-keyed HoD recommend ──
+    applicant_designation_codes: list[str] | None = Field(
+        default=None, sa_column=Column(JSONB, nullable=True)
+    )
+    # NULL = wildcard (match any designation). Else: applicant's designation_code
+    # must be in this list for the rule to match.
+    applicant_employee_types: list[str] | None = Field(
+        default=None, sa_column=Column(JSONB, nullable=True)
+    )
+    # NULL = wildcard (match any employee_type). Else: applicant's employee_type
+    # must be in this list for the rule to match.
+    recommend_via_resolver: str | None = Field(default=None, max_length=64, nullable=True)
+    # Alternative to recommend_via_role_code: name of an approval resolver (e.g.
+    # 'dept_head_at_requestor_campus') called at routing time to find the
+    # recommender. Mutually exclusive with recommend_via_role_code.
+    requires_optin: bool = Field(default=False, nullable=False)
+    # True = rule matches ONLY when the requestor opts in (Q-P10.2 Prof-tier
+    # checkbox). False (default; all existing + Q-P10.1 rows) matches normally.
+
     requires_in_charge: bool = Field(default=False, nullable=False)
     # True for Director's own leave: form must supply in_charge_designation
 

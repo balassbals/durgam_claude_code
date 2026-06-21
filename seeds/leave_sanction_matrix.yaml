@@ -10,8 +10,10 @@
 # FACULTY (routes to Director per §22.I.iii). M10 Faculty module may rework
 # designation-bearing rules at that point.
 #
-# Total rules: 73
+# Total rules: 88
 #   14 CL (§22.I) + 1 SCL (§22.II) + 56 EL/HPL/CML/ML (14 × 4, §23) + 2 EOL/SL (§24)
+#   + 15 M10 Phase 10B (Q-P10) HoD-recommend rows: 3 kinds × 5 faculty leave types
+#     (CL/EL/HPL/CML/ML), appended at the foot of the rules list.
 
 rules:
 
@@ -415,3 +417,147 @@ rules:
     sanctioner_role_code: VC
     priority: 100
     notes: "§24 — VC; may delegate to suitable authority"
+
+  # ═══════════════════════════════════════════════════════════════
+  # M10 Phase 10B (Q-P10) — HoD recommend-via prefix for faculty leave
+  # Prepends a recommend-only HoD stage (resolver dept_head_at_requestor_campus,
+  # 5F) before the Director sanction, for the 5 DIRECTOR-routed faculty leave
+  # types. Three rule kinds per type (distinct priorities → distinct natural keys):
+  #   p25: Q-P10.1 lower designations (auto)   p26: Q-P10.1 employee types (auto)
+  #   p27: Q-P10.2 Prof-tier (requires_optin)
+  # ═══════════════════════════════════════════════════════════════
+  - leave_type: CL
+    applicant_role_code: FACULTY
+    sanctioner_role_code: DIRECTOR
+    scope_type: campus
+    recommend_via_resolver: dept_head_at_requestor_campus
+    applicant_designation_codes: ["asst_prof_l10", "asst_prof_l11", "asst_prof_l12", "instructor"]
+    requires_optin: false
+    priority: 25
+    notes: "Q-P10.1 — HoD recommend for lower-tier faculty designations"
+  - leave_type: CL
+    applicant_role_code: FACULTY
+    sanctioner_role_code: DIRECTOR
+    scope_type: campus
+    recommend_via_resolver: dept_head_at_requestor_campus
+    applicant_employee_types: ["honorary_teaching", "superannuated_teaching", "visiting_fellow"]
+    requires_optin: false
+    priority: 26
+    notes: "Q-P10.1 — HoD recommend for honorary/superannuated/visiting employee types"
+  - leave_type: CL
+    applicant_role_code: FACULTY
+    sanctioner_role_code: DIRECTOR
+    scope_type: campus
+    recommend_via_resolver: dept_head_at_requestor_campus
+    applicant_designation_codes: ["prof", "assoc_prof", "sr_prof"]
+    requires_optin: true
+    priority: 27
+    notes: "Q-P10.2 — Prof-tier opt-in HoD recommend (form checkbox)"
+  - leave_type: EL
+    applicant_role_code: FACULTY
+    sanctioner_role_code: DIRECTOR
+    scope_type: campus
+    recommend_via_resolver: dept_head_at_requestor_campus
+    applicant_designation_codes: ["asst_prof_l10", "asst_prof_l11", "asst_prof_l12", "instructor"]
+    requires_optin: false
+    priority: 25
+    notes: "Q-P10.1 — HoD recommend for lower-tier faculty designations"
+  - leave_type: EL
+    applicant_role_code: FACULTY
+    sanctioner_role_code: DIRECTOR
+    scope_type: campus
+    recommend_via_resolver: dept_head_at_requestor_campus
+    applicant_employee_types: ["honorary_teaching", "superannuated_teaching", "visiting_fellow"]
+    requires_optin: false
+    priority: 26
+    notes: "Q-P10.1 — HoD recommend for honorary/superannuated/visiting employee types"
+  - leave_type: EL
+    applicant_role_code: FACULTY
+    sanctioner_role_code: DIRECTOR
+    scope_type: campus
+    recommend_via_resolver: dept_head_at_requestor_campus
+    applicant_designation_codes: ["prof", "assoc_prof", "sr_prof"]
+    requires_optin: true
+    priority: 27
+    notes: "Q-P10.2 — Prof-tier opt-in HoD recommend (form checkbox)"
+  - leave_type: HPL
+    applicant_role_code: FACULTY
+    sanctioner_role_code: DIRECTOR
+    scope_type: campus
+    recommend_via_resolver: dept_head_at_requestor_campus
+    applicant_designation_codes: ["asst_prof_l10", "asst_prof_l11", "asst_prof_l12", "instructor"]
+    requires_optin: false
+    priority: 25
+    notes: "Q-P10.1 — HoD recommend for lower-tier faculty designations"
+  - leave_type: HPL
+    applicant_role_code: FACULTY
+    sanctioner_role_code: DIRECTOR
+    scope_type: campus
+    recommend_via_resolver: dept_head_at_requestor_campus
+    applicant_employee_types: ["honorary_teaching", "superannuated_teaching", "visiting_fellow"]
+    requires_optin: false
+    priority: 26
+    notes: "Q-P10.1 — HoD recommend for honorary/superannuated/visiting employee types"
+  - leave_type: HPL
+    applicant_role_code: FACULTY
+    sanctioner_role_code: DIRECTOR
+    scope_type: campus
+    recommend_via_resolver: dept_head_at_requestor_campus
+    applicant_designation_codes: ["prof", "assoc_prof", "sr_prof"]
+    requires_optin: true
+    priority: 27
+    notes: "Q-P10.2 — Prof-tier opt-in HoD recommend (form checkbox)"
+  - leave_type: CML
+    applicant_role_code: FACULTY
+    sanctioner_role_code: DIRECTOR
+    scope_type: campus
+    recommend_via_resolver: dept_head_at_requestor_campus
+    applicant_designation_codes: ["asst_prof_l10", "asst_prof_l11", "asst_prof_l12", "instructor"]
+    requires_optin: false
+    priority: 25
+    notes: "Q-P10.1 — HoD recommend for lower-tier faculty designations"
+  - leave_type: CML
+    applicant_role_code: FACULTY
+    sanctioner_role_code: DIRECTOR
+    scope_type: campus
+    recommend_via_resolver: dept_head_at_requestor_campus
+    applicant_employee_types: ["honorary_teaching", "superannuated_teaching", "visiting_fellow"]
+    requires_optin: false
+    priority: 26
+    notes: "Q-P10.1 — HoD recommend for honorary/superannuated/visiting employee types"
+  - leave_type: CML
+    applicant_role_code: FACULTY
+    sanctioner_role_code: DIRECTOR
+    scope_type: campus
+    recommend_via_resolver: dept_head_at_requestor_campus
+    applicant_designation_codes: ["prof", "assoc_prof", "sr_prof"]
+    requires_optin: true
+    priority: 27
+    notes: "Q-P10.2 — Prof-tier opt-in HoD recommend (form checkbox)"
+  - leave_type: ML
+    applicant_role_code: FACULTY
+    sanctioner_role_code: DIRECTOR
+    scope_type: campus
+    recommend_via_resolver: dept_head_at_requestor_campus
+    applicant_designation_codes: ["asst_prof_l10", "asst_prof_l11", "asst_prof_l12", "instructor"]
+    requires_optin: false
+    priority: 25
+    notes: "Q-P10.1 — HoD recommend for lower-tier faculty designations"
+  - leave_type: ML
+    applicant_role_code: FACULTY
+    sanctioner_role_code: DIRECTOR
+    scope_type: campus
+    recommend_via_resolver: dept_head_at_requestor_campus
+    applicant_employee_types: ["honorary_teaching", "superannuated_teaching", "visiting_fellow"]
+    requires_optin: false
+    priority: 26
+    notes: "Q-P10.1 — HoD recommend for honorary/superannuated/visiting employee types"
+  - leave_type: ML
+    applicant_role_code: FACULTY
+    sanctioner_role_code: DIRECTOR
+    scope_type: campus
+    recommend_via_resolver: dept_head_at_requestor_campus
+    applicant_designation_codes: ["prof", "assoc_prof", "sr_prof"]
+    requires_optin: true
+    priority: 27
+    notes: "Q-P10.2 — Prof-tier opt-in HoD recommend (form checkbox)"

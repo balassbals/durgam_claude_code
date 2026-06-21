@@ -298,30 +298,53 @@ def resolve_channel(
     user_roles: list[str],
     leave_type: str,
     rules: list[Any],  # LeaveSanctionAuthorityRule duck-typed
+    *,
+    applicant_designation_code: str | None = None,
+    applicant_employee_type: str | None = None,
+    optin: bool = False,
 ) -> list[dict]:
     """Return the approval channel for (user_roles, leave_type).
 
     Each dict in the returned list has:
-      role_code: str          — the approver role to route to at this stage
-      recommend_only: bool    — True for a recommend-only stage (e.g. Director for SCL)
-      scope_type: str | None  — scope hint for the routing lookup
+      role_code: str | None     — the approver role to route to (None for resolver stages)
+      resolver_name: str | None — name of an approval resolver to call (Q-P10.3); when
+                                  set, the router calls it instead of role-code lookup
+      recommend_only: bool      — True for a recommend-only stage (e.g. HoD prefix)
+      scope_type: str | None    — scope hint for the routing lookup
 
-    Algorithm (§11.10, §11.15 sanctioning matrix):
+    Algorithm (§11.10, §11.15 + Q-P10):
     1. Filter rules matching leave_type == leave_type OR leave_type == '*'.
     2. Filter rules matching applicant_role_code in user_roles OR == '*'.
-    3. Sort by priority ASC (lower number = more specific rule wins).
-    4. Take first match; raise LeaveChannelError if no match found.
-    5. Build channel: if recommend_via_role_code is set, prepend a recommend-only
-       stage; then append the sanctioner stage.
+    3. (Q-P10.1) Filter by applicant_designation_codes (NULL = wildcard) AND
+       applicant_employee_types (NULL = wildcard).
+    4. (Q-P10.2) Drop rules with requires_optin=True unless optin=True.
+    5. Sort by priority ASC; take the single first match (no duplication).
+    6. Build channel: if recommend_via_resolver set, prepend a recommend-only
+       resolver stage; elif recommend_via_role_code set, prepend a recommend-only
+       role stage; then append the sanctioner stage.
 
     Duck-typed rule attributes used: leave_type, applicant_role_code,
-    sanctioner_role_code, recommend_via_role_code, scope_type, priority.
+    sanctioner_role_code, recommend_via_role_code, recommend_via_resolver,
+    applicant_designation_codes, applicant_employee_types, requires_optin,
+    scope_type, priority. (getattr with defaults keeps pre-M10 duck-typed rules /
+    MagicMocks working.)
     """
-    candidates = [
-        r for r in rules
-        if (r.leave_type == leave_type or r.leave_type == "*")
-        and (r.applicant_role_code in user_roles or r.applicant_role_code == "*")
-    ]
+    def _matches(r: Any) -> bool:
+        if not (r.leave_type == leave_type or r.leave_type == "*"):
+            return False
+        if not (r.applicant_role_code in user_roles or r.applicant_role_code == "*"):
+            return False
+        desig_codes = getattr(r, "applicant_designation_codes", None)
+        if desig_codes is not None and applicant_designation_code not in desig_codes:
+            return False
+        emp_types = getattr(r, "applicant_employee_types", None)
+        if emp_types is not None and applicant_employee_type not in emp_types:
+            return False
+        if getattr(r, "requires_optin", False) and not optin:
+            return False
+        return True
+
+    candidates = [r for r in rules if _matches(r)]
     if not candidates:
         raise LeaveChannelError(
             f"No sanctioning authority configured for "
@@ -331,14 +354,24 @@ def resolve_channel(
     rule = sorted(candidates, key=lambda r: r.priority)[0]
 
     channel: list[dict] = []
-    if rule.recommend_via_role_code is not None:
+    resolver = getattr(rule, "recommend_via_resolver", None)
+    if resolver is not None:
+        channel.append({
+            "role_code": None,
+            "resolver_name": resolver,
+            "recommend_only": True,
+            "scope_type": rule.scope_type,
+        })
+    elif rule.recommend_via_role_code is not None:
         channel.append({
             "role_code": rule.recommend_via_role_code,
+            "resolver_name": None,
             "recommend_only": True,
             "scope_type": rule.scope_type,
         })
     channel.append({
         "role_code": rule.sanctioner_role_code,
+        "resolver_name": None,
         "recommend_only": False,
         "scope_type": None,
     })

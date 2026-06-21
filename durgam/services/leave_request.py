@@ -82,6 +82,7 @@ class LeaveRequestService:
         bond_file_id: UUID | None = None,
         has_medical_cert: bool = False,
         exception_reason: str | None = None,
+        hod_recommend_optin: bool = False,
     ) -> LeaveRequest:
         # 1+2. Load user and build user_fields dict for eligibility checks.
         user = self._session.get(User, requestor_user_id)
@@ -103,6 +104,13 @@ class LeaveRequestService:
             role = self._session.get(Role, ur.role_id)
             if role is not None and not role.is_deleted:
                 user_roles.append(role.code)
+
+        # 3b. Q-P10: resolve the applicant's designation_code (from their Faculty
+        # record, if any) for designation-keyed HoD-recommend matrix rules. Non-
+        # faculty applicants have no Faculty record → None (designation rules skip).
+        applicant_designation_code = self._resolve_applicant_designation_code(
+            requestor_user_id
+        )
 
         # 4. Fetch holiday dates for the AY (CL excludes internal holidays).
         holidays_list = self._session.exec(
@@ -151,7 +159,14 @@ class LeaveRequestService:
 
         # 11. Resolve sanctioning channel from the active matrix (may raise LeaveChannelError).
         rules = self._rule_repo.list_active()
-        channel = resolve_channel(user_roles, leave_type, rules)
+        channel = resolve_channel(
+            user_roles,
+            leave_type,
+            rules,
+            applicant_designation_code=applicant_designation_code,
+            applicant_employee_type=user.employee_type,
+            optin=hod_recommend_optin,
+        )
 
         # 11b. If the matched rule requires an in-charge designation, validate it.
         matched_rule = self._match_rule(user_roles, leave_type, rules)
@@ -756,6 +771,26 @@ class LeaveRequestService:
             )
 
     # ── Private helpers ─────────────────────────────────────────────────
+
+    def _resolve_applicant_designation_code(
+        self, user_id: UUID
+    ) -> str | None:
+        """Return the applicant's designation code from their Faculty record, or
+        None if they have no Faculty record (e.g. non-teaching staff). Used for
+        Q-P10 designation-keyed HoD-recommend matrix rules."""
+        from durgam.models.config_anchors import Designation
+        from durgam.models.faculty import Faculty
+
+        faculty = self._session.exec(
+            select(Faculty).where(
+                Faculty.user_id == user_id,
+                Faculty.is_deleted == False,  # noqa: E712
+            )
+        ).first()
+        if faculty is None:
+            return None
+        desig = self._session.get(Designation, faculty.designation_id)
+        return desig.code if desig is not None else None
 
     def _match_rule(
         self, user_roles: list[str], leave_type: str, rules: list[Any]

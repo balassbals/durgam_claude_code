@@ -152,6 +152,8 @@ class LeavePageState(BaseState):
     alternate_arrangement: str = ""
     intended_outside_india: bool = False
     in_charge_designation: str = ""
+    # Q-P10.2: Prof-tier opt-in — "Send through my HoD for recommendation".
+    hod_recommend_optin: bool = False
     preview_days: float = 0.0
     preview_channel_label: str = ""
     submitting: bool = False
@@ -425,6 +427,9 @@ class LeavePageState(BaseState):
     def set_in_charge_designation(self, value: str) -> None:
         self.in_charge_designation = value
 
+    def set_hod_recommend_optin(self, value: bool) -> None:
+        self.hod_recommend_optin = value
+
     def set_withdraw_reason(self, value: str) -> None:
         self.withdraw_reason = value
 
@@ -462,6 +467,7 @@ class LeavePageState(BaseState):
         self.alternate_arrangement = ""
         self.intended_outside_india = False
         self.in_charge_designation = ""
+        self.hod_recommend_optin = False
         self.preview_days = 0.0
         self.preview_channel_label = ""
         self.submitting = False
@@ -571,6 +577,7 @@ class LeavePageState(BaseState):
                     alternate_arrangement=self.alternate_arrangement or None,
                     intended_outside_india=self.intended_outside_india,
                     in_charge_designation=self.in_charge_designation or None,
+                    hod_recommend_optin=self.hod_recommend_optin,
                 )
                 session.commit()
             except (LeaveRequestError, LeaveRuleError, LeaveChannelError, LeaveBalanceError, LeaveEligibilityError) as e:

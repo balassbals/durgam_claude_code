@@ -825,7 +825,21 @@ class ApprovalRequestService:
                 log.warning("approver_resolution_failed", error=str(e))
                 return []
 
-        # M8 path: extracted role_code + scope-chain routing.
+        # M8 path. Q-P10.3: a stage may name a resolver instead of a role_code —
+        # dispatch to the resolver registry (e.g. dept_head_at_requestor_campus).
+        resolver_name = entry.get("resolver_name") if isinstance(entry, dict) else None
+        if resolver_name:
+            from durgam.services.approval_resolvers import ResolverContext, resolve
+
+            ctx = ResolverContext(
+                requestor_user_id=request.requestor_user_id,
+                process_id=request.process_id,
+                stage_index=stage_idx,
+                payload=request.payload_json or {},
+            )
+            return resolve(resolver_name, ctx, self._session)
+
+        # M8 default: extracted role_code + scope-chain routing.
         return self._lookup_approvers_for_role(role_code, request)
 
     def _lookup_approvers_for_role(
