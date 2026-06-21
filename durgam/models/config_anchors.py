@@ -256,11 +256,13 @@ class ClassCoordinatorAssignment(TimestampedSoftDelete, table=True):
     __tablename__ = "class_coordinator_assignments"
     __table_args__ = (
         sa.Index("ix_cca_ay_dept", "academic_year_id", "department_id"),
+        sa.Index("ix_cca_faculty_id", "faculty_id"),
     )
 
     academic_year_id: UUID = Field(foreign_key="academic_years.id", nullable=False)
     department_id: UUID = Field(foreign_key="departments.id", nullable=False)
-    faculty_id_placeholder: str = Field(max_length=128, nullable=False)
+    # M10 Phase 11A (D-020): faculty_id_placeholder → faculty_id FK backfill.
+    faculty_id: UUID = Field(foreign_key="faculties.id", nullable=False)
     class_identifier: str = Field(max_length=64, nullable=False)
     notes: str | None = Field(default=None)
 

@@ -17,7 +17,12 @@ from durgam.models.config_anchors import ClassCoordinatorAssignment
 from durgam.repositories.academic_year import AcademicYearRepository
 from durgam.repositories.assignment import AssignmentRepository
 from durgam.repositories.department import DepartmentRepository
-from durgam.services.assignment import AssignmentError, ClassCoordinatorService
+from durgam.services.assignment import (
+    AssignmentError,
+    ClassCoordinatorService,
+    faculty_display,
+    resolve_faculty_id_by_employee_id,
+)
 from durgam.services.org_exceptions import AcademicYearLockedError
 from durgam.states.base import BaseState
 
@@ -110,7 +115,7 @@ class ClassCoordinatorConfigState(BaseState):
         for c in svc.list_by_ay_dept(UUID(self.selected_ay_id), UUID(self.selected_dept_id)):
             self.coordinators.append({
                 "id": str(c.id),
-                "faculty": c.faculty_id_placeholder,
+                "faculty": faculty_display(session, c.faculty_id),
                 "class": c.class_identifier,
                 "notes": c.notes or "",
             })
@@ -179,11 +184,12 @@ class ClassCoordinatorConfigState(BaseState):
                 svc = _svc(session)
                 repo = AssignmentRepository(ClassCoordinatorAssignment, session)
                 actor_id = UUID(self.current_user_id)
+                faculty_id = resolve_faculty_id_by_employee_id(session, faculty)
                 if not editing_id:
                     entity = svc.create(
                         academic_year_id=UUID(self.selected_ay_id),
                         department_id=UUID(self.selected_dept_id),
-                        faculty_id_placeholder=faculty,
+                        faculty_id=faculty_id,
                         class_identifier=cls,
                         actor_id=actor_id,
                         notes=notes,
@@ -196,7 +202,7 @@ class ClassCoordinatorConfigState(BaseState):
                     entity = svc.update(
                         UUID(editing_id),
                         {
-                            "faculty_id_placeholder": faculty,
+                            "faculty_id": faculty_id,
                             "class_identifier": cls,
                             "notes": notes,
                         },

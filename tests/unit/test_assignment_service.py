@@ -112,7 +112,7 @@ class TestClassCoordinatorCreate:
         result = svc.create(
             academic_year_id=uuid4(),
             department_id=uuid4(),
-            faculty_id_placeholder="FAC003",
+            faculty_id=uuid4(),
             class_identifier="BSc-II-A",
             actor_id=uuid4(),
         )
@@ -126,7 +126,7 @@ class TestClassCoordinatorCreate:
         svc.create(
             academic_year_id=uuid4(),
             department_id=uuid4(),
-            faculty_id_placeholder="FAC004",
+            faculty_id=uuid4(),
             class_identifier="BSc-II-A",
             actor_id=uuid4(),
         )
@@ -139,7 +139,7 @@ class TestClassCoordinatorCreate:
             svc.create(
                 academic_year_id=uuid4(),
                 department_id=uuid4(),
-                faculty_id_placeholder="FAC005",
+                faculty_id=uuid4(),
                 class_identifier="BSc-II-A",
                 actor_id=uuid4(),
             )
@@ -151,29 +151,19 @@ class TestClassCoordinatorCreate:
             svc.create(
                 academic_year_id=uuid4(),
                 department_id=uuid4(),
-                faculty_id_placeholder="FAC006",
-                class_identifier="BSc-II-A",
-                actor_id=uuid4(),
-            )
-
-    def test_create_blank_faculty_raises(self):
-        svc, repo = self._make_svc()
-        with pytest.raises(AssignmentError, match="Faculty identifier"):
-            svc.create(
-                academic_year_id=uuid4(),
-                department_id=uuid4(),
-                faculty_id_placeholder="",
+                faculty_id=uuid4(),
                 class_identifier="BSc-II-A",
                 actor_id=uuid4(),
             )
 
     def test_create_blank_class_raises(self):
         svc, repo = self._make_svc()
+        repo.count_by_ay_class.return_value = 0
         with pytest.raises(AssignmentError, match="Class identifier"):
             svc.create(
                 academic_year_id=uuid4(),
                 department_id=uuid4(),
-                faculty_id_placeholder="FAC007",
+                faculty_id=uuid4(),
                 class_identifier="",
                 actor_id=uuid4(),
             )

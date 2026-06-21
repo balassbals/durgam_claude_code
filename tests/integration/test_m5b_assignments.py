@@ -304,7 +304,7 @@ class TestClassCoordinatorAYLock:
         record = ClassCoordinatorAssignment(
             academic_year_id=ay.id,
             department_id=dept.id,
-            faculty_id_placeholder="FAC003",
+            faculty_id=_faculty(db_session).id,
             class_identifier="BSc-II-A",
         )
         repo = AssignmentRepository(ClassCoordinatorAssignment, db_session)
@@ -320,7 +320,7 @@ class TestClassCoordinatorAYLock:
         record = ClassCoordinatorAssignment(
             academic_year_id=ay.id,
             department_id=dept.id,
-            faculty_id_placeholder="FAC003",
+            faculty_id=_faculty(db_session).id,
             class_identifier="BSc-II-A",
         )
         repo = AssignmentRepository(ClassCoordinatorAssignment, db_session)
@@ -340,7 +340,7 @@ class TestClassCoordinatorAYLock:
         record = ClassCoordinatorAssignment(
             academic_year_id=ay.id,
             department_id=dept.id,
-            faculty_id_placeholder="FAC003",
+            faculty_id=_faculty(db_session).id,
             class_identifier="BSc-II-A",
         )
         repo = AssignmentRepository(ClassCoordinatorAssignment, db_session)
@@ -358,6 +358,7 @@ class TestMaxTwoCoordinators:
         school = _school(db_session)
         dept = _dept(db_session, school, campus)
         user = _user(db_session)
+        fid = _faculty(db_session).id
 
         repo = AssignmentRepository(ClassCoordinatorAssignment, db_session)
         svc = ClassCoordinatorService(repo=repo)
@@ -365,14 +366,14 @@ class TestMaxTwoCoordinators:
         svc.create(
             academic_year_id=ay.id,
             department_id=dept.id,
-            faculty_id_placeholder="FAC_A",
+            faculty_id=fid,
             class_identifier="BSc-III-A",
             actor_id=user.id,
         )
         svc.create(
             academic_year_id=ay.id,
             department_id=dept.id,
-            faculty_id_placeholder="FAC_B",
+            faculty_id=fid,
             class_identifier="BSc-III-A",
             actor_id=user.id,
         )
@@ -381,7 +382,7 @@ class TestMaxTwoCoordinators:
             svc.create(
                 academic_year_id=ay.id,
                 department_id=dept.id,
-                faculty_id_placeholder="FAC_C",
+                faculty_id=fid,
                 class_identifier="BSc-III-A",
                 actor_id=user.id,
             )
@@ -392,6 +393,7 @@ class TestMaxTwoCoordinators:
         school = _school(db_session)
         dept = _dept(db_session, school, campus)
         user = _user(db_session)
+        fid = _faculty(db_session).id
 
         repo = AssignmentRepository(ClassCoordinatorAssignment, db_session)
         svc = ClassCoordinatorService(repo=repo)
@@ -399,14 +401,14 @@ class TestMaxTwoCoordinators:
         svc.create(
             academic_year_id=ay.id,
             department_id=dept.id,
-            faculty_id_placeholder="FAC_A",
+            faculty_id=fid,
             class_identifier="BSc-I-A",
             actor_id=user.id,
         )
         svc.create(
             academic_year_id=ay.id,
             department_id=dept.id,
-            faculty_id_placeholder="FAC_B",
+            faculty_id=fid,
             class_identifier="BSc-I-A",
             actor_id=user.id,
         )
@@ -414,7 +416,7 @@ class TestMaxTwoCoordinators:
         result = svc.create(
             academic_year_id=ay.id,
             department_id=dept.id,
-            faculty_id_placeholder="FAC_C",
+            faculty_id=fid,
             class_identifier="BSc-I-B",
             actor_id=user.id,
         )

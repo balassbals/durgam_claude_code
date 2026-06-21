@@ -193,7 +193,7 @@ def _resolve_cca(ids: list[str], session: Session) -> dict[str, str]:
     from durgam.models.config_anchors import ClassCoordinatorAssignment
     return _simple_resolver(
         ClassCoordinatorAssignment,
-        lambda c: f"{c.faculty_id_placeholder} ({c.class_identifier})",
+        lambda c: f"{c.faculty_id} ({c.class_identifier})",
     )(ids, session)
 
 
