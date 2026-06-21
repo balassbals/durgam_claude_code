@@ -248,7 +248,7 @@ class TestClassTeacherAYLock:
         record = ClassTeacherAssignment(
             academic_year_id=ay.id,
             department_id=dept.id,
-            faculty_id_placeholder="FAC002",
+            faculty_id=_faculty(db_session).id,
             class_identifier="BSc-I-A",
         )
         repo = AssignmentRepository(ClassTeacherAssignment, db_session)
@@ -264,7 +264,7 @@ class TestClassTeacherAYLock:
         record = ClassTeacherAssignment(
             academic_year_id=ay.id,
             department_id=dept.id,
-            faculty_id_placeholder="FAC002",
+            faculty_id=_faculty(db_session).id,
             class_identifier="BSc-I-A",
         )
         repo = AssignmentRepository(ClassTeacherAssignment, db_session)
@@ -284,7 +284,7 @@ class TestClassTeacherAYLock:
         record = ClassTeacherAssignment(
             academic_year_id=ay.id,
             department_id=dept.id,
-            faculty_id_placeholder="FAC002",
+            faculty_id=_faculty(db_session).id,
             class_identifier="BSc-I-A",
         )
         repo = AssignmentRepository(ClassTeacherAssignment, db_session)

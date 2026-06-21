@@ -74,26 +74,17 @@ class TestClassTeacherCreate:
     def test_create_success(self):
         svc, repo = self._make_svc()
         repo.save.side_effect = lambda r: r
+        fid = uuid4()
         result = svc.create(
             academic_year_id=uuid4(),
             department_id=uuid4(),
-            faculty_id_placeholder="FAC002",
+            faculty_id=fid,
             class_identifier="BSc-I-A",
             actor_id=uuid4(),
         )
         repo.save.assert_called_once()
         assert result.class_identifier == "BSc-I-A"
-
-    def test_create_blank_faculty_raises(self):
-        svc, repo = self._make_svc()
-        with pytest.raises(AssignmentError, match="Faculty identifier"):
-            svc.create(
-                academic_year_id=uuid4(),
-                department_id=uuid4(),
-                faculty_id_placeholder="",
-                class_identifier="BSc-I-A",
-                actor_id=uuid4(),
-            )
+        assert result.faculty_id == fid
 
     def test_create_blank_class_raises(self):
         svc, repo = self._make_svc()
@@ -101,7 +92,7 @@ class TestClassTeacherCreate:
             svc.create(
                 academic_year_id=uuid4(),
                 department_id=uuid4(),
-                faculty_id_placeholder="FAC002",
+                faculty_id=uuid4(),
                 class_identifier="  ",
                 actor_id=uuid4(),
             )

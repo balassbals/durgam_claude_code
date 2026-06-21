@@ -138,15 +138,12 @@ class ClassTeacherService:
         *,
         academic_year_id: UUID,
         department_id: UUID,
-        faculty_id_placeholder: str,
+        faculty_id: UUID,
         class_identifier: str,
         actor_id: UUID,
         notes: str | None = None,
     ) -> ClassTeacherAssignment:
-        faculty_id_placeholder = faculty_id_placeholder.strip()
         class_identifier = class_identifier.strip()
-        if not faculty_id_placeholder:
-            raise AssignmentError("Faculty identifier is required.")
         if not class_identifier:
             raise AssignmentError("Class identifier is required.")
 
@@ -154,7 +151,7 @@ class ClassTeacherService:
         record = ClassTeacherAssignment(
             academic_year_id=academic_year_id,
             department_id=department_id,
-            faculty_id_placeholder=faculty_id_placeholder,
+            faculty_id=faculty_id,
             class_identifier=class_identifier,
             notes=notes,
             created_by=actor_id,

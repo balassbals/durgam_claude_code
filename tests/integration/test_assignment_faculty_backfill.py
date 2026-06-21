@@ -106,3 +106,26 @@ class TestFacultyMentorBackfill:
         label = faculty_display(db_session, fac.id)
         assert emp in label
         assert "Asha" in label and "Rao" in label
+
+
+class TestClassTeacherBackfill:
+    def test_create_with_faculty_id_persists_fk(self, db_session: Session) -> None:
+        from durgam.models.config_anchors import ClassTeacherAssignment
+        from durgam.services.assignment import ClassTeacherService
+
+        ay = _ay(db_session)
+        fac, campus = _faculty(db_session, f"EMP-{uuid4().hex[:6]}")
+        # reuse the faculty's dept for the assignment scope
+        from durgam.models.faculty import Faculty
+        dept_id = db_session.get(Faculty, fac.id).department_id
+        svc = ClassTeacherService(
+            repo=AssignmentRepository(ClassTeacherAssignment, db_session)
+        )
+        rec = svc.create(
+            academic_year_id=ay.id, department_id=dept_id, faculty_id=fac.id,
+            class_identifier="BSc-I-A", actor_id=uuid4(),
+        )
+        fetched = AssignmentRepository(
+            ClassTeacherAssignment, db_session
+        ).get_by_id(rec.id)
+        assert fetched.faculty_id == fac.id
