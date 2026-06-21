@@ -8,7 +8,7 @@ from durgam.models.crosscutting import ApprovalProcess
 from durgam.models.identity import Role, User
 from durgam.models.leave import LeaveSanctionAuthorityRule
 
-_YAML_RULE_COUNT = 73  # 14 CL + 1 SCL + 56 EL/HPL/CML/ML + 2 EOL/SL
+_YAML_RULE_COUNT = 88  # 73 base + 15 M10 P10B Q-P10 HoD-recommend rows (3 kinds × 5 faculty leave types)
 
 
 def _count(session, model) -> int:
