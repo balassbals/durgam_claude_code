@@ -36,6 +36,7 @@ from durgam.models.config_anchors import (
 from durgam.models.course import Course
 from durgam.models.crosscutting import AuditLog, FileAsset
 from durgam.models.department import Department
+from durgam.models.faculty import Faculty
 from durgam.models.identity import Role, User
 from durgam.models.program import Program
 from durgam.models.school import School
@@ -46,6 +47,31 @@ from durgam.models.vision_mission import (
 
 
 # ── Helper ───────────────────────────────────────────────────────────────────
+
+
+def _mk_faculty(session, campus, dept):
+    """Minimal Faculty to satisfy assignment.faculty_id FK (M10 Phase 11A)."""
+    desig = Designation(code=f"DG{uuid4().hex[:4]}", name="Prof", rank=50)
+    session.add(desig)
+    session.flush()
+    user = User(
+        username=f"alr_{uuid4().hex[:8]}",
+        email=f"alr_{uuid4().hex[:8]}@dev.local",
+        password_hash="x",
+    )
+    session.add(user)
+    session.flush()
+    now = datetime.now(UTC)
+    f = Faculty(
+        user_id=user.id, employee_id=f"FAC-{uuid4().hex[:8]}", title="Dr",
+        first_name="F", last_name="A", designation_id=desig.id,
+        department_id=dept.id, campus_id=campus.id, joining_date=date(2020, 1, 1),
+        phone="9", emergency_contact_name="E", emergency_contact_relation="P",
+        emergency_contact_phone="9", created_at=now, updated_at=now,
+    )
+    session.add(f)
+    session.flush()
+    return f
 
 
 def _make_audit_row(**kwargs: Any) -> AuditLog:
@@ -258,16 +284,22 @@ class TestFacultyMentorAssignmentResolver:
         ay = AcademicYear(code="2025-30", starts_on=date(2025, 6, 1),
                           ends_on=date(2026, 5, 31))
         c = Campus(code="TST_C6", name="C6")
-        db_session.add_all([ay, c])
+        s = School(code="TST_S6", name="S6")
+        db_session.add_all([ay, c, s])
         db_session.flush()
+        d = Department(code="TST_D6", name="D6", school_id=s.id, main_campus_id=c.id)
+        db_session.add(d)
+        db_session.flush()
+        fac = _mk_faculty(db_session, c, d)
         f = FacultyMentorAssignment(
             academic_year_id=ay.id, campus_id=c.id,
-            faculty_id_placeholder="Prof A", student_id_placeholder="Student B",
+            faculty_id=fac.id, student_id_placeholder="Student B",
         )
         db_session.add(f)
         db_session.flush()
         result = _RESOURCE_RESOLVERS["faculty_mentor_assignment"]([str(f.id)], db_session)
-        assert result[str(f.id)] == "Prof A → Student B"
+        # 11A: resolver emits faculty_id (UUID) since faculty_id_placeholder is gone.
+        assert result[str(f.id)] == f"{fac.id} → Student B"
 
 
 class TestClassTeacherAssignmentResolver:
@@ -281,14 +313,16 @@ class TestClassTeacherAssignmentResolver:
         d = Department(code="TST_D7", name="D7", school_id=s.id, main_campus_id=c.id)
         db_session.add(d)
         db_session.flush()
+        fac = _mk_faculty(db_session, c, d)
         ct = ClassTeacherAssignment(
             academic_year_id=ay.id, department_id=d.id,
-            faculty_id_placeholder="Prof C", class_identifier="MSc-I",
+            faculty_id=fac.id, class_identifier="MSc-I",
         )
         db_session.add(ct)
         db_session.flush()
         result = _RESOURCE_RESOLVERS["class_teacher_assignment"]([str(ct.id)], db_session)
-        assert result[str(ct.id)] == "Prof C (MSc-I)"
+        # 11A: resolver emits faculty_id (UUID).
+        assert result[str(ct.id)] == f"{fac.id} (MSc-I)"
 
 
 class TestClassCoordinatorAssignmentResolver:
@@ -302,14 +336,16 @@ class TestClassCoordinatorAssignmentResolver:
         d = Department(code="TST_D8", name="D8", school_id=s.id, main_campus_id=c.id)
         db_session.add(d)
         db_session.flush()
+        fac = _mk_faculty(db_session, c, d)
         cc = ClassCoordinatorAssignment(
             academic_year_id=ay.id, department_id=d.id,
-            faculty_id_placeholder="Prof D", class_identifier="BSc-II",
+            faculty_id=fac.id, class_identifier="BSc-II",
         )
         db_session.add(cc)
         db_session.flush()
         result = _RESOURCE_RESOLVERS["class_coordinator_assignment"]([str(cc.id)], db_session)
-        assert result[str(cc.id)] == "Prof D (BSc-II)"
+        # 11A: resolver emits faculty_id (UUID).
+        assert result[str(cc.id)] == f"{cc.faculty_id} (BSc-II)"
 
 
 class TestNonRegularFacultyResolver:

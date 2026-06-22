@@ -85,6 +85,33 @@ def _user(session) -> User:
     return u
 
 
+def _faculty(session):
+    """Minimal Faculty to satisfy assignment.faculty_id FK (M10 Phase 11A)."""
+    from datetime import UTC, datetime
+
+    from durgam.models.config_anchors import Designation
+    from durgam.models.faculty import Faculty
+
+    campus = _campus(session)
+    school = _school(session)
+    dept = _dept(session, school, campus)
+    desig = Designation(code=f"DG{uuid4().hex[:4]}", name="Prof", rank=50)
+    session.add(desig)
+    session.flush()
+    user = _user(session)
+    now = datetime.now(UTC)
+    f = Faculty(
+        user_id=user.id, employee_id=f"FAC-{uuid4().hex[:8]}", title="Dr",
+        first_name="F", last_name="C", designation_id=desig.id,
+        department_id=dept.id, campus_id=campus.id, joining_date=date(2020, 1, 1),
+        phone="9", emergency_contact_name="E", emergency_contact_relation="P",
+        emergency_contact_phone="9", created_at=now, updated_at=now,
+    )
+    session.add(f)
+    session.flush()
+    return f
+
+
 class TestCoordinatorFlashOnMax2:
     """Verify the state handler's exception path produces the correct flash.
 
@@ -99,6 +126,7 @@ class TestCoordinatorFlashOnMax2:
         school = _school(db_session)
         dept = _dept(db_session, school, campus)
         user = _user(db_session)
+        fid = _faculty(db_session).id
 
         repo = AssignmentRepository(ClassCoordinatorAssignment, db_session)
         svc = ClassCoordinatorService(repo=repo)
@@ -106,14 +134,14 @@ class TestCoordinatorFlashOnMax2:
         svc.create(
             academic_year_id=ay.id,
             department_id=dept.id,
-            faculty_id_placeholder="FAC_A",
+            faculty_id=fid,
             class_identifier="BSc-III-A",
             actor_id=user.id,
         )
         svc.create(
             academic_year_id=ay.id,
             department_id=dept.id,
-            faculty_id_placeholder="FAC_B",
+            faculty_id=fid,
             class_identifier="BSc-III-A",
             actor_id=user.id,
         )
@@ -124,7 +152,7 @@ class TestCoordinatorFlashOnMax2:
             svc.create(
                 academic_year_id=ay.id,
                 department_id=dept.id,
-                faculty_id_placeholder="FAC_C",
+                faculty_id=fid,
                 class_identifier="BSc-III-A",
                 actor_id=user.id,
             )
@@ -146,6 +174,7 @@ class TestCoordinatorFlashOnMax2:
         school = _school(db_session)
         dept = _dept(db_session, school, campus)
         user = _user(db_session)
+        fid = _faculty(db_session).id
 
         repo = AssignmentRepository(ClassCoordinatorAssignment, db_session)
         svc = ClassCoordinatorService(repo=repo)
@@ -153,14 +182,14 @@ class TestCoordinatorFlashOnMax2:
         svc.create(
             academic_year_id=ay.id,
             department_id=dept.id,
-            faculty_id_placeholder="FAC_X",
+            faculty_id=fid,
             class_identifier="BSc-II-B",
             actor_id=user.id,
         )
         svc.create(
             academic_year_id=ay.id,
             department_id=dept.id,
-            faculty_id_placeholder="FAC_Y",
+            faculty_id=fid,
             class_identifier="BSc-II-B",
             actor_id=user.id,
         )
@@ -171,7 +200,7 @@ class TestCoordinatorFlashOnMax2:
             svc.create(
                 academic_year_id=ay.id,
                 department_id=dept.id,
-                faculty_id_placeholder="FAC_Z",
+                faculty_id=fid,
                 class_identifier="BSc-II-B",
                 actor_id=user.id,
             )
