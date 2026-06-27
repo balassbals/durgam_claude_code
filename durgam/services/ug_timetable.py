@@ -37,20 +37,17 @@ class UGTimetableService:
         period_number: int,
         course_code: str,
         course_name: str,
-        faculty_id_placeholder: str,
+        faculty_id: UUID,
         actor_id: UUID,
         room: str | None = None,
         notes: str | None = None,
     ) -> UGTimetable:
         course_code = course_code.strip()
         course_name = course_name.strip()
-        faculty_id_placeholder = faculty_id_placeholder.strip()
         if not course_code:
             raise UGTimetableError("Course code is required.")
         if not course_name:
             raise UGTimetableError("Course name is required.")
-        if not faculty_id_placeholder:
-            raise UGTimetableError("Faculty identifier is required.")
         if semester not in ("odd", "even"):
             raise UGTimetableError("Semester must be 'odd' or 'even'.")
         if year_of_study not in (1, 2):
@@ -69,7 +66,7 @@ class UGTimetableService:
             period_number=period_number,
             course_code=course_code,
             course_name=course_name,
-            faculty_id_placeholder=faculty_id_placeholder,
+            faculty_id=faculty_id,
             room=room,
             notes=notes,
             created_by=actor_id,

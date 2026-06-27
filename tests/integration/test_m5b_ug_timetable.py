@@ -50,6 +50,41 @@ def _user(session) -> User:
     return u
 
 
+def _faculty(session):
+    """Minimal Faculty to satisfy ug_timetable.faculty_id FK (M10 Phase 11B)."""
+    from datetime import UTC, datetime
+
+    from durgam.models.campus import Campus
+    from durgam.models.config_anchors import Designation
+    from durgam.models.department import Department
+    from durgam.models.faculty import Faculty
+    from durgam.models.school import School
+
+    campus = Campus(code=f"C{uuid4().hex[:4]}", name="Test Campus", address="Addr")
+    school = School(code=f"S{uuid4().hex[:4]}", name="Test School")
+    session.add_all([campus, school])
+    session.flush()
+    dept = Department(
+        code=f"D{uuid4().hex[:4]}", name="Test Dept",
+        school_id=school.id, main_campus_id=campus.id,
+    )
+    desig = Designation(code=f"DG{uuid4().hex[:4]}", name="Prof", rank=50)
+    session.add_all([dept, desig])
+    session.flush()
+    user = _user(session)
+    now = datetime.now(UTC)
+    f = Faculty(
+        user_id=user.id, employee_id=f"FAC-{uuid4().hex[:8]}", title="Dr",
+        first_name="F", last_name="N", designation_id=desig.id,
+        department_id=dept.id, campus_id=campus.id, joining_date=date(2020, 1, 1),
+        phone="9", emergency_contact_name="E", emergency_contact_relation="P",
+        emergency_contact_phone="9", created_at=now, updated_at=now,
+    )
+    session.add(f)
+    session.flush()
+    return f
+
+
 def _svc(session) -> UGTimetableService:
     return UGTimetableService(repo=UGTimetableRepository(session))
 
@@ -68,7 +103,7 @@ class TestUGTimetableCRUD:
             period_number=1,
             course_code="PHY101",
             course_name="General Physics",
-            faculty_id_placeholder="faculty-001",
+            faculty_id=_faculty(db_session).id,
             actor_id=user.id,
         )
         assert created.id is not None
@@ -91,7 +126,7 @@ class TestUGTimetableCRUD:
             period_number=1,
             course_code="CHE101",
             course_name="Chemistry",
-            faculty_id_placeholder="f1",
+            faculty_id=_faculty(db_session).id,
             actor_id=user.id,
         )
         updated = svc.update(created.id, {"course_name": "Updated Chemistry"}, user.id)
@@ -110,7 +145,7 @@ class TestUGTimetableCRUD:
             period_number=2,
             course_code="DEL101",
             course_name="To Delete",
-            faculty_id_placeholder="f1",
+            faculty_id=_faculty(db_session).id,
             actor_id=user.id,
         )
         svc.soft_delete(created.id, user.id)
@@ -135,7 +170,7 @@ class TestUGTimetableAYLock:
                 period_number=1,
                 course_code="LOCK01",
                 course_name="Locked",
-                faculty_id_placeholder="f1",
+                faculty_id=_faculty(db_session).id,
                 actor_id=user.id,
             )
 
@@ -152,7 +187,7 @@ class TestUGTimetableAYLock:
             period_number=3,
             course_code="LOCKD1",
             course_name="Will Lock",
-            faculty_id_placeholder="f1",
+            faculty_id=_faculty(db_session).id,
             actor_id=user.id,
         )
         unlocked_ay.is_locked = True
@@ -175,7 +210,7 @@ class TestUGTimetableAYLock:
             period_number=1,
             course_code="OPEN01",
             course_name="Open Slot",
-            faculty_id_placeholder="f1",
+            faculty_id=_faculty(db_session).id,
             actor_id=user.id,
         )
         assert created.id is not None
@@ -203,7 +238,7 @@ class TestUGTimetableUniqueConstraint:
             period_number=1,
             course_code="PHY101",
             course_name="Physics",
-            faculty_id_placeholder="f1",
+            faculty_id=_faculty(db_session).id,
             actor_id=user.id,
         )
         with pytest.raises(IntegrityError):
@@ -215,7 +250,7 @@ class TestUGTimetableUniqueConstraint:
                 period_number=1,
                 course_code="CHE101",
                 course_name="Chemistry",
-                faculty_id_placeholder="f2",
+                faculty_id=_faculty(db_session).id,
                 actor_id=user.id,
             )
 
@@ -232,7 +267,7 @@ class TestUGTimetableUniqueConstraint:
             period_number=1,
             course_code="PHY101",
             course_name="Physics",
-            faculty_id_placeholder="f1",
+            faculty_id=_faculty(db_session).id,
             actor_id=user.id,
         )
         slot2 = svc.create(
@@ -243,7 +278,7 @@ class TestUGTimetableUniqueConstraint:
             period_number=2,
             course_code="CHE101",
             course_name="Chemistry",
-            faculty_id_placeholder="f2",
+            faculty_id=_faculty(db_session).id,
             actor_id=user.id,
         )
         assert slot2.id is not None
@@ -261,7 +296,7 @@ class TestUGTimetableUniqueConstraint:
             period_number=1,
             course_code="PHY101",
             course_name="Physics",
-            faculty_id_placeholder="f1",
+            faculty_id=_faculty(db_session).id,
             actor_id=user.id,
         )
         slot2 = svc.create(
@@ -272,7 +307,7 @@ class TestUGTimetableUniqueConstraint:
             period_number=1,
             course_code="CHE101",
             course_name="Chemistry",
-            faculty_id_placeholder="f2",
+            faculty_id=_faculty(db_session).id,
             actor_id=user.id,
         )
         assert slot2.id is not None

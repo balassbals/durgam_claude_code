@@ -394,12 +394,18 @@ class TestUGTimetableResolver:
     def test_label(self, db_session):
         ay = AcademicYear(code="2025-34", starts_on=date(2025, 6, 1),
                           ends_on=date(2026, 5, 31))
-        db_session.add(ay)
+        c = Campus(code="TST_C34", name="C34")
+        s = School(code="TST_S34", name="S34")
+        db_session.add_all([ay, c, s])
         db_session.flush()
+        d = Department(code="TST_D34", name="D34", school_id=s.id, main_campus_id=c.id)
+        db_session.add(d)
+        db_session.flush()
+        fac = _mk_faculty(db_session, c, d)
         ugt = UGTimetable(
             academic_year_id=ay.id, semester="Odd", year_of_study=1,
             day_of_week=1, period_number=3, course_code="MAT101",
-            course_name="Calc", faculty_id_placeholder="Prof F",
+            course_name="Calc", faculty_id=fac.id,
         )
         db_session.add(ugt)
         db_session.flush()

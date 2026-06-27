@@ -11,6 +11,11 @@ from durgam.auth.decorators import audit_action, require_role
 from durgam.db import open_session
 from durgam.repositories.academic_year import AcademicYearRepository
 from durgam.repositories.ug_timetable import UGTimetableRepository
+from durgam.services.assignment import (
+    AssignmentError,
+    faculty_display,
+    resolve_faculty_id_by_employee_id,
+)
 from durgam.services.org_exceptions import AcademicYearLockedError
 from durgam.services.ug_timetable import UGTimetableError, UGTimetableService
 from durgam.states.base import BaseState
@@ -94,7 +99,7 @@ class UGTimetableConfigState(BaseState):
                 "period_number": str(s.period_number),
                 "course_code": s.course_code,
                 "course_name": s.course_name,
-                "faculty": s.faculty_id_placeholder,
+                "faculty": faculty_display(session, s.faculty_id),
                 "room": s.room or "",
                 "notes": s.notes or "",
             })
@@ -204,6 +209,7 @@ class UGTimetableConfigState(BaseState):
             with open_session() as session:
                 svc = _svc(session)
                 actor_id = UUID(self.current_user_id)
+                faculty_id = resolve_faculty_id_by_employee_id(session, faculty)
                 if not editing_id:
                     entity = svc.create(
                         academic_year_id=UUID(self.selected_ay_id),
@@ -213,7 +219,7 @@ class UGTimetableConfigState(BaseState):
                         period_number=period_number,
                         course_code=course_code,
                         course_name=course_name,
-                        faculty_id_placeholder=faculty,
+                        faculty_id=faculty_id,
                         actor_id=actor_id,
                         room=room,
                         notes=notes,
@@ -233,7 +239,7 @@ class UGTimetableConfigState(BaseState):
                             "period_number": period_number,
                             "course_code": course_code,
                             "course_name": course_name,
-                            "faculty_id_placeholder": faculty,
+                            "faculty_id": faculty_id,
                             "room": room,
                             "notes": notes,
                         },
@@ -248,7 +254,7 @@ class UGTimetableConfigState(BaseState):
             self.show_form = False
             self.editing_id = ""
             return
-        except (UGTimetableError, AcademicYearLockedError) as e:
+        except (UGTimetableError, AssignmentError, AcademicYearLockedError) as e:
             self.flash = e.message if hasattr(e, "message") else str(e)
             self.flash_type = "error"
             self.show_form = False

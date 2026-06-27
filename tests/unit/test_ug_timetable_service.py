@@ -24,7 +24,7 @@ class TestUGTimetableCreate:
             period_number=1,
             course_code="PHY101",
             course_name="General Physics",
-            faculty_id_placeholder="faculty-001",
+            faculty_id=uuid4(),
             actor_id=uuid4(),
         )
         repo.save.assert_called_once()
@@ -41,7 +41,7 @@ class TestUGTimetableCreate:
                 period_number=1,
                 course_code="  ",
                 course_name="Test",
-                faculty_id_placeholder="f1",
+                faculty_id=uuid4(),
                 actor_id=uuid4(),
             )
 
@@ -56,22 +56,7 @@ class TestUGTimetableCreate:
                 period_number=1,
                 course_code="PHY101",
                 course_name="",
-                faculty_id_placeholder="f1",
-                actor_id=uuid4(),
-            )
-
-    def test_create_blank_faculty_raises(self):
-        svc, repo = self._make_svc()
-        with pytest.raises(UGTimetableError, match="Faculty identifier is required"):
-            svc.create(
-                academic_year_id=uuid4(),
-                semester="odd",
-                year_of_study=1,
-                day_of_week=1,
-                period_number=1,
-                course_code="PHY101",
-                course_name="Test",
-                faculty_id_placeholder="  ",
+                faculty_id=uuid4(),
                 actor_id=uuid4(),
             )
 
@@ -86,7 +71,7 @@ class TestUGTimetableCreate:
                 period_number=1,
                 course_code="PHY101",
                 course_name="Test",
-                faculty_id_placeholder="f1",
+                faculty_id=uuid4(),
                 actor_id=uuid4(),
             )
 
@@ -101,7 +86,7 @@ class TestUGTimetableCreate:
                 period_number=1,
                 course_code="PHY101",
                 course_name="Test",
-                faculty_id_placeholder="f1",
+                faculty_id=uuid4(),
                 actor_id=uuid4(),
             )
 
@@ -116,7 +101,7 @@ class TestUGTimetableCreate:
                 period_number=1,
                 course_code="PHY101",
                 course_name="Test",
-                faculty_id_placeholder="f1",
+                faculty_id=uuid4(),
                 actor_id=uuid4(),
             )
 
@@ -131,7 +116,7 @@ class TestUGTimetableCreate:
                 period_number=0,
                 course_code="PHY101",
                 course_name="Test",
-                faculty_id_placeholder="f1",
+                faculty_id=uuid4(),
                 actor_id=uuid4(),
             )
 
@@ -146,7 +131,7 @@ class TestUGTimetableCreate:
             period_number=4,
             course_code="CHE201",
             course_name="Organic Chemistry",
-            faculty_id_placeholder="f1",
+            faculty_id=uuid4(),
             actor_id=uuid4(),
             room="LH-1",
             notes="Lab session follows",
