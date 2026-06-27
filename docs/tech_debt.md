@@ -1481,3 +1481,27 @@ The direct-renew override stays (parallels the `is_admin_approved` flag). See Q-
 **Status:** Open — defer to Phase 14 gate ritual (sooner if a phase needs a leave-flow walkthrough as gate criterion). **Priority:** Low-Medium.
 
 The dev DB has no `leave_balances` seeded for faculty users (test fixtures seed balances per-test, but `scripts/seed.py` does not). This blocks manual UI walkthroughs of any leave-submit flow (e.g. Phase 10B's HoD recommend-via scenarios) because balance checks fail before routing is exercised. Resolution: either (a) extend `scripts/seed.py` to seed initial balances for the seeded faculty users, or (b) accept and require explicit balance seeding before walkthroughs. Discovered during the Phase 10B/11 block.
+
+### TD-087 — Audit labels carry faculty_id as a raw UUID, not a human name
+
+**Status:** Open — deferred to Phase 13 (docs/TD sweep). **Priority:** Low.
+
+After the Phase 11 faculty_id backfills (11A: faculty_mentor_assignments,
+class_teacher_assignments, class_coordinator_assignments; 11B: non_owned_courses,
+ug_timetable), `faculty_id` is a UUID FK on all five tables, and audit captures it
+two ways that currently render the raw UUID rather than a readable label:
+
+1. **List/detail resolvers** (`durgam/audit/labels.py`): the three assignment
+   resolvers emit `f"{faculty_id} → …"` / `f"{faculty_id} (…)"` (the UUID inline).
+   The non_owned_course / ug_timetable resolvers label course_code/course_name only
+   and never show faculty, so they are unaffected for the resource label — but see (2).
+2. **diff_json FK resolution** (`FK_FIELDS` in `durgam/audit/labels.py`): `faculty_id`
+   is NOT registered as an FK field for any of the five resources, so a before/after
+   diff on `faculty_id` shows the raw UUID instead of `employee_id — Title First Last`.
+
+Resolution (one source change, all five tables): (a) add a `faculty` resolver lookup
+keyed on `faculties.id` that formats `employee_id — title first last`, (b) change the
+three assignment resolvers to render that label instead of the UUID, and (c) add
+`"faculty_id": "faculty"` to the `FK_FIELDS` entry for all five resources so diffs
+resolve. Pure readability; no schema or behaviour change. First surfaced as an honest
+deviation in 11A.1 (resolver-test assertions had to assert the UUID) and re-noted in 11B.
