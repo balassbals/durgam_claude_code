@@ -372,11 +372,17 @@ class TestNonOwnedCourseResolver:
     def test_label(self, db_session):
         ay = AcademicYear(code="2025-33", starts_on=date(2025, 6, 1),
                           ends_on=date(2026, 5, 31))
-        db_session.add(ay)
+        c = Campus(code="TST_C33", name="C33")
+        s = School(code="TST_S33", name="S33")
+        db_session.add_all([ay, c, s])
         db_session.flush()
+        d = Department(code="TST_D33", name="D33", school_id=s.id, main_campus_id=c.id)
+        db_session.add(d)
+        db_session.flush()
+        fac = _mk_faculty(db_session, c, d)
         noc = NonOwnedCourse(
             academic_year_id=ay.id, course_code="MDC01", course_name="Value Ed",
-            credits=2, semester="Odd", faculty_id_placeholder="Prof E",
+            credits=2, semester="Odd", faculty_id=fac.id,
         )
         db_session.add(noc)
         db_session.flush()

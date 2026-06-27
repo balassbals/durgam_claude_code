@@ -9,6 +9,11 @@ from durgam.auth.decorators import audit_action, require_role
 from durgam.db import open_session
 from durgam.repositories.academic_year import AcademicYearRepository
 from durgam.repositories.non_owned_course import NonOwnedCourseRepository
+from durgam.services.assignment import (
+    AssignmentError,
+    faculty_display,
+    resolve_faculty_id_by_employee_id,
+)
 from durgam.services.non_owned_course import NonOwnedCourseError, NonOwnedCourseService
 from durgam.services.org_exceptions import AcademicYearLockedError
 from durgam.states.base import BaseState
@@ -84,7 +89,7 @@ class NonOwnedCourseConfigState(BaseState):
                 "course_name": c.course_name,
                 "credits": str(c.credits),
                 "semester": c.semester,
-                "faculty": c.faculty_id_placeholder,
+                "faculty": faculty_display(session, c.faculty_id),
                 "notes": c.notes or "",
             })
 
@@ -171,6 +176,7 @@ class NonOwnedCourseConfigState(BaseState):
             with open_session() as session:
                 svc = _svc(session)
                 actor_id = UUID(self.current_user_id)
+                faculty_id = resolve_faculty_id_by_employee_id(session, faculty)
                 if not editing_id:
                     entity = svc.create(
                         academic_year_id=UUID(self.selected_ay_id),
@@ -178,7 +184,7 @@ class NonOwnedCourseConfigState(BaseState):
                         course_name=course_name,
                         credits=credits_val,
                         semester=semester,
-                        faculty_id_placeholder=faculty,
+                        faculty_id=faculty_id,
                         actor_id=actor_id,
                         notes=notes,
                     )
@@ -196,7 +202,7 @@ class NonOwnedCourseConfigState(BaseState):
                             "course_name": course_name,
                             "credits": credits_val,
                             "semester": semester,
-                            "faculty_id_placeholder": faculty,
+                            "faculty_id": faculty_id,
                             "notes": notes,
                         },
                         actor_id,
@@ -204,7 +210,7 @@ class NonOwnedCourseConfigState(BaseState):
                     after_snap = audit_snapshot(entity)
                     session.commit()
                     self._set_audit(resource_id=str(entity.id), before=before_snap, after=after_snap)
-        except (NonOwnedCourseError, AcademicYearLockedError) as e:
+        except (NonOwnedCourseError, AssignmentError, AcademicYearLockedError) as e:
             self.flash = e.message if hasattr(e, "message") else str(e)
             self.flash_type = "error"
             self.show_form = False

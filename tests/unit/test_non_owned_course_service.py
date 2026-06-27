@@ -22,7 +22,7 @@ class TestNonOwnedCourseCreate:
             course_name="Moral and Divine Culture",
             credits=2,
             semester="odd",
-            faculty_id_placeholder="faculty-001",
+            faculty_id=uuid4(),
             actor_id=uuid4(),
         )
         repo.save.assert_called_once()
@@ -37,7 +37,7 @@ class TestNonOwnedCourseCreate:
                 course_name="Test",
                 credits=2,
                 semester="odd",
-                faculty_id_placeholder="f1",
+                faculty_id=uuid4(),
                 actor_id=uuid4(),
             )
 
@@ -50,20 +50,7 @@ class TestNonOwnedCourseCreate:
                 course_name="",
                 credits=2,
                 semester="odd",
-                faculty_id_placeholder="f1",
-                actor_id=uuid4(),
-            )
-
-    def test_create_blank_faculty_raises(self):
-        svc, repo = self._make_svc()
-        with pytest.raises(NonOwnedCourseError, match="Faculty identifier is required"):
-            svc.create(
-                academic_year_id=uuid4(),
-                course_code="MDC101",
-                course_name="Test",
-                credits=2,
-                semester="odd",
-                faculty_id_placeholder="  ",
+                faculty_id=uuid4(),
                 actor_id=uuid4(),
             )
 
@@ -76,7 +63,7 @@ class TestNonOwnedCourseCreate:
                 course_name="Test",
                 credits=2,
                 semester="summer",
-                faculty_id_placeholder="f1",
+                faculty_id=uuid4(),
                 actor_id=uuid4(),
             )
 
@@ -89,7 +76,7 @@ class TestNonOwnedCourseCreate:
             course_name="Awareness Course",
             credits=1,
             semester="even",
-            faculty_id_placeholder="f1",
+            faculty_id=uuid4(),
             actor_id=uuid4(),
             notes="Elective for all",
         )

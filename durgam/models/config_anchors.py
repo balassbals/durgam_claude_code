@@ -320,6 +320,7 @@ class NonOwnedCourse(TimestampedSoftDelete, table=True):
     __tablename__ = "non_owned_courses"
     __table_args__ = (
         sa.Index("ix_noc_academic_year_id", "academic_year_id"),
+        sa.Index("ix_noc_faculty_id", "faculty_id"),
     )
 
     academic_year_id: UUID = Field(foreign_key="academic_years.id", nullable=False)
@@ -327,7 +328,8 @@ class NonOwnedCourse(TimestampedSoftDelete, table=True):
     course_name: str = Field(max_length=200, nullable=False)
     credits: int = Field(default=0, nullable=False)
     semester: str = Field(max_length=10, nullable=False)
-    faculty_id_placeholder: str = Field(max_length=128, nullable=False)
+    # M10 Phase 11B (D-020): faculty_id_placeholder -> faculty_id FK backfill.
+    faculty_id: UUID = Field(foreign_key="faculties.id", nullable=False)
     notes: str | None = Field(default=None)
 
 
