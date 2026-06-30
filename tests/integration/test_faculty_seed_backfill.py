@@ -32,11 +32,12 @@ class TestFacultySeedBackfill:
         """All 7 Faculty rows from the Phase 1B backfill table are present."""
         count = seeded_session.exec(
             select(func.count()).select_from(Faculty).where(
-                Faculty.is_deleted == False  # noqa: E712
+                Faculty.is_deleted == False,  # noqa: E712
+                Faculty.employee_id.like("DEV-FAC-%"),
             )
         ).one()
         assert count == 7, (
-            f"Expected 7 Faculty rows from seed backfill, got {count}"
+            f"Expected 7 seed-marker Faculty rows (DEV-FAC-%), got {count}"
         )
 
     def test_each_faculty_row_maps_correctly(self, seeded_session: Session) -> None:
@@ -99,7 +100,8 @@ class TestFacultySeedBackfill:
         with Session(db_engine) as session:
             count1 = session.exec(
                 select(func.count()).select_from(Faculty).where(
-                    Faculty.is_deleted == False  # noqa: E712
+                    Faculty.is_deleted == False,  # noqa: E712
+                    Faculty.employee_id.like("DEV-FAC-%"),
                 )
             ).one()
 
@@ -110,10 +112,12 @@ class TestFacultySeedBackfill:
         with Session(db_engine) as session:
             count2 = session.exec(
                 select(func.count()).select_from(Faculty).where(
-                    Faculty.is_deleted == False  # noqa: E712
+                    Faculty.is_deleted == False,  # noqa: E712
+                    Faculty.employee_id.like("DEV-FAC-%"),
                 )
             ).one()
 
         assert count1 == count2 == 7, (
-            f"Faculty count not idempotent: run1={count1}, run2={count2} (expected 7)"
+            f"Seed-marker Faculty count not idempotent: "
+            f"run1={count1}, run2={count2} (expected 7)"
         )
