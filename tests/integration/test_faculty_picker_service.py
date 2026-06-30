@@ -202,10 +202,23 @@ class TestPickerCapAndShape:
         assert match["id"] == str(f.id)
 
     def test_active_only(self, db_session):
+        # Positive control: an ACTIVE and a SOFT-DELETED faculty share the tag,
+        # so the search query has at least one matching row and the assertion
+        # cannot pass vacuously. The active row must come back; the deleted one
+        # must be filtered out. Tagged with a fresh UUID so it is independent of
+        # any committed rows left in the shared test DB by other suites.
         tag = uuid4().hex[:8]
+        _faculty(db_session, employee_id=f"ACT-{tag}", is_deleted=False)
         _faculty(db_session, employee_id=f"DEL-{tag}", is_deleted=True)
+        db_session.flush()
         rows = _svc(db_session).search(search=tag)
-        assert all(r["employee_id"] != f"DEL-{tag}" for r in rows)
+        emp_ids = {r["employee_id"] for r in rows}
+        assert f"ACT-{tag}" in emp_ids, (
+            f"active faculty ACT-{tag} should be returned; got {sorted(emp_ids)}"
+        )
+        assert f"DEL-{tag}" not in emp_ids, (
+            f"soft-deleted faculty DEL-{tag} must be excluded; got {sorted(emp_ids)}"
+        )
 
     def test_rows_carry_only_picker_fields(self, db_session):
         _faculty(db_session, employee_id="EMP-SHAPE-1")
