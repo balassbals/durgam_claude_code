@@ -82,6 +82,54 @@ class FacultyRepository:
         )
         return rows, total
 
+    def list_for_picker(
+        self,
+        *,
+        search: str | None = None,
+        department_id: UUID | None = None,
+        campus_id: UUID | None = None,
+        designation_id: UUID | None = None,
+        employee_type: str | None = None,
+        limit: int = 50,
+    ) -> list[Faculty]:
+        """M10 Phase 11C — Faculty picker query.
+
+        Active faculty only, ordered by employee_id, hard-capped at 50 rows.
+        ``search`` matches employee_id OR full name (first/middle/last) OR title,
+        case-insensitive partial. ``employee_type`` filters via a join to the
+        owning User (Faculty exists only for regular_teaching users, so this is
+        effectively always 'regular_teaching', but the filter is honoured).
+        """
+        capped = min(max(int(limit), 1), 50)
+        stmt = select(Faculty).where(Faculty.is_deleted == False)  # noqa: E712
+        if search and search.strip():
+            pattern = f"%{search.strip().lower()}%"
+            stmt = stmt.where(
+                func.lower(
+                    Faculty.first_name
+                    + " "
+                    + func.coalesce(Faculty.middle_name, "")
+                    + " "
+                    + Faculty.last_name
+                ).like(pattern)
+                | func.lower(Faculty.title).like(pattern)
+                | func.lower(Faculty.employee_id).like(pattern)
+            )
+        if department_id is not None:
+            stmt = stmt.where(Faculty.department_id == department_id)
+        if campus_id is not None:
+            stmt = stmt.where(Faculty.campus_id == campus_id)
+        if designation_id is not None:
+            stmt = stmt.where(Faculty.designation_id == designation_id)
+        if employee_type is not None and employee_type.strip():
+            from durgam.models.identity import User
+
+            stmt = stmt.join(User, User.id == Faculty.user_id).where(
+                User.employee_type == employee_type.strip()
+            )
+        stmt = stmt.order_by(Faculty.employee_id).limit(capped)
+        return list(self._session.exec(stmt).all())
+
     def list_with_filters(
         self,
         *,

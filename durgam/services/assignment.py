@@ -31,9 +31,12 @@ class AssignmentError(OrgServiceError):
 def resolve_faculty_id_by_employee_id(session, employee_id: str) -> UUID:
     """Resolve a faculty employee_id (the Q-P11.2 lookup key) to a Faculty UUID.
 
-    11A bridge: assignment forms accept an employee_id text input until the 11C
-    Faculty picker dropdown replaces it. Raises AssignmentError if no active
-    faculty has that employee_id.
+    11A bridge: assignment forms accepted an employee_id text input until the
+    11C Faculty picker dropdown replaced it. As of Phase 11C this helper is no
+    longer called by any of the five admin forms (they emit faculty_id directly
+    from the picker); it is retained because tests still exercise it as the
+    canonical employee_id->faculty_id resolution. Raises AssignmentError if no
+    active faculty has that employee_id.
     """
     from durgam.repositories.faculty import FacultyRepository
 

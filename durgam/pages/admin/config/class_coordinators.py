@@ -13,6 +13,7 @@ from durgam.pages.components import (
 )
 from durgam.pages.shared.confirmation_dialog import confirmation_dialog
 from durgam.pages.shared.data_table import TableColumn, data_table
+from durgam.pages.shared.faculty_picker import faculty_picker
 from durgam.states.config_class_coordinator import ClassCoordinatorConfigState
 
 
@@ -36,7 +37,7 @@ def _kebab(row: dict) -> rx.Component:
                 rx.menu.item(
                     "Edit",
                     on_click=ClassCoordinatorConfigState.open_edit(  # type: ignore[call-arg, func-returns-value]
-                        row["id"], row["faculty"], row["class"], row["notes"]
+                        row["id"]
                     ),
                 ),
                 rx.menu.item(
@@ -121,16 +122,13 @@ def _inline_form() -> rx.Component:
                         name="editing_id",
                         value=ClassCoordinatorConfigState.editing_id,
                     ),
-                    rx.vstack(
-                        rx.text("Student (placeholder) *", font_size="0.85rem", color="var(--color-muted)"),
-                        rx.input(
-                            name="form_faculty",
-                            value=ClassCoordinatorConfigState.form_faculty,
-                            on_change=ClassCoordinatorConfigState.set_form_faculty,
-                            placeholder="Student identifier",
-                            width="100%",
-                        ),
-                        align="start", gap="0.25rem", width="100%",
+                    faculty_picker(
+                        selected_label=ClassCoordinatorConfigState.form_faculty_label,
+                        search_value=ClassCoordinatorConfigState.picker_search,
+                        results=ClassCoordinatorConfigState.picker_results,
+                        on_search=ClassCoordinatorConfigState.on_picker_search,
+                        on_select=ClassCoordinatorConfigState.select_faculty,
+                        on_clear=ClassCoordinatorConfigState.clear_faculty,
                     ),
                     rx.vstack(
                         rx.text("Class *", font_size="0.85rem", color="var(--color-muted)"),

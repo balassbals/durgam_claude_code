@@ -8,12 +8,10 @@ from durgam.audit.snapshot import audit_snapshot
 from durgam.auth.decorators import audit_action, require_role
 from durgam.db import open_session
 from durgam.repositories.academic_year import AcademicYearRepository
+from durgam.repositories.faculty import FacultyRepository
 from durgam.repositories.non_owned_course import NonOwnedCourseRepository
-from durgam.services.assignment import (
-    AssignmentError,
-    faculty_display,
-    resolve_faculty_id_by_employee_id,
-)
+from durgam.services.assignment import faculty_display
+from durgam.services.faculty_picker import FacultyPickerService
 from durgam.services.non_owned_course import NonOwnedCourseError, NonOwnedCourseService
 from durgam.services.org_exceptions import AcademicYearLockedError
 from durgam.states.base import BaseState
@@ -39,8 +37,13 @@ class NonOwnedCourseConfigState(BaseState):
     form_course_name: str = ""
     form_credits: str = "0"
     form_semester: str = "odd"
-    form_faculty: str = ""
     form_notes: str = ""
+
+    # Faculty picker (M10 Phase 11C)
+    form_faculty_id: str = ""
+    form_faculty_label: str = ""
+    picker_search: str = ""
+    picker_results: list[dict[str, str]] = []
 
     confirm_open: bool = False
     confirm_id: str = ""
@@ -89,6 +92,7 @@ class NonOwnedCourseConfigState(BaseState):
                 "course_name": c.course_name,
                 "credits": str(c.credits),
                 "semester": c.semester,
+                "faculty_id": str(c.faculty_id),
                 "faculty": faculty_display(session, c.faculty_id),
                 "notes": c.notes or "",
             })
@@ -115,11 +119,41 @@ class NonOwnedCourseConfigState(BaseState):
     def set_form_semester(self, v: str) -> None:
         self.form_semester = v
 
-    def set_form_faculty(self, v: str) -> None:
-        self.form_faculty = v
-
     def set_form_notes(self, v: str) -> None:
         self.form_notes = v
+
+    # ── Faculty picker (M10 Phase 11C) ────────────────────────────────────────
+
+    def on_picker_search(self, value: str) -> None:
+        self.picker_search = value
+        if not value.strip():
+            self.picker_results = []
+            return
+        with open_session() as session:
+            self.picker_results = FacultyPickerService(
+                FacultyRepository(session)
+            ).search(search=value, limit=50)
+
+    def select_faculty(self, faculty_id: str) -> None:
+        for row in self.picker_results:
+            if row["id"] == faculty_id:
+                self.form_faculty_id = faculty_id
+                self.form_faculty_label = row["display"]
+                break
+        self.picker_search = ""
+        self.picker_results = []
+
+    def clear_faculty(self) -> None:
+        self.form_faculty_id = ""
+        self.form_faculty_label = ""
+        self.picker_search = ""
+        self.picker_results = []
+
+    def _reset_picker(self) -> None:
+        self.form_faculty_id = ""
+        self.form_faculty_label = ""
+        self.picker_search = ""
+        self.picker_results = []
 
     def open_create(self):
         self.flash = ""
@@ -129,28 +163,31 @@ class NonOwnedCourseConfigState(BaseState):
         self.form_course_name = ""
         self.form_credits = "0"
         self.form_semester = "odd"
-        self.form_faculty = ""
+        self._reset_picker()
         self.form_notes = ""
         self.show_form = True
 
-    def open_edit(
-        self, cid: str, code: str, name: str, credits: str,
-        semester: str, faculty: str, notes: str,
-    ):
+    def open_edit(self, cid: str):
         self.flash = ""
         self.flash_type = "info"
+        self._reset_picker()
+        for row in self.courses:
+            if row["id"] == cid:
+                self.form_course_code = row["course_code"]
+                self.form_course_name = row["course_name"]
+                self.form_credits = row["credits"]
+                self.form_semester = row["semester"]
+                self.form_faculty_id = row["faculty_id"]
+                self.form_faculty_label = row["faculty"]
+                self.form_notes = row["notes"]
+                break
         self.editing_id = cid
-        self.form_course_code = code
-        self.form_course_name = name
-        self.form_credits = credits
-        self.form_semester = semester
-        self.form_faculty = faculty
-        self.form_notes = notes
         self.show_form = True
 
     def cancel_form(self):
         self.show_form = False
         self.editing_id = ""
+        self._reset_picker()
         self.flash = ""
         self.flash_type = "info"
 
@@ -161,9 +198,13 @@ class NonOwnedCourseConfigState(BaseState):
         course_name = form_data.get("form_course_name", "").strip()
         credits_str = form_data.get("form_credits", "0").strip()
         semester = form_data.get("form_semester", "").strip()
-        faculty = form_data.get("form_faculty", "").strip()
         notes = form_data.get("form_notes", "").strip() or None
         editing_id = form_data.get("editing_id", "").strip()
+
+        if not self.form_faculty_id:
+            self.flash = "Select a faculty from the picker."
+            self.flash_type = "error"
+            return
 
         try:
             credits_val = int(credits_str)
@@ -176,7 +217,7 @@ class NonOwnedCourseConfigState(BaseState):
             with open_session() as session:
                 svc = _svc(session)
                 actor_id = UUID(self.current_user_id)
-                faculty_id = resolve_faculty_id_by_employee_id(session, faculty)
+                faculty_id = UUID(self.form_faculty_id)
                 if not editing_id:
                     entity = svc.create(
                         academic_year_id=UUID(self.selected_ay_id),
@@ -210,7 +251,7 @@ class NonOwnedCourseConfigState(BaseState):
                     after_snap = audit_snapshot(entity)
                     session.commit()
                     self._set_audit(resource_id=str(entity.id), before=before_snap, after=after_snap)
-        except (NonOwnedCourseError, AssignmentError, AcademicYearLockedError) as e:
+        except (NonOwnedCourseError, AcademicYearLockedError) as e:
             self.flash = e.message if hasattr(e, "message") else str(e)
             self.flash_type = "error"
             self.show_form = False

@@ -11,12 +11,13 @@ from durgam.models.config_anchors import ClassTeacherAssignment
 from durgam.repositories.academic_year import AcademicYearRepository
 from durgam.repositories.assignment import AssignmentRepository
 from durgam.repositories.department import DepartmentRepository
+from durgam.repositories.faculty import FacultyRepository
 from durgam.services.assignment import (
     AssignmentError,
     ClassTeacherService,
     faculty_display,
-    resolve_faculty_id_by_employee_id,
 )
+from durgam.services.faculty_picker import FacultyPickerService
 from durgam.services.org_exceptions import AcademicYearLockedError
 from durgam.states.base import BaseState
 
@@ -42,9 +43,14 @@ class ClassTeacherConfigState(BaseState):
 
     show_form: bool = False
     editing_id: str = ""
-    form_faculty: str = ""
     form_class: str = ""
     form_notes: str = ""
+
+    # Faculty picker (M10 Phase 11C)
+    form_faculty_id: str = ""
+    form_faculty_label: str = ""
+    picker_search: str = ""
+    picker_results: list[dict[str, str]] = []
 
     confirm_open: bool = False
     confirm_id: str = ""
@@ -109,6 +115,7 @@ class ClassTeacherConfigState(BaseState):
         for t in svc.list_by_ay_dept(UUID(self.selected_ay_id), UUID(self.selected_dept_id)):
             self.teachers.append({
                 "id": str(t.id),
+                "faculty_id": str(t.faculty_id),
                 "faculty": faculty_display(session, t.faculty_id),
                 "class": t.class_identifier,
                 "notes": t.notes or "",
@@ -132,53 +139,93 @@ class ClassTeacherConfigState(BaseState):
         with open_session() as session:
             self._load_data(session)
 
-    def set_form_faculty(self, v: str) -> None:
-        self.form_faculty = v
-
     def set_form_class(self, v: str) -> None:
         self.form_class = v
 
     def set_form_notes(self, v: str) -> None:
         self.form_notes = v
 
+    # ── Faculty picker (M10 Phase 11C) ────────────────────────────────────────
+
+    def on_picker_search(self, value: str) -> None:
+        self.picker_search = value
+        if not value.strip():
+            self.picker_results = []
+            return
+        with open_session() as session:
+            self.picker_results = FacultyPickerService(
+                FacultyRepository(session)
+            ).search(search=value, limit=50)
+
+    def select_faculty(self, faculty_id: str) -> None:
+        for row in self.picker_results:
+            if row["id"] == faculty_id:
+                self.form_faculty_id = faculty_id
+                self.form_faculty_label = row["display"]
+                break
+        self.picker_search = ""
+        self.picker_results = []
+
+    def clear_faculty(self) -> None:
+        self.form_faculty_id = ""
+        self.form_faculty_label = ""
+        self.picker_search = ""
+        self.picker_results = []
+
+    def _reset_picker(self) -> None:
+        self.form_faculty_id = ""
+        self.form_faculty_label = ""
+        self.picker_search = ""
+        self.picker_results = []
+
     def open_create(self):
         self.flash = ""
         self.flash_type = "info"
         self.editing_id = ""
-        self.form_faculty = ""
+        self._reset_picker()
         self.form_class = ""
         self.form_notes = ""
         self.show_form = True
 
-    def open_edit(self, tid: str, faculty: str, cls: str, notes: str):
+    def open_edit(self, tid: str):
         self.flash = ""
         self.flash_type = "info"
+        self._reset_picker()
+        for row in self.teachers:
+            if row["id"] == tid:
+                self.form_faculty_id = row["faculty_id"]
+                self.form_faculty_label = row["faculty"]
+                self.form_class = row["class"]
+                self.form_notes = row["notes"]
+                break
         self.editing_id = tid
-        self.form_faculty = faculty
-        self.form_class = cls
-        self.form_notes = notes
         self.show_form = True
 
     def cancel_form(self):
         self.show_form = False
         self.editing_id = ""
+        self._reset_picker()
         self.flash = ""
         self.flash_type = "info"
 
     @require_role(action="write", resource="class_teacher_assignment")
     @audit_action(action="write", resource="class_teacher_assignment")
     async def save_teacher(self, form_data: dict) -> None:
-        faculty = form_data.get("form_faculty", "").strip()
         cls = form_data.get("form_class", "").strip()
         notes = form_data.get("form_notes", "").strip() or None
         editing_id = form_data.get("editing_id", "").strip()
+
+        if not self.form_faculty_id:
+            self.flash = "Select a faculty from the picker."
+            self.flash_type = "error"
+            return
 
         try:
             with open_session() as session:
                 svc = _svc(session)
                 repo = AssignmentRepository(ClassTeacherAssignment, session)
                 actor_id = UUID(self.current_user_id)
-                faculty_id = resolve_faculty_id_by_employee_id(session, faculty)
+                faculty_id = UUID(self.form_faculty_id)
                 if not editing_id:
                     entity = svc.create(
                         academic_year_id=UUID(self.selected_ay_id),

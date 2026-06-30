@@ -227,6 +227,11 @@ from durgam.api.download import download_file
 
 app._api.add_route("/api/files/{file_id}", download_file, methods=["GET"])
 
+# ── M10 Phase 11C authenticated Faculty picker API ───────────────────────────
+from durgam.api.faculty_picker import faculty_picker
+
+app._api.add_route("/api/faculty/picker", faculty_picker, methods=["GET"])
+
 app.add_page(about_university, route="/about/university",
              on_load=AboutUniversityState.load_university_about)
 app.add_page(about_departments, route="/about/departments",

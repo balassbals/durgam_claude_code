@@ -13,6 +13,7 @@ from durgam.pages.components import (
 )
 from durgam.pages.shared.confirmation_dialog import confirmation_dialog
 from durgam.pages.shared.data_table import TableColumn, data_table
+from durgam.pages.shared.faculty_picker import faculty_picker
 from durgam.states.config_class_teacher import ClassTeacherConfigState
 
 
@@ -36,7 +37,7 @@ def _kebab(row: dict) -> rx.Component:
                 rx.menu.item(
                     "Edit",
                     on_click=ClassTeacherConfigState.open_edit(  # type: ignore[call-arg, func-returns-value]
-                        row["id"], row["faculty"], row["class"], row["notes"]
+                        row["id"]
                     ),
                 ),
                 rx.menu.item(
@@ -121,16 +122,13 @@ def _inline_form() -> rx.Component:
                         name="editing_id",
                         value=ClassTeacherConfigState.editing_id,
                     ),
-                    rx.vstack(
-                        rx.text("Faculty *", font_size="0.85rem", color="var(--color-muted)"),
-                        rx.input(
-                            name="form_faculty",
-                            value=ClassTeacherConfigState.form_faculty,
-                            on_change=ClassTeacherConfigState.set_form_faculty,
-                            placeholder="Faculty identifier",
-                            width="100%",
-                        ),
-                        align="start", gap="0.25rem", width="100%",
+                    faculty_picker(
+                        selected_label=ClassTeacherConfigState.form_faculty_label,
+                        search_value=ClassTeacherConfigState.picker_search,
+                        results=ClassTeacherConfigState.picker_results,
+                        on_search=ClassTeacherConfigState.on_picker_search,
+                        on_select=ClassTeacherConfigState.select_faculty,
+                        on_clear=ClassTeacherConfigState.clear_faculty,
                     ),
                     rx.vstack(
                         rx.text("Class *", font_size="0.85rem", color="var(--color-muted)"),

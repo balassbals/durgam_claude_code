@@ -18,13 +18,14 @@ from durgam.repositories.academic_year import AcademicYearRepository
 from durgam.repositories.assignment import AssignmentRepository
 from durgam.repositories.campus import CampusRepository
 from durgam.repositories.document_template import DocumentTemplateRepository
+from durgam.repositories.faculty import FacultyRepository
 from durgam.repositories.file_asset import FileAssetRepository
 from durgam.services.assignment import (
     AssignmentError,
     FacultyMentorService,
     faculty_display,
-    resolve_faculty_id_by_employee_id,
 )
+from durgam.services.faculty_picker import FacultyPickerService
 from durgam.services.org_exceptions import AcademicYearLockedError
 from durgam.states.base import BaseState
 from durgam.storage import get_storage_backend
@@ -53,9 +54,14 @@ class FacultyMentorConfigState(BaseState):
     # Form
     show_form: bool = False
     editing_id: str = ""
-    form_faculty: str = ""
     form_student: str = ""
     form_notes: str = ""
+
+    # Faculty picker (M10 Phase 11C)
+    form_faculty_id: str = ""
+    form_faculty_label: str = ""
+    picker_search: str = ""
+    picker_results: list[dict[str, str]] = []
 
     # Roster confirmation
     is_confirmed: bool = False
@@ -134,6 +140,7 @@ class FacultyMentorConfigState(BaseState):
         ):
             self.mentors.append({
                 "id": str(m.id),
+                "faculty_id": str(m.faculty_id),
                 "faculty": faculty_display(session, m.faculty_id),
                 "student": m.student_id_placeholder,
                 "notes": m.notes or "",
@@ -159,14 +166,44 @@ class FacultyMentorConfigState(BaseState):
 
     # ── Form setters ──────────────────────────────────────────────────────────
 
-    def set_form_faculty(self, v: str) -> None:
-        self.form_faculty = v
-
     def set_form_student(self, v: str) -> None:
         self.form_student = v
 
     def set_form_notes(self, v: str) -> None:
         self.form_notes = v
+
+    # ── Faculty picker (M10 Phase 11C) ────────────────────────────────────────
+
+    def on_picker_search(self, value: str) -> None:
+        self.picker_search = value
+        if not value.strip():
+            self.picker_results = []
+            return
+        with open_session() as session:
+            self.picker_results = FacultyPickerService(
+                FacultyRepository(session)
+            ).search(search=value, limit=50)
+
+    def select_faculty(self, faculty_id: str) -> None:
+        for row in self.picker_results:
+            if row["id"] == faculty_id:
+                self.form_faculty_id = faculty_id
+                self.form_faculty_label = row["display"]
+                break
+        self.picker_search = ""
+        self.picker_results = []
+
+    def clear_faculty(self) -> None:
+        self.form_faculty_id = ""
+        self.form_faculty_label = ""
+        self.picker_search = ""
+        self.picker_results = []
+
+    def _reset_picker(self) -> None:
+        self.form_faculty_id = ""
+        self.form_faculty_label = ""
+        self.picker_search = ""
+        self.picker_results = []
 
     # ── Form open / cancel ────────────────────────────────────────────────────
 
@@ -174,23 +211,29 @@ class FacultyMentorConfigState(BaseState):
         self.flash = ""
         self.flash_type = "info"
         self.editing_id = ""
-        self.form_faculty = ""
+        self._reset_picker()
         self.form_student = ""
         self.form_notes = ""
         self.show_form = True
 
-    def open_edit(self, mid: str, faculty: str, student: str, notes: str):
+    def open_edit(self, mid: str):
         self.flash = ""
         self.flash_type = "info"
+        self._reset_picker()
+        for row in self.mentors:
+            if row["id"] == mid:
+                self.form_faculty_id = row["faculty_id"]
+                self.form_faculty_label = row["faculty"]
+                self.form_student = row["student"]
+                self.form_notes = row["notes"]
+                break
         self.editing_id = mid
-        self.form_faculty = faculty
-        self.form_student = student
-        self.form_notes = notes
         self.show_form = True
 
     def cancel_form(self):
         self.show_form = False
         self.editing_id = ""
+        self._reset_picker()
         self.flash = ""
         self.flash_type = "info"
 
@@ -199,17 +242,21 @@ class FacultyMentorConfigState(BaseState):
     @require_role(action="write", resource="faculty_mentor_assignment")
     @audit_action(action="write", resource="faculty_mentor_assignment")
     async def save_mentor(self, form_data: dict) -> None:
-        faculty = form_data.get("form_faculty", "").strip()
         student = form_data.get("form_student", "").strip()
         notes = form_data.get("form_notes", "").strip() or None
         editing_id = form_data.get("editing_id", "").strip()
+
+        if not self.form_faculty_id:
+            self.flash = "Select a faculty from the picker."
+            self.flash_type = "error"
+            return
 
         try:
             with open_session() as session:
                 svc = _svc(session)
                 repo = AssignmentRepository(FacultyMentorAssignment, session)
                 actor_id = UUID(self.current_user_id)
-                faculty_id = resolve_faculty_id_by_employee_id(session, faculty)
+                faculty_id = UUID(self.form_faculty_id)
                 if not editing_id:
                     entity = svc.create(
                         academic_year_id=UUID(self.selected_ay_id),
