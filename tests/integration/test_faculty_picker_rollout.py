@@ -47,18 +47,18 @@ def _ay(session) -> AcademicYear:
 
 
 def _campus(session) -> Campus:
-    c = Campus(code=f"C{uuid4().hex[:4]}", name="Campus", address="A")
+    c = Campus(code=f"C{uuid4().hex[:8]}", name="Campus", address="A")
     session.add(c)
     session.flush()
     return c
 
 
 def _dept(session, campus) -> Department:
-    s = School(code=f"S{uuid4().hex[:4]}", name="School")
+    s = School(code=f"S{uuid4().hex[:8]}", name="School")
     session.add(s)
     session.flush()
     d = Department(
-        code=f"D{uuid4().hex[:4]}", name="Dept",
+        code=f"D{uuid4().hex[:8]}", name="Dept",
         school_id=s.id, main_campus_id=campus.id,
     )
     session.add(d)
@@ -69,7 +69,7 @@ def _dept(session, campus) -> Department:
 def _faculty(session, *, employee_id) -> Faculty:
     campus = _campus(session)
     dept = _dept(session, campus)
-    desig = Designation(code=f"DG{uuid4().hex[:4]}", name="Prof", rank=50)
+    desig = Designation(code=f"DG{uuid4().hex[:8]}", name="Prof", rank=50)
     session.add(desig)
     session.flush()
     user = User(

@@ -23,18 +23,18 @@ from durgam.services.faculty_picker import PICKER_FIELDS, FacultyPickerService
 
 
 def _campus(session, code_prefix="C") -> Campus:
-    c = Campus(code=f"{code_prefix}{uuid4().hex[:4]}", name="Campus", address="A")
+    c = Campus(code=f"{code_prefix}{uuid4().hex[:8]}", name="Campus", address="A")
     session.add(c)
     session.flush()
     return c
 
 
 def _dept(session, campus) -> Department:
-    s = School(code=f"S{uuid4().hex[:4]}", name="School")
+    s = School(code=f"S{uuid4().hex[:8]}", name="School")
     session.add(s)
     session.flush()
     d = Department(
-        code=f"D{uuid4().hex[:4]}", name="Dept",
+        code=f"D{uuid4().hex[:8]}", name="Dept",
         school_id=s.id, main_campus_id=campus.id,
     )
     session.add(d)
@@ -43,7 +43,7 @@ def _dept(session, campus) -> Department:
 
 
 def _designation(session, name="Professor") -> Designation:
-    d = Designation(code=f"DG{uuid4().hex[:4]}", name=name, rank=50)
+    d = Designation(code=f"DG{uuid4().hex[:8]}", name=name, rank=50)
     session.add(d)
     session.flush()
     return d
@@ -138,15 +138,24 @@ class TestPickerFilters:
             assert fac.department_id == dept_a.id
 
     def test_filter_by_campus_id(self, db_session):
+        # Positive-control discrimination: campus_a faculty returned, campus_b excluded.
+        # tag scopes the search to test-created rows so stale committed faculty from
+        # endpoint/rollout tests that share durgam_test cannot interfere.
+        tag = uuid4().hex[:8]
         campus_a = _campus(db_session)
         campus_b = _campus(db_session)
-        fa = _faculty(db_session, campus=campus_a)
-        _faculty(db_session, campus=campus_b)
-        rows = _svc(db_session).search(campus_id=campus_a.id)
-        assert str(fa.id) in {r["id"] for r in rows}
-        from uuid import UUID
-        for r in rows:
-            assert db_session.get(Faculty, UUID(r["id"])).campus_id == campus_a.id
+        fa = _faculty(db_session, employee_id=f"CA-{tag}", campus=campus_a)
+        _faculty(db_session, employee_id=f"CB-{tag}", campus=campus_b)
+        db_session.flush()
+        rows = _svc(db_session).search(search=tag, campus_id=campus_a.id)
+        ids = {r["id"] for r in rows}
+        emp_ids = {r["employee_id"] for r in rows}
+        assert str(fa.id) in ids, (
+            f"faculty on campus_a must be returned; got {sorted(emp_ids)}"
+        )
+        assert f"CB-{tag}" not in emp_ids, (
+            "faculty on campus_b must be excluded when filtering by campus_a"
+        )
 
     def test_filter_by_designation_id(self, db_session):
         campus = _campus(db_session)

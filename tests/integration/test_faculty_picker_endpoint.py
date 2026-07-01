@@ -97,18 +97,18 @@ def _grant_write(session: Session, user_id, resource: str) -> None:
 
 
 def _campus(session) -> Campus:
-    c = Campus(code=f"C{uuid4().hex[:4]}", name="Campus", address="A")
+    c = Campus(code=f"C{uuid4().hex[:8]}", name="Campus", address="A")
     session.add(c)
     session.flush()
     return c
 
 
 def _dept(session, campus) -> Department:
-    s = School(code=f"S{uuid4().hex[:4]}", name="School")
+    s = School(code=f"S{uuid4().hex[:8]}", name="School")
     session.add(s)
     session.flush()
     d = Department(
-        code=f"D{uuid4().hex[:4]}", name="Dept",
+        code=f"D{uuid4().hex[:8]}", name="Dept",
         school_id=s.id, main_campus_id=campus.id,
     )
     session.add(d)
@@ -124,7 +124,7 @@ def _faculty(
     campus = campus or _campus(session)
     dept = dept or _dept(session, campus)
     if designation is None:
-        designation = Designation(code=f"DG{uuid4().hex[:4]}", name="Prof", rank=50)
+        designation = Designation(code=f"DG{uuid4().hex[:8]}", name="Prof", rank=50)
         session.add(designation)
         session.flush()
     owner = _user(session, employee_type=employee_type)
