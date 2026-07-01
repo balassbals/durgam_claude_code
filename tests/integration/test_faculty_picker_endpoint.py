@@ -216,22 +216,58 @@ class TestFacultyPickerEndpoint:
         assert "Katherine" in names
 
     def test_filter_by_campus_and_department(self, db_engine, real_api_client):
+        # Positive-control discrimination: within ONE campus, a faculty in dept_a
+        # (matches BOTH filters) must be returned and a faculty in dept_b (matches
+        # campus only) must be EXCLUDED — proving the department filter combines
+        # with the campus filter rather than passing vacuously on the target alone.
+        # High-entropy inline codes (uuid4().hex[:8]) avoid uq-code collisions in the
+        # shared, never-rolled-back durgam_test; a unique employee_id tag scopes the
+        # query so accumulated committed faculty in the test DB cannot interfere.
+        tag = uuid4().hex[:8]
         with Session(db_engine) as session:
             raw_token = _authed(session)
-            campus = _campus(session)
-            dept = _dept(session, campus)
-            target = _faculty(session, campus=campus, dept=dept)
-            other_campus = _campus(session)
-            _faculty(session, campus=other_campus)
+            campus = Campus(code=f"C{uuid4().hex[:8]}", name="Campus", address="A")
+            school = School(code=f"S{uuid4().hex[:8]}", name="School")
+            session.add_all([campus, school])
+            session.flush()
+            dept_a = Department(
+                code=f"DA{uuid4().hex[:7]}", name="DeptA",
+                school_id=school.id, main_campus_id=campus.id,
+            )
+            dept_b = Department(
+                code=f"DB{uuid4().hex[:7]}", name="DeptB",
+                school_id=school.id, main_campus_id=campus.id,
+            )
+            desig = Designation(code=f"DG{uuid4().hex[:8]}", name="Prof", rank=50)
+            session.add_all([dept_a, dept_b, desig])
+            session.flush()
+            target = _faculty(
+                session, employee_id=f"MATCH-{tag}",
+                campus=campus, dept=dept_a, designation=desig,
+            )
+            _faculty(
+                session, employee_id=f"CAMPUSONLY-{tag}",
+                campus=campus, dept=dept_b, designation=desig,
+            )
             session.commit()
-            campus_id, dept_id, target_id = str(campus.id), str(dept.id), str(target.id)
+            campus_id, dept_id, target_id = str(campus.id), str(dept_a.id), str(target.id)
         resp = real_api_client.get(
             "/api/faculty/picker",
-            params={"campus_id": campus_id, "department_id": dept_id},
+            params={
+                "campus_id": campus_id, "department_id": dept_id, "search": tag,
+            },
             cookies={"dsession": raw_token},
         )
-        ids = {r["id"] for r in resp.json()["results"]}
-        assert target_id in ids
+        results = resp.json()["results"]
+        ids = {r["id"] for r in results}
+        emp_ids = {r["employee_id"] for r in results}
+        assert target_id in ids, (
+            f"faculty matching campus+dept must be returned; got {sorted(emp_ids)}"
+        )
+        assert f"CAMPUSONLY-{tag}" not in emp_ids, (
+            "faculty in a different department (same campus) must be excluded; "
+            f"got {sorted(emp_ids)}"
+        )
 
     def test_filter_by_designation(self, db_engine, real_api_client):
         with Session(db_engine) as session:
