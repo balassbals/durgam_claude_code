@@ -129,25 +129,3 @@ class TestClassTeacherBackfill:
             ClassTeacherAssignment, db_session
         ).get_by_id(rec.id)
         assert fetched.faculty_id == fac.id
-
-
-class TestClassCoordinatorBackfill:
-    def test_create_with_faculty_id_persists_fk(self, db_session: Session) -> None:
-        from durgam.models.config_anchors import ClassCoordinatorAssignment
-        from durgam.models.faculty import Faculty
-        from durgam.services.assignment import ClassCoordinatorService
-
-        ay = _ay(db_session)
-        fac, _ = _faculty(db_session, f"EMP-{uuid4().hex[:6]}")
-        dept_id = db_session.get(Faculty, fac.id).department_id
-        svc = ClassCoordinatorService(
-            repo=AssignmentRepository(ClassCoordinatorAssignment, db_session)
-        )
-        rec = svc.create(
-            academic_year_id=ay.id, department_id=dept_id, faculty_id=fac.id,
-            class_identifier="BSc-II-A", actor_id=uuid4(),
-        )
-        fetched = AssignmentRepository(
-            ClassCoordinatorAssignment, db_session
-        ).get_by_id(rec.id)
-        assert fetched.faculty_id == fac.id

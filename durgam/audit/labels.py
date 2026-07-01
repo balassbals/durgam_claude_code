@@ -28,7 +28,6 @@ FK_FIELDS: dict[str, dict[str, str]] = {
     "mental_health_counsellor":     {"academic_year_id": "academic_year", "campus_id": "campus"},
     "faculty_mentor_assignment":    {"academic_year_id": "academic_year", "campus_id": "campus"},
     "class_teacher_assignment":     {"academic_year_id": "academic_year", "department_id": "department"},
-    "class_coordinator_assignment": {"academic_year_id": "academic_year", "department_id": "department"},
     "non_regular_faculty":          {"department_id": "department", "approved_by_user_id": "user"},
     "non_owned_course":             {"academic_year_id": "academic_year"},
     "ug_timetable":                 {"academic_year_id": "academic_year"},
@@ -184,15 +183,6 @@ def _resolve_cta(ids: list[str], session: Session) -> dict[str, str]:
     from durgam.models.config_anchors import ClassTeacherAssignment
     return _simple_resolver(
         ClassTeacherAssignment,
-        lambda c: f"{c.faculty_id} ({c.class_identifier})",
-    )(ids, session)
-
-
-@register_resolver("class_coordinator_assignment")
-def _resolve_cca(ids: list[str], session: Session) -> dict[str, str]:
-    from durgam.models.config_anchors import ClassCoordinatorAssignment
-    return _simple_resolver(
-        ClassCoordinatorAssignment,
         lambda c: f"{c.faculty_id} ({c.class_identifier})",
     )(ids, session)
 

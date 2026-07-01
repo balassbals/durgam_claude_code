@@ -35,13 +35,13 @@ log = structlog.get_logger(__name__)
 
 _FORBIDDEN = Response("Forbidden", status_code=403)
 
-# The picker is used by exactly these five admin forms; a caller may use it iff
+# The picker is used by exactly these four admin forms; a caller may use it iff
 # they can write at least one of them (mirrors each form's _config_guard write
 # check). No dedicated picker permission is introduced.
+# (class_coordinator_assignment removed in M10 Phase 11D — Q-P11D.1.)
 _PICKER_RESOURCES = (
     "faculty_mentor_assignment",
     "class_teacher_assignment",
-    "class_coordinator_assignment",
     "non_owned_course",
     "ug_timetable",
 )

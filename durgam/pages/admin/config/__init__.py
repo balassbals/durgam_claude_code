@@ -44,7 +44,6 @@ register(NavEntry(
         ("write",     "mental_health_counsellor",       None),
         ("write",     "faculty_mentor_assignment",      None),
         ("write",     "class_teacher_assignment",       None),
-        ("write",     "class_coordinator_assignment",   None),
         ("write",     "non_regular_faculty",             None),
         ("write",     "non_owned_course",                None),
         ("write",     "ug_timetable",                    None),
@@ -216,14 +215,6 @@ register(NavEntry(
     group="Config",
     permission_action="write",
     permission_resource="class_teacher_assignment",
-))
-register(NavEntry(
-    label="Class Coordinators",
-    href="/admin/config/class-coordinators",
-    icon="user-cog",
-    group="Config",
-    permission_action="read",
-    permission_resource="class_coordinator_assignment",
 ))
 register(NavEntry(
     label="Non-Regular Faculty",

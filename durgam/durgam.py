@@ -180,16 +180,12 @@ app.add_page(admin_config_faculty_mentors, route="/admin/config/faculty-mentors"
              on_load=FacultyMentorConfigState.load_mentors)
 
 from durgam.pages.admin.config.class_teachers import admin_config_class_teachers
-from durgam.pages.admin.config.class_coordinators import admin_config_class_coordinators
 from durgam.pages.admin.config.non_regular_faculty import admin_config_non_regular_faculty
 from durgam.states.config_class_teacher import ClassTeacherConfigState
-from durgam.states.config_class_coordinator import ClassCoordinatorConfigState
 from durgam.states.config_non_regular_faculty import NonRegularFacultyConfigState
 
 app.add_page(admin_config_class_teachers, route="/admin/config/class-teachers",
              on_load=ClassTeacherConfigState.load_teachers)
-app.add_page(admin_config_class_coordinators, route="/admin/config/class-coordinators",
-             on_load=ClassCoordinatorConfigState.load_coordinators)
 app.add_page(admin_config_non_regular_faculty, route="/admin/config/non-regular-faculty",
              on_load=NonRegularFacultyConfigState.load_visitors)
 

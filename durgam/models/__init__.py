@@ -11,7 +11,6 @@ from .centre import CentreOfExcellence
 from .config_anchors import (
     AcademicYear,
     CalendarEntry,
-    ClassCoordinatorAssignment,
     ClassTeacherAssignment,
     ClassTimingsConfig,
     Designation,
@@ -111,7 +110,6 @@ __all__ = [
     "FacultyMentorAssignment",
     "FacultyMentorConfirmation",
     "ClassTeacherAssignment",
-    "ClassCoordinatorAssignment",
     "NonRegularFaculty",
     "NonOwnedCourse",
     "UGTimetable",

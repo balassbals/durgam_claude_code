@@ -244,27 +244,9 @@ class ClassTeacherAssignment(TimestampedSoftDelete, table=True):
     notes: str | None = Field(default=None)
 
 
-class ClassCoordinatorAssignment(TimestampedSoftDelete, table=True):
-    """Student serving as class coordinator, assigned by class teacher (faculty).
-
-    Max 2 per class per AY (§9.3, line 150). Student picker deferred to M12.
-    Write-access correctly gated on class-teacher assignment once M10/M12 exist;
-    current HoD/SysAdmin write access is a placeholder until the class-teacher
-    role can be identity-verified.
-    """
-
-    __tablename__ = "class_coordinator_assignments"
-    __table_args__ = (
-        sa.Index("ix_cca_ay_dept", "academic_year_id", "department_id"),
-        sa.Index("ix_cca_faculty_id", "faculty_id"),
-    )
-
-    academic_year_id: UUID = Field(foreign_key="academic_years.id", nullable=False)
-    department_id: UUID = Field(foreign_key="departments.id", nullable=False)
-    # M10 Phase 11A (D-020): faculty_id_placeholder → faculty_id FK backfill.
-    faculty_id: UUID = Field(foreign_key="faculties.id", nullable=False)
-    class_identifier: str = Field(max_length=64, nullable=False)
-    notes: str | None = Field(default=None)
+# class_coordinator_assignments removed in M10 Phase 11D (Q-P11D.1): class
+# coordinators are STUDENTS, not faculty; re-introduce correctly when the
+# student domain ships (TD-088).
 
 
 class NonRegularFaculty(TimestampedSoftDelete, table=True):

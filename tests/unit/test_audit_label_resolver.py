@@ -16,7 +16,6 @@ from durgam.models.centre import CentreOfExcellence
 from durgam.models.config_anchors import (
     AcademicYear,
     CalendarEntry,
-    ClassCoordinatorAssignment,
     ClassTeacherAssignment,
     ClassTimingsConfig,
     Designation,
@@ -323,29 +322,6 @@ class TestClassTeacherAssignmentResolver:
         result = _RESOURCE_RESOLVERS["class_teacher_assignment"]([str(ct.id)], db_session)
         # 11A: resolver emits faculty_id (UUID).
         assert result[str(ct.id)] == f"{fac.id} (MSc-I)"
-
-
-class TestClassCoordinatorAssignmentResolver:
-    def test_label(self, db_session):
-        ay = AcademicYear(code="2025-32", starts_on=date(2025, 6, 1),
-                          ends_on=date(2026, 5, 31))
-        s = School(code="TST_S8", name="S8")
-        c = Campus(code="TST_C8", name="C8")
-        db_session.add_all([ay, s, c])
-        db_session.flush()
-        d = Department(code="TST_D8", name="D8", school_id=s.id, main_campus_id=c.id)
-        db_session.add(d)
-        db_session.flush()
-        fac = _mk_faculty(db_session, c, d)
-        cc = ClassCoordinatorAssignment(
-            academic_year_id=ay.id, department_id=d.id,
-            faculty_id=fac.id, class_identifier="BSc-II",
-        )
-        db_session.add(cc)
-        db_session.flush()
-        result = _RESOURCE_RESOLVERS["class_coordinator_assignment"]([str(cc.id)], db_session)
-        # 11A: resolver emits faculty_id (UUID).
-        assert result[str(cc.id)] == f"{cc.faculty_id} (BSc-II)"
 
 
 class TestNonRegularFacultyResolver:

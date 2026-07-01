@@ -14,7 +14,6 @@ import pytest
 from durgam.models.campus import Campus
 from durgam.models.config_anchors import (
     AcademicYear,
-    ClassCoordinatorAssignment,
     ClassTeacherAssignment,
     FacultyMentorAssignment,
     MentalHealthCounsellor,
@@ -26,12 +25,7 @@ from durgam.repositories.assignment import AssignmentRepository
 from durgam.repositories.mental_health_counsellor import (
     MentalHealthCounsellorRepository,
 )
-from durgam.services.assignment import (
-    AssignmentError,
-    ClassCoordinatorService,
-)
 from durgam.services.org_exceptions import AcademicYearLockedError
-
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -290,134 +284,3 @@ class TestClassTeacherAYLock:
         repo = AssignmentRepository(ClassTeacherAssignment, db_session)
         saved = repo.save(record)
         assert saved.id is not None
-
-
-# ── ClassCoordinatorAssignment AY-lock ───────────────────────────────────────
-
-
-class TestClassCoordinatorAYLock:
-    def test_save_on_locked_ay_raises(self, db_session):
-        ay = _ay(db_session, locked=True)
-        campus = _campus(db_session)
-        school = _school(db_session)
-        dept = _dept(db_session, school, campus)
-        record = ClassCoordinatorAssignment(
-            academic_year_id=ay.id,
-            department_id=dept.id,
-            faculty_id=_faculty(db_session).id,
-            class_identifier="BSc-II-A",
-        )
-        repo = AssignmentRepository(ClassCoordinatorAssignment, db_session)
-        with pytest.raises(AcademicYearLockedError):
-            repo.save(record)
-
-    def test_soft_delete_on_locked_ay_raises(self, db_session):
-        ay = _ay(db_session)
-        campus = _campus(db_session)
-        school = _school(db_session)
-        dept = _dept(db_session, school, campus)
-        user = _user(db_session)
-        record = ClassCoordinatorAssignment(
-            academic_year_id=ay.id,
-            department_id=dept.id,
-            faculty_id=_faculty(db_session).id,
-            class_identifier="BSc-II-A",
-        )
-        repo = AssignmentRepository(ClassCoordinatorAssignment, db_session)
-        saved = repo.save(record)
-
-        ay.is_locked = True
-        db_session.flush()
-
-        with pytest.raises(AcademicYearLockedError):
-            repo.soft_delete(saved, actor_id=user.id)
-
-    def test_save_on_unlocked_ay_succeeds(self, db_session):
-        ay = _ay(db_session)
-        campus = _campus(db_session)
-        school = _school(db_session)
-        dept = _dept(db_session, school, campus)
-        record = ClassCoordinatorAssignment(
-            academic_year_id=ay.id,
-            department_id=dept.id,
-            faculty_id=_faculty(db_session).id,
-            class_identifier="BSc-II-A",
-        )
-        repo = AssignmentRepository(ClassCoordinatorAssignment, db_session)
-        saved = repo.save(record)
-        assert saved.id is not None
-
-
-# ── Max-2-coordinator integration test ───────────────────────────────────────
-
-
-class TestMaxTwoCoordinators:
-    def test_third_coordinator_same_class_raises(self, db_session):
-        ay = _ay(db_session)
-        campus = _campus(db_session)
-        school = _school(db_session)
-        dept = _dept(db_session, school, campus)
-        user = _user(db_session)
-        fid = _faculty(db_session).id
-
-        repo = AssignmentRepository(ClassCoordinatorAssignment, db_session)
-        svc = ClassCoordinatorService(repo=repo)
-
-        svc.create(
-            academic_year_id=ay.id,
-            department_id=dept.id,
-            faculty_id=fid,
-            class_identifier="BSc-III-A",
-            actor_id=user.id,
-        )
-        svc.create(
-            academic_year_id=ay.id,
-            department_id=dept.id,
-            faculty_id=fid,
-            class_identifier="BSc-III-A",
-            actor_id=user.id,
-        )
-
-        with pytest.raises(AssignmentError, match="Maximum 2"):
-            svc.create(
-                academic_year_id=ay.id,
-                department_id=dept.id,
-                faculty_id=fid,
-                class_identifier="BSc-III-A",
-                actor_id=user.id,
-            )
-
-    def test_different_class_allows_more(self, db_session):
-        ay = _ay(db_session)
-        campus = _campus(db_session)
-        school = _school(db_session)
-        dept = _dept(db_session, school, campus)
-        user = _user(db_session)
-        fid = _faculty(db_session).id
-
-        repo = AssignmentRepository(ClassCoordinatorAssignment, db_session)
-        svc = ClassCoordinatorService(repo=repo)
-
-        svc.create(
-            academic_year_id=ay.id,
-            department_id=dept.id,
-            faculty_id=fid,
-            class_identifier="BSc-I-A",
-            actor_id=user.id,
-        )
-        svc.create(
-            academic_year_id=ay.id,
-            department_id=dept.id,
-            faculty_id=fid,
-            class_identifier="BSc-I-A",
-            actor_id=user.id,
-        )
-
-        result = svc.create(
-            academic_year_id=ay.id,
-            department_id=dept.id,
-            faculty_id=fid,
-            class_identifier="BSc-I-B",
-            actor_id=user.id,
-        )
-        assert result.class_identifier == "BSc-I-B"

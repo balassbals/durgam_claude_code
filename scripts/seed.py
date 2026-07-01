@@ -342,10 +342,6 @@ def seed(session: Session) -> dict[str, int]:
         {"resource": "class_teacher_assignment",   "action": "read",      "scope": "*"},
         {"resource": "class_teacher_assignment",   "action": "write",     "scope": "*"},
         {"resource": "class_teacher_assignment",   "action": "delete",    "scope": "*"},
-        # Class coordinator assignment (Dean Academic Affairs family + HOD + SysAdmin)
-        {"resource": "class_coordinator_assignment", "action": "read",    "scope": "*"},
-        {"resource": "class_coordinator_assignment", "action": "write",   "scope": "*"},
-        {"resource": "class_coordinator_assignment", "action": "delete",  "scope": "*"},
         # Non-regular faculty (HoD family read/write/delete + SysAdmin; approve = SysAdmin only)
         {"resource": "non_regular_faculty",          "action": "read",    "scope": "*"},
         {"resource": "non_regular_faculty",          "action": "write",   "scope": "*"},
@@ -466,8 +462,6 @@ def seed(session: Session) -> dict[str, int]:
         # M5b — non-owned courses + UG timetable (scheduling info all users see)
         ("non_owned_course",          "read", "*"),
         ("ug_timetable",              "read", "*"),
-        # M5b — class coordinator list viewable by all (B1: coordinator is a student)
-        ("class_coordinator_assignment", "read", "*"),
         # M9 — Announcement Module reads (broad transparency: every role can see announcements,
         # the composer roster, categories, and audience groups)
         ("announcement",                 "read", "*"),
@@ -608,7 +602,6 @@ def seed(session: Session) -> dict[str, int]:
         ("calendar_entry",             "write",     "*"),
         ("student_category_count",     "read",      "*"),
         ("class_teacher_assignment",   "read",      "*"),
-        ("class_coordinator_assignment", "read",    "*"),
         # M5b — non-owned courses (DAA family; NOT ug_timetable — Director only)
         ("non_owned_course",           "read",      "*"),
         ("non_owned_course",           "write",     "*"),
@@ -746,18 +739,12 @@ def seed(session: Session) -> dict[str, int]:
             ("class_teacher_assignment",   "read",      "*"),
             ("class_teacher_assignment",   "write",     "*"),
             ("class_teacher_assignment",   "delete",    "*"),
-            ("class_coordinator_assignment", "read",    "*"),
-            ("class_coordinator_assignment", "write",   "*"),
-            ("class_coordinator_assignment", "delete",  "*"),
         ],
         "AHOD":                 _PUBLIC_READ + _LEAVE_REQUESTOR + _HOD_SPECIFIC + _FACULTY_OWN + [
             ("faculty_request",            "read",      "*"),  # dept scope enforced at handler body (M3 pattern)
             ("class_teacher_assignment",   "read",      "*"),
             ("class_teacher_assignment",   "write",     "*"),
             ("class_teacher_assignment",   "delete",    "*"),
-            ("class_coordinator_assignment", "read",    "*"),
-            ("class_coordinator_assignment", "write",   "*"),
-            ("class_coordinator_assignment", "delete",  "*"),
         ],
         "HOD_OFFICE":           _PUBLIC_READ + _LEAVE_REQUESTOR + [
             ("calendar_entry",             "read",      "*"),

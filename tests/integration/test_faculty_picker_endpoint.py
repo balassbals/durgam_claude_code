@@ -172,12 +172,11 @@ class TestFacultyPickerEndpoint:
         [
             "faculty_mentor_assignment",
             "class_teacher_assignment",
-            "class_coordinator_assignment",
             "non_owned_course",
             "ug_timetable",
         ],
     )
-    def test_any_of_five_write_perms_authorizes(
+    def test_any_of_four_write_perms_authorizes(
         self, db_engine, real_api_client, resource
     ):
         with Session(db_engine) as session:

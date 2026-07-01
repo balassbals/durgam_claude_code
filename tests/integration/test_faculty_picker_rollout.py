@@ -15,7 +15,6 @@ from uuid import uuid4
 from durgam.models.campus import Campus
 from durgam.models.config_anchors import (
     AcademicYear,
-    ClassCoordinatorAssignment,
     ClassTeacherAssignment,
     Designation,
     FacultyMentorAssignment,
@@ -29,7 +28,6 @@ from durgam.repositories.faculty import FacultyRepository
 from durgam.repositories.non_owned_course import NonOwnedCourseRepository
 from durgam.repositories.ug_timetable import UGTimetableRepository
 from durgam.services.assignment import (
-    ClassCoordinatorService,
     ClassTeacherService,
     FacultyMentorService,
 )
@@ -135,24 +133,6 @@ class TestPickerRollout:
         row = svc.create(
             academic_year_id=ay.id, department_id=dept.id,
             faculty_id=UUID(picked_id), class_identifier="BSc-I-A", actor_id=uuid4(),
-        )
-        assert str(row.faculty_id) == picked_id
-
-    def test_class_coordinator_create_uses_picked_id(self, db_session):
-        emp = f"RC-{uuid4().hex[:8]}"
-        _faculty(db_session, employee_id=emp)
-        ay = _ay(db_session)
-        campus = _campus(db_session)
-        dept = _dept(db_session, campus)
-        picked_id = _pick(db_session, emp)
-
-        from uuid import UUID
-        svc = ClassCoordinatorService(
-            repo=AssignmentRepository(ClassCoordinatorAssignment, db_session)
-        )
-        row = svc.create(
-            academic_year_id=ay.id, department_id=dept.id,
-            faculty_id=UUID(picked_id), class_identifier="BSc-II-A", actor_id=uuid4(),
         )
         assert str(row.faculty_id) == picked_id
 
