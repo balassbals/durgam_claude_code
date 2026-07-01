@@ -1505,3 +1505,25 @@ three assignment resolvers to render that label instead of the UUID, and (c) add
 `"faculty_id": "faculty"` to the `FK_FIELDS` entry for all five resources so diffs
 resolve. Pure readability; no schema or behaviour change. First surfaced as an honest
 deviation in 11A.1 (resolver-test assertions had to assert the UUID) and re-noted in 11B.
+
+**Update (Phase 11D):** class_coordinator_assignments was removed (Q-P11D.1), so its
+resolver + FK_FIELDS entry are gone. TD-087 now covers FOUR tables:
+faculty_mentor_assignments, class_teacher_assignments, non_owned_courses, ug_timetable.
+
+### TD-088 — Re-introduce class coordinator feature when the student domain ships
+
+**Status:** Open — deferred to the milestone that introduces the student domain
+(likely M11+). **Priority:** Medium.
+
+Phase 11D removed `class_coordinator_assignments` entirely (misclassification
+correction per Q-P11D.1). The table had been built with `faculty_id`, but per the
+SSSIHL domain class coordinators are STUDENTS — capped at 2 per class per AY, appointed
+by the class teacher. Removal was chosen over building a speculative students table now,
+which would risk throwaway architecture once the real student domain exists. The table
+had 0 rows, so there was no data or functional regression.
+
+When the students table + student domain exist, re-introduce class coordinator correctly:
+`student_id` FK (not faculty_id), max-2-per-class enforcement, a student picker for
+assignment (mirroring the M10 Phase 11C faculty picker), and the class teacher as the
+appointing authority. The dropped DROP migration (c9f1a2b3d417) documents the prior
+schema; the re-introduction is a fresh, student-bound design, not a revert.
