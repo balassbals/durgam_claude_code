@@ -13,10 +13,12 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 import structlog
+from sqlmodel import Session, select
 
 from durgam.models.config_anchors import (
     ClassTeacherAssignment,
     FacultyMentorAssignment,
+    FacultyMentorConfirmation,
 )
 from durgam.repositories.assignment import AssignmentRepository
 from durgam.services.org_exceptions import OrgServiceError
@@ -60,6 +62,56 @@ def faculty_display(session, faculty_id: UUID) -> str:
         p for p in (faculty.title, faculty.first_name, faculty.last_name) if p
     )
     return f"{faculty.employee_id} — {name}"
+
+
+def is_material_mentor_edit(
+    existing: FacultyMentorAssignment, new_fields: dict,
+) -> bool:
+    """Return True if faculty_id or student_id_placeholder changes (material edit).
+
+    Notes-only changes are cosmetic and do NOT invalidate the roster confirmation.
+    Caller is responsible for passing the pre-update record as `existing`.
+    """
+    if "faculty_id" in new_fields and new_fields["faculty_id"] != existing.faculty_id:
+        return True
+    if (
+        "student_id_placeholder" in new_fields
+        and new_fields["student_id_placeholder"] != existing.student_id_placeholder
+    ):
+        return True
+    return False
+
+
+def invalidate_confirmation(
+    ay_id: UUID, campus_id: UUID, actor_id: UUID, session: Session,
+) -> str | None:
+    """Soft-delete the active FacultyMentorConfirmation for an AY+campus pair.
+
+    Returns the confirmation's id (str) if one was invalidated, or None if no
+    active confirmation existed.  Caller must commit the session after this call.
+    """
+    confirmation = session.exec(
+        select(FacultyMentorConfirmation).where(
+            FacultyMentorConfirmation.academic_year_id == ay_id,
+            FacultyMentorConfirmation.campus_id == campus_id,
+            FacultyMentorConfirmation.is_deleted == False,  # noqa: E712
+        )
+    ).first()
+    if confirmation is None:
+        return None
+    now = datetime.now(UTC)
+    confirmation.is_deleted = True
+    confirmation.deleted_at = now
+    confirmation.deleted_by = actor_id
+    session.add(confirmation)
+    log.info(
+        "faculty_mentor_confirmation_invalidated",
+        confirmation_id=str(confirmation.id),
+        ay_id=str(ay_id),
+        campus_id=str(campus_id),
+        actor=str(actor_id),
+    )
+    return str(confirmation.id)
 
 
 class FacultyMentorService:

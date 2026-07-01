@@ -7,6 +7,7 @@ from uuid import UUID
 
 import reflex as rx
 
+from durgam.audit.log import write_audit_row
 from durgam.audit.snapshot import audit_snapshot
 from durgam.auth.decorators import audit_action, require_role
 from durgam.db import open_session
@@ -24,6 +25,8 @@ from durgam.services.assignment import (
     AssignmentError,
     FacultyMentorService,
     faculty_display,
+    invalidate_confirmation,
+    is_material_mentor_edit,
 )
 from durgam.services.faculty_picker import FacultyPickerService
 from durgam.services.org_exceptions import AcademicYearLockedError
@@ -66,6 +69,7 @@ class FacultyMentorConfigState(BaseState):
     # Roster confirmation
     is_confirmed: bool = False
     confirmed_info: str = ""
+    roster_stale: bool = False
 
     # Confirmation dialog
     confirm_open: bool = False
@@ -114,6 +118,7 @@ class FacultyMentorConfigState(BaseState):
         self.mentors = []
         self.is_confirmed = False
         self.confirmed_info = ""
+        self.roster_stale = False
         if not self.selected_ay_id or not self.selected_campus_id:
             self.ay_is_locked = False
             return
@@ -133,6 +138,19 @@ class FacultyMentorConfigState(BaseState):
             self.confirmed_info = (
                 f"Confirmed on {confirmation.confirmed_at.strftime('%b %-d, %Y %I:%M %p')}"
             )
+        else:
+            # Check for a previously-confirmed but now-invalidated confirmation.
+            # If one exists (is_deleted=True), show the stale banner so the
+            # Director knows re-confirmation is needed.
+            prior = session.exec(
+                select(FacultyMentorConfirmation).where(
+                    FacultyMentorConfirmation.academic_year_id == UUID(self.selected_ay_id),
+                    FacultyMentorConfirmation.campus_id == UUID(self.selected_campus_id),
+                    FacultyMentorConfirmation.is_deleted == True,  # noqa: E712
+                )
+            ).first()
+            if prior is not None:
+                self.roster_stale = True
 
         repo = AssignmentRepository(FacultyMentorAssignment, session)
         for m in repo.list_by_ay_and_scope(
@@ -270,19 +288,47 @@ class FacultyMentorConfigState(BaseState):
                     session.commit()
                     self._set_audit(resource_id=str(entity.id), after=after_snap)
                 else:
-                    before_snap = audit_snapshot(repo.get_by_id(UUID(editing_id)))
-                    entity = svc.update(
-                        UUID(editing_id),
-                        {
-                            "faculty_id": faculty_id,
-                            "student_id_placeholder": student,
-                            "notes": notes,
-                        },
-                        actor_id,
-                    )
+                    new_fields = {
+                        "faculty_id": faculty_id,
+                        "student_id_placeholder": student,
+                        "notes": notes,
+                    }
+                    existing = repo.get_by_id(UUID(editing_id))
+                    before_snap = audit_snapshot(existing)
+                    material = is_material_mentor_edit(existing, new_fields)
+                    entity = svc.update(UUID(editing_id), new_fields, actor_id)
                     after_snap = audit_snapshot(entity)
+                    # Invalidate roster confirmation when a material field changed
+                    # (faculty_id or student_id_placeholder). Notes-only changes
+                    # are cosmetic and leave the confirmation intact.
+                    conf_id: str | None = None
+                    if material:
+                        conf_id = invalidate_confirmation(
+                            UUID(self.selected_ay_id),
+                            UUID(self.selected_campus_id),
+                            actor_id,
+                            session,
+                        )
+                        if conf_id:
+                            write_audit_row(
+                                actor_user_id=actor_id,
+                                actor_role_code=None,
+                                action="soft_delete",
+                                resource="faculty_mentor_confirmation",
+                                resource_id=conf_id,
+                                request_id=None,
+                                ip=None,
+                                user_agent=None,
+                                before={"reason": "material_assignment_edit"},
+                                after=None,
+                                session=session,
+                            )
                     session.commit()
-                    self._set_audit(resource_id=str(entity.id), before=before_snap, after=after_snap)
+                    self._set_audit(
+                        resource_id=str(entity.id),
+                        before=before_snap,
+                        after=after_snap,
+                    )
         except (AssignmentError, AcademicYearLockedError) as e:
             self.flash = e.message if hasattr(e, "message") else str(e)
             self.flash_type = "error"
@@ -311,9 +357,30 @@ class FacultyMentorConfigState(BaseState):
                 repo = AssignmentRepository(FacultyMentorAssignment, session)
                 entity = repo.get_by_id(UUID(self.confirm_id))
                 before_snap = audit_snapshot(entity)
-                _svc(session).soft_delete(
-                    UUID(self.confirm_id), UUID(self.current_user_id),
+                actor_id = UUID(self.current_user_id)
+                _svc(session).soft_delete(UUID(self.confirm_id), actor_id)
+                # Removing any assignment from a confirmed roster voids the
+                # confirmation — the Director must re-confirm the updated roster.
+                conf_id = invalidate_confirmation(
+                    UUID(self.selected_ay_id),
+                    UUID(self.selected_campus_id),
+                    actor_id,
+                    session,
                 )
+                if conf_id:
+                    write_audit_row(
+                        actor_user_id=actor_id,
+                        actor_role_code=None,
+                        action="soft_delete",
+                        resource="faculty_mentor_confirmation",
+                        resource_id=conf_id,
+                        request_id=None,
+                        ip=None,
+                        user_agent=None,
+                        before={"reason": "assignment_removal"},
+                        after=None,
+                        session=session,
+                    )
                 session.commit()
                 self._set_audit(resource_id=str(entity.id), before=before_snap)
         except (AssignmentError, AcademicYearLockedError) as e:

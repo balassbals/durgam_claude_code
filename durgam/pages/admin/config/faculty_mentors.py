@@ -208,6 +208,34 @@ def admin_config_faculty_mentors() -> rx.Component:
                     FacultyMentorConfigState.flash_type,
                     FacultyMentorConfigState.dismiss_flash,
                 ),
+                rx.cond(
+                    FacultyMentorConfigState.roster_stale
+                    & ~FacultyMentorConfigState.is_confirmed,
+                    rx.box(
+                        rx.hstack(
+                            rx.icon(
+                                "triangle-alert",
+                                color="var(--color-warning, #b45309)",
+                                size=16,
+                            ),
+                            rx.text(
+                                "Roster has changed since last confirmation"
+                                " — please re-confirm when ready.",
+                                font_size="0.875rem",
+                                color="var(--color-warning, #b45309)",
+                            ),
+                            align="center",
+                            gap="0.5rem",
+                        ),
+                        background="var(--color-warning-bg, #fef3c7)",
+                        border="1px solid var(--color-warning-border, #fcd34d)",
+                        border_radius="6px",
+                        padding="0.75rem 1rem",
+                        margin_bottom="1rem",
+                        width="100%",
+                    ),
+                    rx.fragment(),
+                ),
                 _inline_form(),
                 rx.cond(
                     FacultyMentorConfigState.loading,
@@ -222,7 +250,9 @@ def admin_config_faculty_mentors() -> rx.Component:
                         card_primary_key="faculty",
                         is_mobile=False,
                         actions=_kebab,
-                        empty_message="No mentor assignments found for this academic year and campus.",
+                        empty_message=(
+                            "No mentor assignments found for this academic year and campus."
+                        ),
                     ),
                 ),
                 rx.hstack(

@@ -6,7 +6,7 @@ from uuid import UUID
 
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlmodel import Column, Field, SQLModel
+from sqlmodel import Column, Field
 
 from .base import TimestampedSoftDelete
 
@@ -210,9 +210,14 @@ class FacultyMentorConfirmation(TimestampedSoftDelete, table=True):
 
     __tablename__ = "faculty_mentor_confirmations"
     __table_args__ = (
-        sa.UniqueConstraint(
+        # Partial unique index (M10 Phase 11E): at most one ACTIVE confirmation
+        # per AY+campus.  The WHERE clause allows soft-deleted rows to coexist
+        # for audit chain purposes, enabling re-confirm after invalidation.
+        sa.Index(
+            "uq_fmc_ay_campus",
             "academic_year_id", "campus_id",
-            name="uq_fmc_ay_campus",
+            unique=True,
+            postgresql_where=sa.text("is_deleted = FALSE"),
         ),
     )
 
