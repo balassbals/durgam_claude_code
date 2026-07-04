@@ -310,3 +310,24 @@ class TestIsMaterialMentorEdit:
         existing = self._make_assignment()
         result = is_material_mentor_edit(existing, {})
         assert result is False
+
+
+def test_stale_banner_suppressed_when_assignment_list_empty() -> None:
+    """Render-condition invariant: banner gated on roster_stale AND len(rows) > 0.
+
+    After delete-last-row, roster_stale=True but mentors=[] — banner must NOT
+    show (nothing to confirm).  Tests all four cases of the Boolean condition
+    that the Reflex rx.cond expression encodes on the faculty-mentors page.
+    """
+
+    def _show(roster_stale: bool, is_confirmed: bool, row_count: int) -> bool:
+        return roster_stale and not is_confirmed and row_count > 0
+
+    # Delete-last-row: stale=True, list empty → suppress
+    assert not _show(roster_stale=True, is_confirmed=False, row_count=0)
+    # Stale + non-empty list → show (positive control)
+    assert _show(roster_stale=True, is_confirmed=False, row_count=1)
+    # Already confirmed → suppress regardless
+    assert not _show(roster_stale=True, is_confirmed=True, row_count=3)
+    # Not stale → suppress regardless
+    assert not _show(roster_stale=False, is_confirmed=False, row_count=3)

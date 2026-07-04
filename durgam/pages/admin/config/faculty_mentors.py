@@ -210,7 +210,8 @@ def admin_config_faculty_mentors() -> rx.Component:
                 ),
                 rx.cond(
                     FacultyMentorConfigState.roster_stale
-                    & ~FacultyMentorConfigState.is_confirmed,
+                    & ~FacultyMentorConfigState.is_confirmed
+                    & (FacultyMentorConfigState.mentors.length() > 0),
                     rx.box(
                         rx.hstack(
                             rx.icon(
