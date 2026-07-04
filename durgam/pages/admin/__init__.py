@@ -38,6 +38,14 @@ register(NavEntry(
     permission_resource="faculty",
 ))
 register(NavEntry(
+    label="Faculty Import",
+    href="/admin/faculty/import",
+    icon="file-up",
+    group="Admin",
+    permission_action="bulk_import",
+    permission_resource="faculty",
+))
+register(NavEntry(
     label="Permissions",
     href="/admin/permissions",
     icon="key",

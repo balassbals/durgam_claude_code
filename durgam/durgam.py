@@ -6,6 +6,7 @@ from durgam.pages.admin import index as _admin_nav_register  # noqa: F401 — re
 from durgam.pages.admin.config import __init__ as _config_nav_register  # noqa: F401 — registers config nav entries
 from durgam.pages.audit import __init__ as _audit_nav_register  # noqa: F401 — registers audit nav entry
 from durgam.pages.admin.import_users import admin_import_users
+from durgam.pages.admin.faculty_import import admin_faculty_import_page
 from durgam.pages.admin.index import admin_index
 from durgam.pages.admin.permissions import AdminPermissionsState, admin_permissions
 from durgam.pages.admin.roles import admin_role_create, admin_role_detail, admin_roles
@@ -21,6 +22,7 @@ from durgam.pages.login import login
 from durgam.pages.reset_password import reset_password
 from durgam.pages.shared.permission_check_widget import PermissionCheckState
 from durgam.states.admin_bulk_import import BulkImportState
+from durgam.states.faculty_bulk_import import FacultyBulkImportState
 from durgam.states.admin_index import AdminIndexState
 from durgam.states.admin_roles import AdminRolesState
 from durgam.states.admin_users import AdminUsersState
@@ -73,6 +75,8 @@ app.add_page(admin_permissions, route="/admin/permissions",
              on_load=AdminPermissionsState.load_permissions)
 app.add_page(admin_import_users, route="/admin/import",
              on_load=BulkImportState.load_import)
+app.add_page(admin_faculty_import_page, route="/admin/faculty/import",
+             on_load=FacultyBulkImportState.load_import)
 app.add_page(audit_log, route="/audit", on_load=AuditLogState.load_audit)
 
 # ── M3 Config routes ────────────────────────────────────────────────────────────
