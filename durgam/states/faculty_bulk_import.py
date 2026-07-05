@@ -93,7 +93,11 @@ class FacultyBulkImportState(BaseState):
                 "col1": v.employee_id,
                 "col2": v.username,
                 "col3": f"{v.first_name} {v.last_name}",
-                "status": "✓ Valid",
+                "status": (
+                    "✓ will create user + faculty"
+                    if v.will_create_user
+                    else "✓ will link existing user + faculty"
+                ),
             }
             for v in valid_rows
         ]
@@ -190,11 +194,11 @@ class FacultyBulkImportState(BaseState):
         content = (
             "employee_id,username,first_name,last_name,designation_code,"
             "dept_code,campus_code,joining_date,gender,"
-            "middle_name,title,phone,emergency_contact_name,"
+            "email,middle_name,title,phone,emergency_contact_name,"
             "emergency_contact_relation,emergency_contact_phone\n"
             "EMP001,john_doe,John,Doe,ASST_PROF_L10,"
             "DMACS,MAIN,2020-06-01,M,"
-            ",Dr,9999999999,Jane Doe,Spouse,8888888888\n"
+            "john.doe@example.com,,Dr,9999999999,Jane Doe,Spouse,8888888888\n"
         )
         return rx.download(data=content, filename="import_faculty_template.csv")
 
@@ -216,7 +220,7 @@ def _row_to_dict(v: ValidFacultyRow) -> dict[str, str]:
         "row": str(v.row_number),
         "employee_id": v.employee_id,
         "username": v.username,
-        "user_id": str(v.user_id),
+        "user_id": str(v.user_id) if v.user_id is not None else "",
         "first_name": v.first_name,
         "last_name": v.last_name,
         "middle_name": v.middle_name,
@@ -245,15 +249,18 @@ def _row_to_dict(v: ValidFacultyRow) -> dict[str, str]:
         "linkedin": v.linkedin,
         "google_scholar": v.google_scholar,
         "researchgate": v.researchgate,
+        "will_create_user": "true" if v.will_create_user else "false",
+        "email": v.email,
     }
 
 
 def _dict_to_row(d: dict[str, str]) -> ValidFacultyRow:
+    raw_user_id = d.get("user_id", "")
     return ValidFacultyRow(
         row_number=int(d["row"]),
         employee_id=d["employee_id"],
         username=d["username"],
-        user_id=UUID(d["user_id"]),
+        user_id=UUID(raw_user_id) if raw_user_id else None,
         first_name=d["first_name"],
         last_name=d["last_name"],
         middle_name=d.get("middle_name", ""),
@@ -282,4 +289,6 @@ def _dict_to_row(d: dict[str, str]) -> ValidFacultyRow:
         linkedin=d.get("linkedin", ""),
         google_scholar=d.get("google_scholar", ""),
         researchgate=d.get("researchgate", ""),
+        will_create_user=d.get("will_create_user", "false") == "true",
+        email=d.get("email", ""),
     )

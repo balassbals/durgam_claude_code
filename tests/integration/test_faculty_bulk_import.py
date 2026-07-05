@@ -117,6 +117,16 @@ def _csv(*rows: str, header: bool = True) -> bytes:
     return "\n".join(lines).encode("utf-8")
 
 
+def _csv_with_email(*rows: str) -> bytes:
+    """Like _csv but includes an 'email' column in the header."""
+    lines = [
+        "employee_id,username,first_name,last_name,"
+        "designation_code,dept_code,campus_code,joining_date,gender,email"
+    ]
+    lines.extend(rows)
+    return "\n".join(lines).encode("utf-8")
+
+
 # ── TestValidateFacultyCSV ────────────────────────────────────────────────────
 
 
@@ -257,7 +267,8 @@ class TestValidateFacultyCSV:
         assert valid == []
         assert "designation_code" in invalid[0].error
 
-    def test_username_not_found_in_system(self, db_session: Session) -> None:
+    def test_username_not_found_without_email_is_rejected(self, db_session: Session) -> None:
+        """No email column → rejected; user must supply email for auto-create."""
         campus = _campus(db_session)
         dept = _dept(db_session, campus)
         desig = _desig(db_session)
@@ -268,6 +279,59 @@ class TestValidateFacultyCSV:
         valid, invalid = validate_faculty_csv(content, **_repos(db_session))
         assert valid == []
         assert "not found" in invalid[0].error
+        assert "email" in invalid[0].error
+
+    def test_username_not_found_with_valid_email_sets_will_create_user(
+        self, db_session: Session
+    ) -> None:
+        """New username + valid email → accepted with will_create_user=True."""
+        campus = _campus(db_session)
+        dept = _dept(db_session, campus)
+        desig = _desig(db_session)
+        new_username = f"newuser_{uuid4().hex[:8]}"
+        new_email = f"new_{uuid4().hex[:8]}@dev.local"
+        content = _csv_with_email(
+            f"EMP-{uuid4().hex[:8]},{new_username},Alice,Smith,"
+            f"{desig.code},{dept.code},{campus.code},2022-01-15,F,{new_email}"
+        )
+        valid, invalid = validate_faculty_csv(content, **_repos(db_session))
+        assert invalid == []
+        assert len(valid) == 1
+        assert valid[0].will_create_user is True
+        assert valid[0].email == new_email
+        assert valid[0].user_id is None
+
+    def test_username_not_found_with_invalid_email_is_rejected(
+        self, db_session: Session
+    ) -> None:
+        """New username + malformed email (no @) → rejected."""
+        campus = _campus(db_session)
+        dept = _dept(db_session, campus)
+        desig = _desig(db_session)
+        content = _csv_with_email(
+            f"EMP-{uuid4().hex[:8]},ghost_xyz,A,B,"
+            f"{desig.code},{dept.code},{campus.code},2020-01-01,M,not-an-email"
+        )
+        valid, invalid = validate_faculty_csv(content, **_repos(db_session))
+        assert valid == []
+        assert "email" in invalid[0].error
+
+    def test_username_not_found_email_already_registered_is_rejected(
+        self, db_session: Session
+    ) -> None:
+        """New username but email already taken → rejected at validate time."""
+        campus = _campus(db_session)
+        dept = _dept(db_session, campus)
+        desig = _desig(db_session)
+        existing = _user(db_session)  # existing user owns the email
+        new_username = f"brandnew_{uuid4().hex[:8]}"
+        content = _csv_with_email(
+            f"EMP-{uuid4().hex[:8]},{new_username},A,B,"
+            f"{desig.code},{dept.code},{campus.code},2020-01-01,M,{existing.email}"
+        )
+        valid, invalid = validate_faculty_csv(content, **_repos(db_session))
+        assert valid == []
+        assert "already registered" in invalid[0].error
 
     def test_username_wrong_employee_type(self, db_session: Session) -> None:
         campus = _campus(db_session)
@@ -576,3 +640,81 @@ class TestCommitFacultyImport:
         )
         assert result.success_count == 0
         assert result.errors == []
+
+    def _make_will_create_row(self, session) -> tuple:
+        """Return a ValidFacultyRow with will_create_user=True (new username path)."""
+        campus = _campus(session)
+        dept = _dept(session, campus)
+        desig = _desig(session)
+        new_username = f"autocreate_{uuid4().hex[:8]}"
+        new_email = f"ac_{uuid4().hex[:8]}@dev.local"
+        content = _csv_with_email(
+            f"EMP-{uuid4().hex[:8]},{new_username},Auto,Create,"
+            f"{desig.code},{dept.code},{campus.code},2024-01-01,M,{new_email}"
+        )
+        valid, invalid = validate_faculty_csv(content, **_repos(session))
+        assert invalid == [], f"unexpected validation errors: {invalid}"
+        assert len(valid) == 1
+        assert valid[0].will_create_user is True
+        return valid[0], new_username, new_email
+
+    def test_commit_auto_creates_user_and_faculty(self, db_session: Session) -> None:
+        """will_create_user=True path: User + Faculty rows both created."""
+        vrow, username, email = self._make_will_create_row(db_session)
+        actor = uuid4()
+        result = commit_faculty_import(
+            [vrow], actor,
+            faculty_repo=FacultyRepository(db_session),
+            user_repo=UserRepository(db_session),
+        )
+        assert result.success_count == 1
+        assert result.errors == []
+
+        user = UserRepository(db_session).get_by_username(username)
+        assert user is not None
+        faculty = FacultyRepository(db_session).get_by_user_id(user.id)
+        assert faculty is not None
+        assert faculty.employee_id == vrow.employee_id
+
+    def test_auto_created_user_employee_type_is_regular_teaching(
+        self, db_session: Session
+    ) -> None:
+        """Auto-created user must have employee_type='regular_teaching', not the default."""
+        vrow, username, _ = self._make_will_create_row(db_session)
+        commit_faculty_import(
+            [vrow], uuid4(),
+            faculty_repo=FacultyRepository(db_session),
+            user_repo=UserRepository(db_session),
+        )
+        user = UserRepository(db_session).get_by_username(username)
+        assert user is not None
+        assert user.employee_type == "regular_teaching"
+
+    def test_auto_created_user_must_change_password_is_true(
+        self, db_session: Session
+    ) -> None:
+        """Auto-created user must be forced to set a new password on first login."""
+        vrow, username, _ = self._make_will_create_row(db_session)
+        commit_faculty_import(
+            [vrow], uuid4(),
+            faculty_repo=FacultyRepository(db_session),
+            user_repo=UserRepository(db_session),
+        )
+        user = UserRepository(db_session).get_by_username(username)
+        assert user is not None
+        assert user.must_change_password is True
+
+    def test_auto_created_user_password_hash_is_non_empty(
+        self, db_session: Session
+    ) -> None:
+        """Auto-created user must have a real hashed password, not empty or placeholder."""
+        vrow, username, _ = self._make_will_create_row(db_session)
+        commit_faculty_import(
+            [vrow], uuid4(),
+            faculty_repo=FacultyRepository(db_session),
+            user_repo=UserRepository(db_session),
+        )
+        user = UserRepository(db_session).get_by_username(username)
+        assert user is not None
+        assert user.password_hash
+        assert len(user.password_hash) > 20  # noqa: PLR2004

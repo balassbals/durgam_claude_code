@@ -486,7 +486,7 @@ class ValidFacultyRow:
     row_number: int
     employee_id: str
     username: str
-    user_id: UUID
+    user_id: UUID | None
     first_name: str
     last_name: str
     middle_name: str
@@ -515,6 +515,8 @@ class ValidFacultyRow:
     linkedin: str
     google_scholar: str
     researchgate: str
+    will_create_user: bool = False
+    email: str = ""
 
 
 def validate_faculty_csv(
@@ -532,7 +534,11 @@ def validate_faculty_csv(
     Mandatory cols: employee_id, username, first_name, last_name,
     designation_code, dept_code, campus_code, joining_date, gender.
     Optional cols: all other faculty profile fields per Q11.
-    User must pre-exist with employee_type='regular_teaching' (Q-P12.4).
+
+    When a username does not exist in the system the row is still accepted if
+    the CSV supplies a valid email address — a new User row is auto-created at
+    commit time with employee_type='regular_teaching', must_change_password=True,
+    and a random strong temporary password (Q-P12.4 correction, Phase 12.1).
     """
     try:
         text = file_bytes.decode("utf-8-sig")
@@ -632,6 +638,9 @@ def validate_faculty_csv(
             errors.append(f"duplicate username '{username}' within this file")
 
         user_id: UUID | None = None
+        will_create_user = False
+        email_for_row = ""
+
         if not errors:
             existing_emp = faculty_repo.get_by_employee_id(employee_id)
             if existing_emp is not None:
@@ -639,7 +648,18 @@ def validate_faculty_csv(
 
             user = user_repo.get_by_username(username)
             if user is None:
-                errors.append(f"username '{username}' not found in the system")
+                # Auto-create path — email column required.
+                email_csv = row.get("email", "").strip().lower()
+                if not email_csv or "@" not in email_csv:
+                    errors.append(
+                        f"user '{username}' not found — provide a valid 'email' column"
+                        " to auto-create the account"
+                    )
+                elif user_repo.get_by_email(email_csv) is not None:
+                    errors.append(f"email '{email_csv}' is already registered in the system")
+                else:
+                    will_create_user = True
+                    email_for_row = email_csv
             elif user.employee_type != "regular_teaching":
                 errors.append(
                     f"user '{username}' employee_type is '{user.employee_type}'"
@@ -661,7 +681,7 @@ def validate_faculty_csv(
                 row_number=i,
                 employee_id=employee_id,
                 username=username,
-                user_id=user_id,  # type: ignore[arg-type]
+                user_id=user_id,
                 first_name=first_name,
                 last_name=last_name,
                 middle_name=row.get("middle_name", ""),
@@ -690,6 +710,8 @@ def validate_faculty_csv(
                 linkedin=row.get("linkedin", ""),
                 google_scholar=row.get("google_scholar", ""),
                 researchgate=row.get("researchgate", ""),
+                will_create_user=will_create_user,
+                email=email_for_row,
             ))
 
     return valid, invalid
@@ -704,12 +726,15 @@ def commit_faculty_import(
 ) -> ImportResult:
     """Commit valid rows from a prior validate_faculty_csv call.
 
+    For rows with will_create_user=True a new User is created first with
+    employee_type='regular_teaching' and must_change_password=True.
     Creates Faculty rows for each valid entry and updates User.gender.
     All rows share one outer session/transaction managed by the caller.
     """
     from datetime import UTC, datetime as _dt
 
     from durgam.models.faculty import Faculty as _Faculty
+    from durgam.models.identity import User as _User
 
     success = 0
     late_errors: list[InvalidRow] = []
@@ -717,8 +742,32 @@ def commit_faculty_import(
     for vrow in valid_rows:
         try:
             now = _dt.now(UTC)
+            resolved_user_id: UUID
+
+            if vrow.will_create_user:
+                temp_pw = generate_temp_password()
+                pw_hash = hash_password(temp_pw)
+                full_name = f"{vrow.first_name} {vrow.last_name}".strip()
+                new_user = user_repo.create(
+                    vrow.username,
+                    vrow.email,
+                    pw_hash,
+                    actor_id,
+                    must_change_password=True,
+                    full_name=full_name or None,
+                )
+                # user_repo.create() defaults employee_type to 'regular_non_teaching';
+                # override to 'regular_teaching' before flush so Faculty FK resolves.
+                new_user.employee_type = "regular_teaching"
+                user_repo.save(new_user)
+                resolved_user_id = new_user.id
+                log.info("bulk_import_user_created",
+                         username=vrow.username, actor=str(actor_id))
+            else:
+                resolved_user_id = vrow.user_id  # type: ignore[assignment]
+
             faculty = _Faculty(
-                user_id=vrow.user_id,
+                user_id=resolved_user_id,
                 employee_id=vrow.employee_id,
                 title=vrow.title,
                 first_name=vrow.first_name,
@@ -752,10 +801,10 @@ def commit_faculty_import(
             faculty_repo.create(faculty)
 
             if vrow.gender:
-                user = user_repo.get_by_username(vrow.username)
-                if user is not None:
-                    user.gender = vrow.gender
-                    user_repo.save(user)
+                gender_user = user_repo.get_by_id(resolved_user_id)
+                if gender_user is not None:
+                    gender_user.gender = vrow.gender
+                    user_repo.save(gender_user)
 
             success += 1
             log.info("bulk_import_faculty_created",

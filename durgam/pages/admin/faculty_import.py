@@ -79,7 +79,8 @@ def admin_faculty_import_page() -> rx.Component:
                     "Required columns: employee_id, username, first_name, last_name, "
                     "designation_code, dept_code, campus_code, joining_date (YYYY-MM-DD), "
                     "gender (M/F/O). "
-                    "Users must pre-exist in the system with employee_type=regular_teaching.",
+                    "If a username does not exist, include an 'email' column and a new "
+                    "account will be created automatically (must_change_password=True).",
                     font_size="0.8rem",
                     color="var(--color-muted)",
                 ),
