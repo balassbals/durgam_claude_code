@@ -293,7 +293,16 @@ class NonRegularFaculty(TimestampedSoftDelete, table=True):
         default=None, foreign_key="users.id",
     )
     approval_request_id: UUID | None = Field(
-        default=None, foreign_key="approval_requests.id",
+        default=None,
+        sa_column=sa.Column(
+            sa.Uuid,
+            sa.ForeignKey(
+                "approval_requests.id",
+                name="fk_nrf_approval_request_id",
+                ondelete="SET NULL",
+            ),
+            nullable=True,
+        ),
     )
 
 

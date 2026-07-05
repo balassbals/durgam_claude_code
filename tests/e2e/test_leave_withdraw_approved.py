@@ -99,9 +99,9 @@ def _create_approved_leave(
                 "INSERT INTO leave_requests "
                 "(id, requestor_user_id, academic_year_id, leave_type, "
                 " starts_on, ends_on, chargeable_days, sanctioned_days, "
-                " state, reason, is_deleted, created_at, updated_at) "
+                " half_day, state, reason, is_deleted, created_at, updated_at) "
                 "VALUES (:id, :uid, :ay, 'CL', :s, :e, 3.0, 3.0, "
-                "        'approved', 'E2E test leave', false, NOW(), NOW())"
+                "        false, 'approved', 'E2E test leave', false, NOW(), NOW())"
             ),
             {
                 "id": leave_id,
