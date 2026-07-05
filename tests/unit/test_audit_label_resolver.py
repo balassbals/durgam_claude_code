@@ -278,6 +278,21 @@ class TestMentalHealthCounsellorResolver:
         assert result[str(m.id)] == "Dr. Sharma"
 
 
+class TestFacultyResolver:
+    def test_label(self, db_session):
+        s = School(code="TST_SF1", name="SF1")
+        c = Campus(code="TST_CF1", name="CF1")
+        db_session.add_all([s, c])
+        db_session.flush()
+        d = Department(code="TST_DF1", name="DF1", school_id=s.id, main_campus_id=c.id)
+        db_session.add(d)
+        db_session.flush()
+        fac = _mk_faculty(db_session, c, d)
+        result = _RESOURCE_RESOLVERS["faculty"]([str(fac.id)], db_session)
+        expected = f"{fac.employee_id} — {fac.title} {fac.first_name} {fac.last_name}"
+        assert result[str(fac.id)] == expected
+
+
 class TestFacultyMentorAssignmentResolver:
     def test_label(self, db_session):
         ay = AcademicYear(code="2025-30", starts_on=date(2025, 6, 1),
@@ -297,8 +312,8 @@ class TestFacultyMentorAssignmentResolver:
         db_session.add(f)
         db_session.flush()
         result = _RESOURCE_RESOLVERS["faculty_mentor_assignment"]([str(f.id)], db_session)
-        # 11A: resolver emits faculty_id (UUID) since faculty_id_placeholder is gone.
-        assert result[str(f.id)] == f"{fac.id} → Student B"
+        expected_fac = f"{fac.employee_id} — {fac.title} {fac.first_name} {fac.last_name}"
+        assert result[str(f.id)] == f"{expected_fac} → Student B"
 
 
 class TestClassTeacherAssignmentResolver:
@@ -320,8 +335,8 @@ class TestClassTeacherAssignmentResolver:
         db_session.add(ct)
         db_session.flush()
         result = _RESOURCE_RESOLVERS["class_teacher_assignment"]([str(ct.id)], db_session)
-        # 11A: resolver emits faculty_id (UUID).
-        assert result[str(ct.id)] == f"{fac.id} (MSc-I)"
+        expected_fac = f"{fac.employee_id} — {fac.title} {fac.first_name} {fac.last_name}"
+        assert result[str(ct.id)] == f"{expected_fac} (MSc-I)"
 
 
 class TestNonRegularFacultyResolver:

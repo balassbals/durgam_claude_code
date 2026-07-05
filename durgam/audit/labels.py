@@ -26,11 +26,11 @@ FK_FIELDS: dict[str, dict[str, str]] = {
     "holiday":                      {"academic_year_id": "academic_year"},
     "calendar_entry":               {"academic_year_id": "academic_year", "owner_user_id": "user"},
     "mental_health_counsellor":     {"academic_year_id": "academic_year", "campus_id": "campus"},
-    "faculty_mentor_assignment":    {"academic_year_id": "academic_year", "campus_id": "campus"},
-    "class_teacher_assignment":     {"academic_year_id": "academic_year", "department_id": "department"},
+    "faculty_mentor_assignment":    {"academic_year_id": "academic_year", "campus_id": "campus", "faculty_id": "faculty"},
+    "class_teacher_assignment":     {"academic_year_id": "academic_year", "department_id": "department", "faculty_id": "faculty"},
     "non_regular_faculty":          {"department_id": "department", "approved_by_user_id": "user"},
-    "non_owned_course":             {"academic_year_id": "academic_year"},
-    "ug_timetable":                 {"academic_year_id": "academic_year"},
+    "non_owned_course":             {"academic_year_id": "academic_year", "faculty_id": "faculty"},
+    "ug_timetable":                 {"academic_year_id": "academic_year", "faculty_id": "faculty"},
     "student_category_count":       {"academic_year_id": "academic_year"},
     "letterhead_asset":             {"file_id": "file_asset"},
     "template_asset":               {"file_id": "file_asset"},
@@ -169,22 +169,57 @@ def _resolve_mhc(ids: list[str], session: Session) -> dict[str, str]:
     return _simple_resolver(MentalHealthCounsellor, lambda m: m.name)(ids, session)
 
 
+@register_resolver("faculty")
+def _resolve_faculty(ids: list[str], session: Session) -> dict[str, str]:
+    from durgam.models.faculty import Faculty
+    return _simple_resolver(
+        Faculty,
+        lambda f: f"{f.employee_id} — {f.title} {f.first_name} {f.last_name}",
+    )(ids, session)
+
+
 @register_resolver("faculty_mentor_assignment")
 def _resolve_fma(ids: list[str], session: Session) -> dict[str, str]:
     from durgam.models.config_anchors import FacultyMentorAssignment
-    return _simple_resolver(
-        FacultyMentorAssignment,
-        lambda f: f"{f.faculty_id} → {f.student_id_placeholder}",
-    )(ids, session)
+    from durgam.models.faculty import Faculty
+    uuids = _parse_uuids(ids)
+    if not uuids:
+        return {}
+    stmt = (
+        select(FacultyMentorAssignment, Faculty)
+        .join(Faculty, FacultyMentorAssignment.faculty_id == Faculty.id, isouter=True)
+        .where(FacultyMentorAssignment.id.in_(uuids))
+    )
+    result: dict[str, str] = {}
+    for fma, fac in session.exec(stmt).all():
+        fac_label = (
+            f"{fac.employee_id} — {fac.title} {fac.first_name} {fac.last_name}"
+            if fac else str(fma.faculty_id)
+        )
+        result[str(fma.id)] = f"{fac_label} → {fma.student_id_placeholder}"
+    return result
 
 
 @register_resolver("class_teacher_assignment")
 def _resolve_cta(ids: list[str], session: Session) -> dict[str, str]:
     from durgam.models.config_anchors import ClassTeacherAssignment
-    return _simple_resolver(
-        ClassTeacherAssignment,
-        lambda c: f"{c.faculty_id} ({c.class_identifier})",
-    )(ids, session)
+    from durgam.models.faculty import Faculty
+    uuids = _parse_uuids(ids)
+    if not uuids:
+        return {}
+    stmt = (
+        select(ClassTeacherAssignment, Faculty)
+        .join(Faculty, ClassTeacherAssignment.faculty_id == Faculty.id, isouter=True)
+        .where(ClassTeacherAssignment.id.in_(uuids))
+    )
+    result: dict[str, str] = {}
+    for cta, fac in session.exec(stmt).all():
+        fac_label = (
+            f"{fac.employee_id} — {fac.title} {fac.first_name} {fac.last_name}"
+            if fac else str(cta.faculty_id)
+        )
+        result[str(cta.id)] = f"{fac_label} ({cta.class_identifier})"
+    return result
 
 
 @register_resolver("non_regular_faculty")
