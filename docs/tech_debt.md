@@ -1021,22 +1021,26 @@ the `scope_type not in ("*", "own")` bypass semantics as a live runtime check.
 ### TD-047 — True baseline is ~61 failures, not 22 (TD-044 undercount)
 
 **Phase:** M9 Phase 7 (baseline recalibrated after seeded_db contamination spread).
-**Severity:** Low — administrative.
+**Severity:** Low — administrative. **Status: Closed (M10 Phase 13 docs sweep).**
 
 **Root cause:** TD-044 was filed at Phase 2 when only `tests/unit/` failures were counted (22). Full-suite `pytest tests/` runs reveal additional order-dependent failures in `tests/integration/` (seeded_db_engine contaminating db_session tests). The 61-failure baseline is the correct operational number from Phase 7 onward.
 
 **Resolution path:** Update TD-044 to note the 61-failure operational baseline. Triage and fix the contamination at a test-hygiene milestone (likely a small M9.1 or between M9 and M10).
+
+**Closed:** Administrative — the 61-failure baseline is documented here and in gate verification notes. Contamination fix deferred to a dedicated test-hygiene milestone.
 
 ---
 
 ### TD-051 — Seed re-run discipline undocumented for fresh-clone setup
 
 **Phase:** M9 Phase 7 (discovered when walkthrough failed due to missing seed data).
-**Severity:** Low — affects new developer setup, not production.
+**Severity:** Low — affects new developer setup, not production. **Status: Closed (M10 Phase 13).**
 
 **Root cause:** The CLAUDE.md Session start checklist does not include `uv run python scripts/seed.py` as a step after `alembic upgrade head` on a fresh clone. A developer who migrates the DB but does not seed it sees `PermissionDenied` for all announcement operations, which is hard to diagnose.
 
 **Resolution path:** Add a Step 5 to the Session start checklist in CLAUDE.md: "If this is a fresh clone or DB was reset: `uv run python scripts/seed.py`." Also document in runbook.md (already added in Phase 9 sweep).
+
+**Closed (M10 Phase 13):** Step 5 added to CLAUDE.md Session start checklist.
 
 ---
 
@@ -1065,11 +1069,13 @@ the `scope_type not in ("*", "own")` bypass semantics as a live runtime check.
 ### TD-058 — CC test-suite report numbers were paraphrased, not verbatim
 
 **Phase:** M9 (cross-phase observation; formalized in Phase 9 sweep).
-**Severity:** Low — process discipline only.
+**Severity:** Low — process discipline only. **Status: Closed (M10 Phase 13 docs sweep).**
 
 **Root cause:** Multiple phase reports (Phase 6a "898", Phase 6b "1474", Phase 8b "87") stated test counts that didn't match actual `pytest` output. The root cause is that CC paraphrased suite results instead of pasting verbatim `tail -3` output. This made it impossible to verify whether regressions were introduced between phases.
 
 **Resolution path:** All phase reports must paste verbatim `pytest ... 2>&1 | tail -3` output. The raw output mandate is documented in `docs/prompts/gate_verification.md` M9 lessons section. `docs/milestones/M9.md` Phase 9 row corrects the Phase 8c stale numbers.
+
+**Closed:** Process discipline documented and enforced since M9 Phase 9. Verbatim output now standard in all phase reports.
 
 ---
 
@@ -1110,7 +1116,7 @@ Protocol established: before declaring a test suite baseline, the full non-E2E s
 
 ### TD-064 — E-017 E2E tests xfailed: `_create_approved_leave` missing `half_day` column
 
-**Phase:** M9 Phase 10.1. **Status: Open.**
+**Phase:** M9 Phase 10.1. **Status: Partially resolved (M10 Phase 13, commit `d3c069c`).**
 
 **Location:** `tests/e2e/test_leave_withdraw_approved.py` — `TestWithdrawApprovedLeave` (all 3 tests).
 
@@ -1118,7 +1124,9 @@ Protocol established: before declaring a test suite baseline, the full non-E2E s
 
 All 3 tests are marked `@pytest.mark.xfail(strict=False, reason="E-017 ...")` so the M9 E2E gate is green. The underlying E-017 feature (withdraw post-approval) was not implemented in M9.
 
-**Trigger to re-open:** When E-017 is scheduled for implementation, the fix requires two changes: (1) add `half_day = false` to the INSERT in `_create_approved_leave()`; (2) implement the post-approval withdraw service method and UI. Remove the xfail decorators and verify all 3 tests pass.
+**Partially resolved (M10 Phase 13):** `half_day = false` added to the INSERT in `_create_approved_leave()`. The fixture setup no longer errors on the missing column. xfail decorators remain — E-017 feature implementation is still deferred.
+
+**Trigger to re-open:** When E-017 is scheduled for implementation: implement the post-approval withdraw service method and UI, then remove the xfail decorators and verify all 3 tests pass.
 
 ---
 
@@ -1185,7 +1193,7 @@ The underlying E-022 feature (admin manual edit of leave records) may be partial
 
 ### TD-069 — non_regular_faculty FK metadata skew
 
-**Phase:** M10 Phase 1A (filed at Phase 1B). **Status:** Open.
+**Phase:** M10 Phase 1A (filed at Phase 1B). **Status: Resolved (M10 Phase 13, commit `d3c069c`).**
 
 **Location:** `durgam/models/config_anchors.py` — `NonRegularFaculty.approval_request_id` FK; existing DB constraint `fk_nrf_approval_request_id` with `ondelete='SET NULL'`.
 
@@ -1193,9 +1201,7 @@ The underlying E-022 feature (admin manual edit of leave records) may be partial
 
 **Impact:** None functionally — DB behaviour is correct (SET NULL on referenced row delete). Purely declarative skew that surfaces as autogen noise on future migrations involving NonRegularFaculty.
 
-**Resolution path:** Either (a) name the FK in the model `fk_nrf_approval_request_id` + add `ondelete='SET NULL'` to the FK declaration, or (b) drop and recreate the DB constraint to match the model's unnamed default. Option (a) is the cleaner forward path.
-
-**Priority:** Low. Address opportunistically — likely target is M10 Phase 9 (NonRegularFaculty contract-term expansion) which will touch this model anyway.
+**Resolved (M10 Phase 13):** Used `sa_column=sa.Column(sa.ForeignKey(..., name="fk_nrf_approval_request_id", ondelete="SET NULL"), ...)` in the model. No migration needed — DB is already correct.
 
 ---
 
@@ -1416,11 +1422,11 @@ First-action-wins semantics per Q-P5C.1 freeze: any user in the resolved pool ca
 **Risk (remaining):** TD-083.1 only — approvers without `approval_request:approve:*` cannot act. Functional for HOD/AHOD/REGISTRAR/SYSTEM_ADMIN who hold that triple via M7 seeding.
 
 **Resolution path:**
-- TD-083.1 (permissions — OPEN): Seed `faculty_request:approve:*` and `faculty_request:reject:*` triples assigned to HOD, AHOD, REGISTRAR. Update `@require_role` decorators in approver state. Estimated effort: 0.5 day. *Deferred to later cleanup phase.*
+- TD-083.1 (permissions — OPEN → deferred to M11): Phase 7F (UI Unification) consolidated `ApproverRequestDetailState.approve()/reject()` into `RequestDetailState.submit_approve()/submit_reject()` in `durgam/states/approval_requests.py`, which now serves ALL request types (leave, faculty, NRF). Changing decorators to `faculty_request:approve:*` would break leave approvals. Correct fix requires multi-type permission design; deferred to M11 as a permissions design task.
 - TD-083.2 (comment-on-approve — RESOLVED): See description above.
 - TD-083.3 (downward attachments — RESOLVED): See description above.
 
-**Filed:** M10 Phase 7C, 2026-06-17. **Partially resolved:** Phase 7C-fix, 2026-06-17.
+**Filed:** M10 Phase 7C, 2026-06-17. **Partially resolved:** Phase 7C-fix, 2026-06-17. **TD-083.1 re-scoped to M11** (M10 Phase 13, 2026-07-05).
 
 
 ---
@@ -1484,7 +1490,7 @@ The dev DB has no `leave_balances` seeded for faculty users (test fixtures seed 
 
 ### TD-087 — Audit labels carry faculty_id as a raw UUID, not a human name
 
-**Status:** Open — deferred to Phase 13 (docs/TD sweep). **Priority:** Low.
+**Status: Resolved (M10 Phase 13, commit `b568d94`). Priority:** Low.
 
 After the Phase 11 faculty_id backfills (11A: faculty_mentor_assignments,
 class_teacher_assignments, class_coordinator_assignments; 11B: non_owned_courses,
@@ -1509,6 +1515,8 @@ deviation in 11A.1 (resolver-test assertions had to assert the UUID) and re-note
 **Update (Phase 11D):** class_coordinator_assignments was removed (Q-P11D.1), so its
 resolver + FK_FIELDS entry are gone. TD-087 now covers FOUR tables:
 faculty_mentor_assignments, class_teacher_assignments, non_owned_courses, ug_timetable.
+
+**Resolved (M10 Phase 13, commit `b568d94`):** Added `faculty` resolver, rewrote `faculty_mentor_assignment` and `class_teacher_assignment` resolvers to join Faculty and show human-readable label, added `faculty_id: "faculty"` to FK_FIELDS for all four tables. 1 new test (TestFacultyResolver), 2 test assertions updated.
 
 ### TD-088 — Re-introduce class coordinator feature when the student domain ships
 

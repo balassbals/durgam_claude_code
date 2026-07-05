@@ -300,6 +300,7 @@ At the start of every coding session, Claude Code runs:
 2. `cat CLAUDE.md | grep "Current milestone"` — confirm what's in flight.
 3. `uv run pytest --collect-only -q | tail -5` — confirm tests are discoverable and the suite isn't broken.
 4. Read the RFP section for the current milestone (§12 entry for the milestone in flight).
+5. If this is a fresh clone or the DB was reset: `uv run python scripts/seed.py` — ensures permission rows exist before any walkthrough. Missing this causes `PermissionDenied` for all operations even when code and seed content are correct (TD-051; recurred at M3/M8.1/M9).
 
 If any of the above fails or surprises, stop and surface it before writing code.
 
