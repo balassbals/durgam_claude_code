@@ -300,8 +300,8 @@ model exists and is verified by integration tests.
 | LeaveBalance admin edit (`/admin/leave/balance-edit`) | E-022 | M8.1 | Shipped at M8.1 | Per-row edit. `closing_balance` auto-recomputed. Audit on every save. |
 | LeaveRequest admin edit (`/admin/leave/request-edit`) | E-022 | M8.1 | Shipped at M8.1 | Allowed state transitions per DD-M8.1-P8-5. Approved→cancelled/withdrawn delegates to `withdraw()`. Window-elapsed guard blocks transitions after `ends_on`. |
 | Post-facto leave application (`is_post_facto` flag) | E-022 | M8.1 | Shipped at M8.1 | Set at submit time if `starts_on < today`. Amber badge on Apply modal. CL forfeit reversal on approval. |
-| Withdrawal notification campus-dept scope | TD-038 | M10 | Deferred | Requires Faculty/Campus assignment model. |
-| Leave admin pages campus-scope enforcement | TD-039 | M10 | Deferred | DIRECTOR-tier scope filter blocked on M10 Faculty model. |
+| Withdrawal notification campus-dept scope | TD-038 | M11 | Deferred | Faculty model shipped at M10 (Phase 1A) satisfying the linkage dependency; the campus/dept filter itself + fixture-isolation infrastructure retargeted to M11 at the M10 close docs sweep. |
+| Leave admin pages campus-scope enforcement | TD-039 | M11 | Deferred | Same Faculty-linkage dependency, now satisfied; retargeted to M11 at the M10 close docs sweep. |
 | credit_annual_cl beat schedule DB-driven | TD-040 | Future | Deferred | Hardcoded Jan 1 is statutory; non-Jan-1 deferred. |
 
 ---
@@ -328,3 +328,36 @@ model exists and is verified by integration tests.
 | Faculty mentor confirmation email (coverage_matrix line 243) | Out of scope | M14 (Director workflow) |
 | Per-module announcement surfacing (§10.1 beyond dashboard widget) | Out of scope | M15 (Role-based dashboards) |
 | Clubs/Meetings auto-announce hooks | Out of scope | M15 |
+
+---
+
+## M10 — Faculty Module
+
+**Gate passed: 2026-08-20.** Fresh-clone verification: 61-failure deterministic baseline
+(diff-empty vs. main) + 118 E2E passed + 8 skipped. Tag: `m10-close` at `476e334`. See
+`docs/milestones/M10.md` for full phase-by-phase gate details and `docs/modules/faculty.md`
+for the module reference.
+
+| Feature | RFP §§ / Errata-TD | Target | Status | Notes |
+|---------|---------------------|--------|--------|-------|
+| Faculty self-service profile (contact, external IDs, PhD, photo) | §9.7 | M10 | Shipped | `durgam/pages/faculty/profile.py`; `test_faculty_profile_state.py` (16), `test_faculty_service.py` (80 unit, incl. photo handling). |
+| Faculty education / experience / expertise / documents CRUD | §9.7 | M10 | Shipped | `profile_education.py` / `profile_experience.py` / `profile_expertise.py` / `profile_documents.py`; 8+8+7+8 integration tests respectively. |
+| Faculty directory (peer card grid + detail) | §8.3 | M10 | Shipped | `pages/faculty/directory.py` (`/faculty`) + `detail.py` (`/faculty/[fid]`); `test_faculty_directory_state.py` (6), `test_faculty_detail_state.py` (5). |
+| Admin faculty directory (read-only, no PII) | §9.7 | M10 | Shipped | `pages/admin/faculty_list.py` (`/admin/faculty`); `test_faculty_admin_state.py` (11). |
+| Faculty requests overlay (deep-link `?type=faculty` into `/approvals`) | §9.7 | M10 | Shipped | `pages/faculty/requests_overlay.py` (`/faculty/requests`). |
+| Faculty request types (submit/approve/reject/withdraw/attachments) | §9.7 | M10 | Shipped | `services/faculty_request.py`; `test_faculty_request_submit.py` (12), `_approve.py` (11), `_reject_withdraw.py` (15), `_attachments.py` (18), `_service.py` (5), `_repository.py` (8), `_service_validation.py` (11 unit). |
+| Non-Regular Faculty contract-term + renewal | §9.10 / E-003 | M10 | Shipped | `pages/admin/config/non_regular_faculty.py`; `test_non_regular_faculty_service.py` (21 unit), `test_m5b_non_regular_faculty.py` (11), `test_nrf_contract_term.py` (3), `test_nrf_approve_flow.py` (2), `test_faculty_noc_seed.py` (15). |
+| Faculty picker (shared component + `/api/faculty/picker` + 4-form rollout) | Q-P11.4 | M10 | Shipped | `pages/shared/faculty_picker.py`, `api/faculty_picker.py`; `test_faculty_picker_service.py` (14), `_endpoint.py` (11), `_rollout.py` (4). |
+| M5b assignment-table `faculty_id` backfill (mentor / class-teacher / non-owned-course / ug-timetable) | Q-P11.4 / D-020 | M10 | Shipped | `test_assignment_faculty_backfill.py` (6), `test_non_owned_course_service.py` (9 unit) + `test_m5b_non_owned_course.py` (6), `test_ug_timetable_service.py` (12 unit) + `test_m5b_ug_timetable.py` (9). |
+| Faculty mentor confirmation (invalidate-on-edit + re-confirm banner) | Q-P11E | M10 | Shipped | `states/config_faculty_mentor.py`; `test_faculty_mentor_confirmation.py` (12). |
+| Faculty bulk CSV import (upload → preview → commit, auto-creates User) | Q-P12 | M10 | Shipped | `pages/admin/faculty_import.py`, `states/faculty_bulk_import.py`; `test_faculty_bulk_import.py` (33). |
+| HoD recommend-via leave matrix (designation/employee-type-keyed) | E-021 | M10 | Shipped | `services/leave_rules.py`, `config_leave_matrix.py`; `test_leave_hod_recommend_10a.py` (4), `_10b.py` (5). |
+| Campus-scoped Director routing | E-019 | M10 | Shipped | Absorbed via `Faculty.campus_id` in the approval/leave engines. |
+| Audit label readability for faculty FK fields | TD-087 | M10 | Shipped (Phase 13) | `durgam/audit/labels.py` `faculty` resolver + `FK_FIELDS` for 4 tables. |
+| Faculty model/repository/seed backfill | — | M10 | Shipped | `test_faculty_repository.py` (14), `test_faculty_models.py` (7), `test_faculty_seed_backfill.py` (3), `test_faculty_permission_catalog_phase2.py` (16). |
+| PAN/Aadhaar encryption-at-rest + sensitive-section UI (Phase P5) | TD-084 | M11 | Deferred | Blocked on an explicit encryption design phase (key storage, rotation, audit-on-decrypt, fixture key). |
+| NRF extension workflow (HoD-initiated, university-admin-approved) | TD-085 | M11 | Deferred | Phase 9A shipped only the sys_admin direct-renewal override. |
+| Withdrawal notification campus-dept scope | TD-038 | M11 | Deferred | See M8.1 section row above — retargeted from M10 Phase 13 sweep. |
+| Leave admin pages campus-scope enforcement | TD-039 | M11 | Deferred | See M8.1 section row above — retargeted from M10 Phase 13 sweep. |
+| Leave-balance seed gap (blocks manual leave-flow walkthroughs) | TD-086 | M11 | Deferred | `scripts/seed.py` seeds no `leave_balances` for faculty users. |
+| Class coordinator re-introduction (student-bound) | TD-088 | M13 | Deferred | Removed at M10 Phase 11D (Q-P11D.1) pending the student domain; explicitly out of M11 scope. |

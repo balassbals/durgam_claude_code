@@ -682,7 +682,7 @@ the direct and table-based pathways.
 
 ### TD-038 — Withdrawal notification recipient resolution is university-wide (no campus-dept scope)
 
-**STATUS: deferred to Phase 13 docs/TD sweep.** An initial M10 Phase 9 attempt (commit `8923abf`, discarded by hard-reset) implemented the campus/dept filter in `resolve_withdrawal_notification_recipients`, but it introduced order-dependent fixture contamination across the test suite — the production code passed in isolation, yet cross-test session/DB state varied unpredictably between test orderings (non-deterministic suite). The fix was reverted; the M10 Faculty model (`Faculty.campus_id`/`department_id`) now provides the linkage the original trigger waited on, so the remaining work is the filter itself **plus** proper fixture-isolation infrastructure (a separate workstream). Re-scope both together in the Phase 13 sweep.
+**STATUS: Open — deferred to M11.** An initial M10 Phase 9 attempt (commit `8923abf`, discarded by hard-reset) implemented the campus/dept filter in `resolve_withdrawal_notification_recipients`, but it introduced order-dependent fixture contamination across the test suite — the production code passed in isolation, yet cross-test session/DB state varied unpredictably between test orderings (non-deterministic suite). The fix was reverted; the M10 Faculty model (`Faculty.campus_id`/`department_id`) now provides the linkage the original trigger waited on, so the remaining work is the filter itself **plus** proper fixture-isolation infrastructure (a separate workstream). Re-scope both together in M11 (retargeted at the M10 close docs sweep — M10 Phase 13 sweep only closed the TD-047/051/058/064/069/087 cluster; TD-038 carries forward).
 
 **Location:** `durgam/services/leave_notification.py`; scope: `resolve_withdrawal_notification_recipients()`.
 
@@ -690,11 +690,13 @@ the direct and table-based pathways.
 
 **Why this is not an M8.1 blocker:** Withdrawal notifications are informational. An excess recipient is annoying but not harmful; a missed recipient would be worse. Conservative over-notification is acceptable until the Faculty/Campus assignment model exists.
 
-**Trigger to re-open:** M10 Faculty module ships the employee-to-campus/department linkage table. Resolution: pass the employee's campus UUID into `resolve_withdrawal_notification_recipients` and add a `.where(scope_id == campus_id)` filter to the HOD/AHOD lookup.
+**Trigger to re-open:** M11. The M10 Faculty module shipped the employee-to-campus/department linkage table (`Faculty.campus_id`/`department_id`, Phase 1A) — the linkage this TD was waiting on now exists. Remaining work: pass the employee's campus UUID into `resolve_withdrawal_notification_recipients` and add a `.where(scope_id == campus_id)` filter to the HOD/AHOD lookup, plus the fixture-isolation infrastructure noted above.
 
 ---
 
 ### TD-039 — Leave balance and request admin pages lack campus-scope enforcement
+
+**Status:** Open — deferred to M11.
 
 **Location:** `durgam/pages/admin/leave_balance_admin.py` and `durgam/pages/admin/leave_request_admin.py` (M8.1 Phases 7–8, not yet created); planned permission: `leave_balance_admin:write:*` and `leave_request_admin:write:*`.
 
@@ -702,7 +704,7 @@ the direct and table-based pathways.
 
 **Why this is not an M8.1 blocker:** Employee-to-campus assignment requires the M10 Faculty model. The pages are used by Registrar-family roles in v1; DIRECTOR-tier usage deferred.
 
-**Trigger to re-open:** M10 Faculty module ships employee-to-campus linkage. Resolution: add a `campus_filter` query argument to `admin_search_balances` and `admin_list_requests` based on the actor's `scope_id`.
+**Trigger to re-open:** M11. The M10 Faculty module shipped the employee-to-campus linkage (`Faculty.campus_id`). Resolution: add a `campus_filter` query argument to `admin_search_balances` and `admin_list_requests` based on the actor's `scope_id`.
 
 ---
 
@@ -875,7 +877,7 @@ as TD-062 for a future tightening pass.
 
 ### TD-054 — Auto-announcement `composer_role_code = "SYSTEM"` literal
 
-**Phase:** M9 Phase 8a
+**Phase:** M9 Phase 8a. **Status:** Open — deferred to M11.
 
 **Symptom:** Auto-announcements created via `_run_post_approval` use the literal
 string `"SYSTEM"` as `composer_role_code` because the approver's actual composer-
@@ -897,7 +899,7 @@ model with a nullable `composer_role_code` for `source_type="auto"` rows.
 
 ### TD-056 — Announcement attachments: no download-permission restriction
 
-**Phase:** M9 Phase 8b
+**Phase:** M9 Phase 8b. **Status:** Open — deferred to M11.
 
 **Symptom:** Files uploaded with `purpose="announcement_attachment"` are downloadable
 by any authenticated user with `file_asset:read` permission (the permissive default
@@ -923,7 +925,7 @@ URLs (MinIO presigned URLs) for attachments with a short TTL.
 
 ### TD-057 — Announcement attachments: single-file limit enforced only by UI
 
-**Phase:** M9 Phase 8b
+**Phase:** M9 Phase 8b. **Status:** Open — deferred to M11.
 
 **Symptom:** The spec allows one attachment per announcement (M9 design decision).
 This limit is enforced only at the UI layer (one file upload zone, no multi-select).
@@ -944,7 +946,7 @@ When the spec is relaxed to N attachments, replace `1` with the configured limit
 
 ### TD-062 — Decorator meta-test: data presence ≠ auth resolution for scoped users
 
-**Phase:** M9 Phase 8b.2
+**Phase:** M9 Phase 8b.2. **Status:** Open — deferred to M11.
 
 **Symptom:** `test_announcement_decorator_actions.py` verified that every `@require_role`
 decorator's `(resource, action)` pair has a seeded `Permission` row. This did NOT catch
@@ -1047,7 +1049,7 @@ the `scope_type not in ("*", "own")` bypass semantics as a live runtime check.
 ### TD-053 — Auth meta-test: decorator (action, resource) existence ≠ runtime resolution for scoped users
 
 **Phase:** M9 Phase 8b.1 (meta-test filed); Phase 8b.2 (scoped-role gap confirmed).
-**Severity:** Medium — bugs in this class bypass CI.
+**Severity:** Medium — bugs in this class bypass CI. **Status:** Open — deferred to M11.
 
 **Root cause:** `test_announcement_decorator_actions.py` checks that every `@require_role` decorator's `(action, resource)` pair has a matching seeded `Permission` row. This confirmed correctness at the schema level but not at the runtime `can()` resolution level. Phase 8b.2 showed that a campus-scoped `DIRECTOR` was denied despite having a valid permission row — because `can()` filtered out their `UserRole` before examining permissions (pre-8b.2 bug). The meta-test would have missed this.
 
@@ -1116,7 +1118,7 @@ Protocol established: before declaring a test suite baseline, the full non-E2E s
 
 ### TD-064 — E-017 E2E tests xfailed: `_create_approved_leave` missing `half_day` column
 
-**Phase:** M9 Phase 10.1. **Status: Partially resolved (M10 Phase 13, commit `d3c069c`).**
+**Phase:** M9 Phase 10.1. **Status: Closed (M10 Phase 13, commit `d3c069c`).**
 
 **Location:** `tests/e2e/test_leave_withdraw_approved.py` — `TestWithdrawApprovedLeave` (all 3 tests).
 
@@ -1124,9 +1126,9 @@ Protocol established: before declaring a test suite baseline, the full non-E2E s
 
 All 3 tests are marked `@pytest.mark.xfail(strict=False, reason="E-017 ...")` so the M9 E2E gate is green. The underlying E-017 feature (withdraw post-approval) was not implemented in M9.
 
-**Partially resolved (M10 Phase 13):** `half_day = false` added to the INSERT in `_create_approved_leave()`. The fixture setup no longer errors on the missing column. xfail decorators remain — E-017 feature implementation is still deferred.
+**Closed (M10 Phase 13):** `half_day = false` added to the INSERT in `_create_approved_leave()`. The fixture setup no longer errors on the missing column — TD-064's original scope (the missing-column fixture bug) is fully fixed. Note: the `@pytest.mark.xfail` decorators on these 3 tests still carry the stale reason text `"E-017 ..."` even though E-017 (withdraw post-approval) was actually implemented at M8.1 — that xfail-removal / re-verification is a separate, not-yet-filed test-hygiene follow-up outside TD-064's scope, not a re-opening of this TD.
 
-**Trigger to re-open:** When E-017 is scheduled for implementation: implement the post-approval withdraw service method and UI, then remove the xfail decorators and verify all 3 tests pass.
+**Trigger to re-open:** N/A — closed. A future test-hygiene pass may separately re-verify and un-xfail `TestWithdrawApprovedLeave` now that E-017 is shipped.
 
 ---
 
@@ -1146,7 +1148,7 @@ The underlying E-022 feature (admin manual edit of leave records) may be partial
 
 ### TD-066 — Composer scope label resolved at display time, not stored
 
-**Phase:** M9 Phase 10.2. **Status: Open.**
+**Phase:** M9 Phase 10.2. **Status: Open — deferred to M11.**
 
 **Location:** `durgam/services/announcement.py` — `_resolve_composer_scope_label()`; called from `durgam/states/announcements.py` (`load_announcements`, `open_detail`) and `durgam/pages/shared/recent_announcements_widget.py` (`load_widget_data`).
 
@@ -1160,7 +1162,7 @@ The underlying E-022 feature (admin manual edit of leave records) may be partial
 
 ### TD-067 — `_resolve_composer_scope_label` underscore convention vs cross-module import
 
-**Phase:** M9 Phase 10.2. **Status:** Open.
+**Phase:** M9 Phase 10.2. **Status:** Open — deferred to M11.
 
 **Location:** `durgam/services/announcement.py` exposes `_resolve_composer_scope_label` as a module-private function (leading underscore), but it is imported across module boundaries from `durgam/states/announcements.py` and `durgam/pages/shared/recent_announcements_widget.py`.
 
@@ -1433,7 +1435,7 @@ First-action-wins semantics per Q-P5C.1 freeze: any user in the resolved pool ca
 
 ### TD-084 — PAN/Aadhaar encryption-at-rest layer required before P5 UI can ship
 
-**Phase:** M10 Phase P5 (attempted during the combined P5+P6 turn). **Status:** Open — blocking P5. **Priority:** Medium-High (sensitive PII).
+**Phase:** M10 Phase P5 (attempted during the combined P5+P6 turn). **Status:** Open — deferred to M11 as an explicit design phase. **Priority:** Medium-High (sensitive PII).
 
 **Note on numbering:** The originating prompt referenced this as "TD-070", but TD-070 is already in use (Migration test isolation). Filed as TD-084 (next free number); all P5/P6 code, M10.md, and CLAUDE.md references point to TD-084.
 
@@ -1460,7 +1462,7 @@ c) Audit-on-decrypt (likely required for sensitive PII access; relates to deferr
 d) Fixture key for tests.
 e) Schema validation that existing column types/widths accommodate ciphertext + IV/nonce.
 
-**Suggested execution:** separate "Security Foundations" mini-milestone OR an M11 prelude.
+**Suggested execution:** an explicit M11 design phase (confirmed at the M10 close docs sweep, 2026-08-20) — key storage strategy, rotation policy, audit-on-decrypt, and a test fixture key, before Phase P5 (deferred faculty PAN/Aadhaar UI) can ship.
 
 **Resolution path:** Resolve (a)–(e), implement the crypto module + decrypt-on-read
 path, then ship Phase P5 (sensitive section UI) against `User.pan_enc`/`aadhaar_enc`.
@@ -1471,7 +1473,7 @@ path, then ship Phase P5 (sensitive section UI) against `User.pan_enc`/`aadhaar_
 
 ### TD-085 — NonRegularFaculty extension workflow (HoD-initiated, university-admin-approved)
 
-**Status:** Open — deferred to Phase 11 or M11. **Priority:** Medium. (Prompt referenced this as "TD-086"; filed as TD-085, the next free number.)
+**Status:** Open — deferred to M11. **Priority:** Medium. (Prompt referenced this as "TD-086"; filed as TD-085, the next free number.)
 
 Phase 9A shipped sys_admin **direct** NRF renewal (`NonRegularFacultyService.renew` + admin config "Renew contract" modal) as an admin-override capability. The proper workflow per SSSIHL practice is not yet implemented: department HoD raises an NRF **extension request** → university admin approves through the existing approval engine → renewal applied automatically. Needs:
 - (a) `nrf_extension` ApprovalProcess seed with HoD-as-requestor + university-admin approval chain,
@@ -1484,7 +1486,7 @@ The direct-renew override stays (parallels the `is_admin_approved` flag). See Q-
 
 ### TD-086 — Leave-balance seed gap (blocks manual leave-flow walkthroughs)
 
-**Status:** Open — defer to Phase 14 gate ritual (sooner if a phase needs a leave-flow walkthrough as gate criterion). **Priority:** Low-Medium.
+**Status:** Open — deferred to M11. **Priority:** Low-Medium. (The M10 Phase 14 gate ritual passed without needing a leave-flow walkthrough as a gate criterion, so the deferred trigger did not fire during M10; carried forward to M11.)
 
 The dev DB has no `leave_balances` seeded for faculty users (test fixtures seed balances per-test, but `scripts/seed.py` does not). This blocks manual UI walkthroughs of any leave-submit flow (e.g. Phase 10B's HoD recommend-via scenarios) because balance checks fail before routing is exercised. Resolution: either (a) extend `scripts/seed.py` to seed initial balances for the seeded faculty users, or (b) accept and require explicit balance seeding before walkthroughs. Discovered during the Phase 10B/11 block.
 
@@ -1520,8 +1522,13 @@ faculty_mentor_assignments, class_teacher_assignments, non_owned_courses, ug_tim
 
 ### TD-088 — Re-introduce class coordinator feature when the student domain ships
 
-**Status:** Open — deferred to the milestone that introduces the student domain
-(likely M11+). **Priority:** Medium.
+**Status:** Open — deferred to M13 (the milestone that introduces the student domain).
+**Priority:** Medium. Confirmed explicitly out of M11 scope at the M10 close docs sweep
+(2026-08-20) — class coordinators are student-bound (see below), and M11 is a
+hardening/encryption/test-hygiene milestone with no student-records work. Note:
+`docs/milestones/M13.md` is currently a stub titled "Program & Course Management"
+and does not yet mention the student domain or class coordinators; this TD's M13
+target should be confirmed (or the work re-numbered) during M13 planning.
 
 Phase 11D removed `class_coordinator_assignments` entirely (misclassification
 correction per Q-P11D.1). The table had been built with `faculty_id`, but per the
@@ -1535,3 +1542,17 @@ When the students table + student domain exist, re-introduce class coordinator c
 assignment (mirroring the M10 Phase 11C faculty picker), and the class teacher as the
 appointing authority. The dropped DROP migration (c9f1a2b3d417) documents the prior
 schema; the re-introduction is a fresh, student-bound design, not a revert.
+
+---
+
+### TD-089 — E2E upload tests flake under full-suite load (timeout, not defect)
+
+**Status:** Open — deferred to M11 test-hygiene workstream. **Priority:** Low.
+
+**Symptom:** E2E upload tests (letterhead, template) flake under full-suite load; they pass reliably in isolation. The failure mode is a `net::timeout` on the file-input locator, not an assertion failure.
+
+**Root cause:** A single Reflex instance serves all 118 sequential E2E tests in the M10 gate ritual run. Under that cumulative load, heavier upload flows occasionally exceed the default 30s locator timeout. This is a load/timing artifact of the shared-instance E2E harness, not a code defect in the upload feature itself.
+
+**Resolution path:** In M11's test-hygiene workstream, bump the locator timeout on upload tests to 60s, or add a bounded retry around the file-input interaction. Group with TD-044 (61-baseline seeded_db contamination) and TD-068 (seed idempotency) as the M11 test-hygiene cluster.
+
+**Filed:** M10 close docs sweep, 2026-08-20 (observed during Phase 14 gate ritual E2E runs).

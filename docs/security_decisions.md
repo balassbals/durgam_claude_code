@@ -294,4 +294,81 @@ clear operational benefit at v1. HoDs are typically requestors, not reviewers.
 - A future process requires HoDs to view (but not decide on) approval requests
   for their department. Add a `approval_request:read:department` permission and
   scope-filtered query.
+
+---
+
+## SD-006 — PAN/Aadhaar encryption-at-rest deferred to M11 design phase
+
+**Milestone:** M10 — Faculty Module (close docs sweep)
+**Date:** 2026-08-20
+**Decision makers:** bala
+
+### Context
+
+`User.pan_enc` and `User.aadhaar_enc` were declared at M10 Phase 1A with the `_enc` suffix
+signaling encryption-at-rest intent — they are also listed in `User._audit_redact_fields`,
+and sized 128/512 characters, far wider than plaintext PAN (10 chars) or Aadhaar (12 digits),
+i.e. sized for ciphertext. No encryption layer (Fernet, KMS, or otherwise) exists anywhere in
+the codebase, and the two fields are never read or written by any code path — they are
+unimplemented placeholders. Phase P5 (the sensitive-PII section of `/faculty/profile`) was
+attempted during the combined P5+P6 turn and found every path forward blocked: adding
+plaintext PAN/Aadhaar fields to `Faculty` is a schema change out of scope; writing plaintext
+into the `_enc`-suffixed `User` columns is an outright security regression; and building a
+crypto module inline is a milestone-boundary decision, not a UI-phase task. Tracked as TD-084.
+
+### Decision
+
+Defer PAN/Aadhaar UI and any read/write of `pan_enc`/`aadhaar_enc` to M11, as an **explicit
+design phase** (not a drive-by implementation folded into a feature phase). The design phase
+must resolve, before any code lands:
+
+- Key storage strategy (env var minimum; ideally an external secret store).
+- Key rotation policy.
+- Audit-on-decrypt — sensitive PII reads should themselves be auditable, not just redacted
+  from other audit rows.
+- A fixture key for tests.
+- Schema validation that the existing 128/512-char column widths accommodate ciphertext +
+  IV/nonce for the chosen scheme.
+
+Phase P5 (the faculty-facing PAN/Aadhaar UI) ships only after this design phase lands the
+crypto module and a decrypt-on-read path.
+
+### Rationale
+
+Shipping plaintext into columns explicitly named and sized for ciphertext would be worse than
+not shipping the feature at all — it creates a false sense of security (the column name implies
+protection that doesn't exist) while adding a genuine PII exposure. Better to ship the profile
+module without PAN/Aadhaar than to ship it insecurely.
+
+### Alternatives considered
+
+**(a) Ship P5 against plaintext `pan_enc`/`aadhaar_enc` now, encrypt later** — rejected. Any
+plaintext PII that touches disk, even briefly, is a real exposure window; retrofitting
+encryption doesn't undo a leak that already happened, and every existing row would need a
+one-time re-encryption migration anyway.
+
+**(b) Add unencrypted `pan`/`aadhaar` fields to `Faculty` as a stopgap** — rejected. Same
+plaintext-PII exposure as (a), plus it duplicates identifier storage across `User` and
+`Faculty`, creating a second column to migrate away from later.
+
+### Residual risk
+
+Until M11's design phase lands, faculty PAN/Aadhaar data cannot be entered into the system at
+all — this is a functionality gap, not a security risk. The `_enc` columns remain empty and
+unused.
+
+### Compensating controls
+
+1. `User._audit_redact_fields` already includes `pan_enc`/`aadhaar_enc`, so even once
+   populated, these fields will never appear in plaintext in an `auditlog` diff row.
+2. No code path reads or writes these columns today — verified by grep at TD-084 filing time —
+   so there is no accidental-plaintext-write surface to guard against in the interim.
+
+### Escalation triggers
+
+- M11 planning begins: convert this SD's open design questions into concrete Q-decisions
+  before any implementation Phase starts.
+- Any code path is proposed that would read or write `pan_enc`/`aadhaar_enc` before the
+  encryption module exists — block it in review; that is exactly the regression this SD exists
+  to prevent.
 - M20 security hardening review — confirm the access model is appropriate.

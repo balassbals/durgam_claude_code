@@ -317,4 +317,37 @@ For a future UI-polish pass: show a countdown timer and disable the button clien
 
 The Withdraw Window field in `/admin/config/announcement-categories` is labeled "Withdraw Window (seconds)" with a helper text: "Seconds after composing during which the announcement is pending (invisible to recipients but withdrawable). 0 = publish immediately." The input is a number field, min=0, max=86400.
 
+---
+
+## M10 Faculty Module — UX conventions
+
+### 1. Faculty picker — searchable dropdown replaces free-text employee_id
+
+`durgam/pages/shared/faculty_picker.py` replaces free-text `employee_id` inputs on the 4
+admin assignment forms (faculty mentors, class teachers, non-owned courses, UG timetable) with
+a searchable dropdown: a search input drives a live, server-side search (by employee_id, name,
+or title) returning at most 50 results, capped for both performance and to discourage a
+scroll-and-guess interaction. A single-arg selection collapses the dropdown into a "selected
+chip + Change" affordance. Search runs server-side via a State handler (never a client-side
+`fetch()`), consistent with "Reflex State is the source of truth."
+
+### 2. Re-confirm banner — persistent, amber, gated on stale AND non-empty
+
+The faculty mentor roster confirmation banner ("Roster has changed since last confirmation —
+please re-confirm when ready") is amber, persists until the Director explicitly re-confirms
+(it is not dismissible or auto-timed), and only renders when the roster is BOTH stale (a
+material field changed or an assignment was removed since the last confirmation) AND
+non-empty. Showing the banner over an empty roster reads as a false alarm — there's nothing to
+re-confirm — so the two conditions are checked together (M10 Phase 11E.2 fix).
+
+### 3. Bulk-import three-stage flow: upload → preview → commit
+
+The faculty CSV bulk-import page (`/admin/faculty/import`) follows the same three-stage
+pattern established at M5b's `BulkImportState`: **upload** (parse the CSV, no DB writes yet)
+→ **preview** (every row shown with per-row pass/fail validation, so the admin sees exactly
+what will and won't import before committing) → **commit** (writes only the valid rows, one
+audit row per commit action). The Commit button is disabled while any previewed row still has
+an unresolved validation error, so a partial-success commit is always a deliberate admin choice
+(skip invalid rows), never a silent default.
+
 For admin convenience: the category list page does not show the delay value in the table (too low information density). It is only visible on the edit modal. If admins need to scan delays, direct SQL is the recommended approach for M9.
