@@ -37,6 +37,10 @@ def _rule(
     recommend_via_role_code: str | None = None,
     requires_in_charge: bool = False,
     scope_type: str | None = None,
+    applicant_designation_codes: list[str] | None = None,
+    applicant_employee_types: list[str] | None = None,
+    recommend_via_resolver: str | None = None,
+    requires_optin: bool = False,
 ) -> SimpleNamespace:
     return SimpleNamespace(
         leave_type=leave_type,
@@ -46,6 +50,10 @@ def _rule(
         recommend_via_role_code=recommend_via_role_code,
         requires_in_charge=requires_in_charge,
         scope_type=scope_type,
+        applicant_designation_codes=applicant_designation_codes,
+        applicant_employee_types=applicant_employee_types,
+        recommend_via_resolver=recommend_via_resolver,
+        requires_optin=requires_optin,
     )
 
 
@@ -407,3 +415,195 @@ def test_resolve_channel_single_stage_no_recommend() -> None:
     channel = resolve_channel(["FACULTY"], "CL", rules)
     assert len(channel) == 1
     assert channel[0]["recommend_only"] is False
+
+
+# ── Phase 10A: HoD recommend-via (STEP-A throwaway proof, Q-P10) ──────────────
+# Proves resolve_channel prepends a HoD recommend-only stage when a matrix rule
+# sets recommend_via_role_code="HOD". Mechanism is M8-built; this is the Q-P10.4
+# STEP-A proof on a throwaway rule. NO live LEAVE_APPROVAL wiring (that is 10B).
+
+
+def test_resolve_channel_hod_recommend_prepended() -> None:
+    rule = _rule(
+        "CL", "FACULTY", "DIRECTOR", priority=30,
+        recommend_via_role_code="HOD", scope_type="department",
+    )
+    channel = resolve_channel(["FACULTY"], "CL", [rule])
+    assert len(channel) == 2
+    assert channel[0]["role_code"] == "HOD"
+    assert channel[0]["recommend_only"] is True
+    assert channel[1]["role_code"] == "DIRECTOR"
+    assert channel[1]["recommend_only"] is False
+
+
+def test_resolve_channel_hod_recommend_carries_scope_hint() -> None:
+    rule = _rule(
+        "EL", "FACULTY", "DIRECTOR", priority=30,
+        recommend_via_role_code="HOD", scope_type="department",
+    )
+    channel = resolve_channel(["FACULTY"], "EL", [rule])
+    assert channel[0]["scope_type"] == "department"
+
+
+def test_resolve_channel_hod_recommend_ordering_recommend_before_sanctioner() -> None:
+    rule = _rule(
+        "HPL", "FACULTY", "DIRECTOR", priority=30, recommend_via_role_code="HOD",
+    )
+    channel = resolve_channel(["FACULTY"], "HPL", [rule])
+    # recommend stage strictly precedes the authoritative sanction stage
+    recommend_idx = next(i for i, s in enumerate(channel) if s["recommend_only"])
+    sanction_idx = next(i for i, s in enumerate(channel) if not s["recommend_only"])
+    assert recommend_idx < sanction_idx
+
+
+def test_resolve_channel_no_hod_recommend_when_unset_control() -> None:
+    # Control: without recommend_via_role_code, no HoD prepend (single sanction stage).
+    rule = _rule("CL", "FACULTY", "DIRECTOR", priority=30, recommend_via_role_code=None)
+    channel = resolve_channel(["FACULTY"], "CL", [rule])
+    assert len(channel) == 1
+    assert channel[0]["recommend_only"] is False
+
+
+# ── Phase 10B: designation/employee_type keying + resolver + opt-in (Q-P10) ───
+
+
+def test_matcher_designation_codes_matches_only_listed() -> None:
+    rule = _rule(
+        "CL", "FACULTY", "DIRECTOR", priority=25,
+        recommend_via_resolver="dept_head_at_requestor_campus",
+        applicant_designation_codes=["asst_prof_l10", "instructor"],
+    )
+    generic = _rule("CL", "FACULTY", "DIRECTOR", priority=30)
+    ch = resolve_channel(
+        ["FACULTY"], "CL", [rule, generic],
+        applicant_designation_code="asst_prof_l10",
+    )
+    assert ch[0]["resolver_name"] == "dept_head_at_requestor_campus"
+    assert ch[0]["recommend_only"] is True
+
+
+def test_matcher_designation_codes_non_member_falls_to_generic() -> None:
+    rule = _rule(
+        "CL", "FACULTY", "DIRECTOR", priority=25,
+        recommend_via_resolver="dept_head_at_requestor_campus",
+        applicant_designation_codes=["asst_prof_l10"],
+    )
+    generic = _rule("CL", "FACULTY", "DIRECTOR", priority=30)
+    ch = resolve_channel(
+        ["FACULTY"], "CL", [rule, generic],
+        applicant_designation_code="prof",
+    )
+    assert len(ch) == 1  # generic only, no HoD prepend
+    assert ch[0]["recommend_only"] is False
+
+
+def test_matcher_employee_types_matches_only_listed() -> None:
+    rule = _rule(
+        "EL", "FACULTY", "DIRECTOR", priority=26,
+        recommend_via_resolver="dept_head_at_requestor_campus",
+        applicant_employee_types=["honorary_teaching", "visiting_fellow"],
+    )
+    generic = _rule("EL", "FACULTY", "DIRECTOR", priority=30)
+    ch = resolve_channel(
+        ["FACULTY"], "EL", [rule, generic],
+        applicant_employee_type="honorary_teaching",
+    )
+    assert ch[0]["resolver_name"] == "dept_head_at_requestor_campus"
+
+
+def test_matcher_null_designation_codes_is_wildcard() -> None:
+    # Existing rows (no designation/employee_type) match regardless — regression.
+    rule = _rule("CL", "FACULTY", "DIRECTOR", priority=30)
+    ch = resolve_channel(
+        ["FACULTY"], "CL", [rule], applicant_designation_code="anything"
+    )
+    assert ch[0]["role_code"] == "DIRECTOR"
+
+
+def test_requires_optin_rule_skipped_when_optin_false() -> None:
+    optin_rule = _rule(
+        "CL", "FACULTY", "DIRECTOR", priority=27,
+        recommend_via_resolver="dept_head_at_requestor_campus",
+        applicant_designation_codes=["prof", "assoc_prof", "sr_prof"],
+        requires_optin=True,
+    )
+    generic = _rule("CL", "FACULTY", "DIRECTOR", priority=30)
+    ch = resolve_channel(
+        ["FACULTY"], "CL", [optin_rule, generic],
+        applicant_designation_code="prof", optin=False,
+    )
+    assert len(ch) == 1  # opt-in rule skipped → generic only
+    assert ch[0]["recommend_only"] is False
+
+
+def test_requires_optin_rule_matches_when_optin_true() -> None:
+    optin_rule = _rule(
+        "CL", "FACULTY", "DIRECTOR", priority=27,
+        recommend_via_resolver="dept_head_at_requestor_campus",
+        applicant_designation_codes=["prof", "assoc_prof", "sr_prof"],
+        requires_optin=True,
+    )
+    generic = _rule("CL", "FACULTY", "DIRECTOR", priority=30)
+    ch = resolve_channel(
+        ["FACULTY"], "CL", [optin_rule, generic],
+        applicant_designation_code="prof", optin=True,
+    )
+    assert ch[0]["resolver_name"] == "dept_head_at_requestor_campus"
+    assert ch[0]["recommend_only"] is True
+
+
+def test_optin_false_rule_matches_regardless_of_optin() -> None:
+    # Q-P10.1 rows (requires_optin=False) fire even when optin=False.
+    auto_rule = _rule(
+        "CL", "FACULTY", "DIRECTOR", priority=25,
+        recommend_via_resolver="dept_head_at_requestor_campus",
+        applicant_designation_codes=["asst_prof_l10"],
+        requires_optin=False,
+    )
+    ch = resolve_channel(
+        ["FACULTY"], "CL", [auto_rule],
+        applicant_designation_code="asst_prof_l10", optin=False,
+    )
+    assert ch[0]["resolver_name"] == "dept_head_at_requestor_campus"
+
+
+def test_resolver_branch_emits_resolver_role_code_none() -> None:
+    rule = _rule(
+        "CL", "FACULTY", "DIRECTOR", priority=25,
+        recommend_via_resolver="dept_head_at_requestor_campus",
+    )
+    ch = resolve_channel(["FACULTY"], "CL", [rule])
+    assert ch[0]["resolver_name"] == "dept_head_at_requestor_campus"
+    assert ch[0]["role_code"] is None
+
+
+def test_role_code_branch_still_works_regression() -> None:
+    # recommend_via_role_code path unchanged; resolver_name is None.
+    rule = _rule(
+        "SCL", "*", "VC", priority=100, recommend_via_role_code="DIRECTOR",
+    )
+    ch = resolve_channel(["FACULTY"], "SCL", [rule])
+    assert ch[0]["role_code"] == "DIRECTOR"
+    assert ch[0]["resolver_name"] is None
+    assert ch[0]["recommend_only"] is True
+
+
+def test_no_duplication_single_rule_wins_by_priority() -> None:
+    # asst_prof_l10 WITH optin: designation rule (25) wins; opt-in prof rule (27)
+    # doesn't match designation. Single prepend, no duplication.
+    desig_rule = _rule(
+        "CL", "FACULTY", "DIRECTOR", priority=25,
+        recommend_via_resolver="dept_head_at_requestor_campus",
+        applicant_designation_codes=["asst_prof_l10"],
+    )
+    prof_rule = _rule(
+        "CL", "FACULTY", "DIRECTOR", priority=27,
+        recommend_via_resolver="dept_head_at_requestor_campus",
+        applicant_designation_codes=["prof"], requires_optin=True,
+    )
+    generic = _rule("CL", "FACULTY", "DIRECTOR", priority=30)
+    ch = resolve_channel(
+        ["FACULTY"], "CL", [desig_rule, prof_rule, generic],
+        applicant_designation_code="asst_prof_l10", optin=True,
+    )
+    assert len([s for s in ch if s["recommend_only"]]) == 1  # exactly one HoD stage

@@ -33,19 +33,16 @@ class NonOwnedCourseService:
         course_name: str,
         credits: int,
         semester: str,
-        faculty_id_placeholder: str,
+        faculty_id: UUID,
         actor_id: UUID,
         notes: str | None = None,
     ) -> NonOwnedCourse:
         course_code = course_code.strip()
         course_name = course_name.strip()
-        faculty_id_placeholder = faculty_id_placeholder.strip()
         if not course_code:
             raise NonOwnedCourseError("Course code is required.")
         if not course_name:
             raise NonOwnedCourseError("Course name is required.")
-        if not faculty_id_placeholder:
-            raise NonOwnedCourseError("Faculty identifier is required.")
         if semester not in ("odd", "even"):
             raise NonOwnedCourseError("Semester must be 'odd' or 'even'.")
 
@@ -56,7 +53,7 @@ class NonOwnedCourseService:
             course_name=course_name,
             credits=credits,
             semester=semester,
-            faculty_id_placeholder=faculty_id_placeholder,
+            faculty_id=faculty_id,
             notes=notes,
             created_by=actor_id,
             updated_by=actor_id,

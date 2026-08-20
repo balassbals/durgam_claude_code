@@ -70,16 +70,27 @@ uv run pytest tests/integration/ -v
 uv run pytest tests/unit/ tests/integration/ --cov=durgam --cov-report=html
 ```
 
-### E2E tests (require running app)
+### E2E tests (require running app — two-terminal pattern)
+
+The E2E harness does **not** spawn its own app — it connects to `localhost:3000`. Reflex must
+already be live before the suite runs. Use two terminals in the same clone directory:
 
 ```bash
-# Start the full stack
-docker compose up -d
-uv run reflex run &
+# Terminal 1 — start the full stack and leave Reflex running in the foreground
+docker compose up db redis mailpit minio -d
+uv run reflex run
+```
 
-# Wait for app to be ready, then:
+```bash
+# Terminal 2 — once the app is up, run the E2E suite
 BASE_URL=http://localhost:3000 uv run pytest tests/e2e/ -v
 ```
+
+Running E2E with no app up produces mass `ERR_CONNECTION_REFUSED` failures that look like
+~119 broken tests but are purely an infra/ordering mistake, not a regression — see
+`docs/prompts/gate_verification.md` M10 Gate Lessons. Kill any stray/zombie process on
+:3000 or :8000 before a fresh run — a leftover manually-started Reflex instance serves a
+stale `.web` build to the E2E suite.
 
 ## Database operations
 
@@ -372,4 +383,45 @@ FROM announcements a
 WHERE a.source_type = 'auto'
   AND a.created_at >= NOW() - INTERVAL '30 days'
 ORDER BY a.created_at DESC;
+```
+
+---
+
+## Faculty Module (M10)
+
+### Seeding
+
+Same as always — see "Start dev services" above (`uv run python scripts/seed.py`). No
+faculty-specific seed step exists beyond the standard fresh-clone/volume-wipe sequence; seeding
+after any clone or volume wipe is required before faculty pages will show data (TD-051).
+
+### Bulk faculty import (`/admin/faculty/import`)
+
+The CSV requires an `email` column for any row whose username doesn't match an existing
+account — a new `User` is auto-created with `must_change_password=True` (and `employee_type`
+forced to `regular_teaching`) before the `Faculty` FK resolves. Rows with a matching existing
+username reuse that `User` and do not touch its password/must-change-password state. See
+`docs/modules/faculty.md` §7 for the full upload → preview → commit flow.
+
+### Key SQL for ops
+
+```sql
+-- List all active (non-deleted, regular-teaching) faculty
+SELECT f.id, f.employee_id, f.title, u.email
+FROM faculties f
+JOIN users u ON u.id = f.user_id
+WHERE f.is_deleted = false
+ORDER BY f.employee_id;
+
+-- Find non-regular faculty whose contract window has already ended
+SELECT id, employee_id, title, available_to, renewal_count
+FROM non_regular_faculty
+WHERE is_deleted = false AND available_to < CURRENT_DATE
+ORDER BY available_to;
+
+-- Find stale (unconfirmed since last edit) faculty mentor rosters
+SELECT academic_year_id, campus_id
+FROM faculty_mentor_confirmations
+WHERE is_deleted = true
+ORDER BY updated_at DESC;
 ```

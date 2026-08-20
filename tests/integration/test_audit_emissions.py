@@ -379,8 +379,6 @@ _STANDARD_CRUD_PAIRS = [
     ("delete", "non_owned_course"),  # #34
     ("write", "class_teacher_assignment"),      # #35
     ("delete", "class_teacher_assignment"),     # #36
-    ("write", "class_coordinator_assignment"),  # #37
-    ("delete", "class_coordinator_assignment"), # #38
     ("write", "calendar_entry"),   # #39
     ("delete", "calendar_entry"),  # #40
     ("write", "mental_health_counsellor"),      # #41

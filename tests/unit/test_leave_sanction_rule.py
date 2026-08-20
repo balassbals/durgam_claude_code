@@ -18,7 +18,7 @@ from durgam.repositories.leave import LeaveSanctionRuleRepository
 from durgam.services.leave_sanction_rule import LeaveSanctionRuleService
 
 _YAML_PATH = Path(__file__).parent.parent.parent / "seeds" / "leave_sanction_matrix.yaml"
-_EXPECTED_RULE_COUNT = 73  # 14 CL + 1 SCL + 56 EL/HPL/CML/ML + 2 EOL/SL
+_EXPECTED_RULE_COUNT = 88  # 73 base + 15 M10 P10B Q-P10 HoD-recommend rows (3 kinds × 5 faculty leave types)
 
 
 def _svc(session):

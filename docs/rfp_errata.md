@@ -734,4 +734,6 @@ import UIs.
 
 **Trigger to re-open**: A follow-up milestone with bandwidth for two admin pages + one cross-cutting transition path. Likely M8.1 follow-up or M9 prep, jointly with E-016/E-017.
 
+**Status note (M10 close docs sweep, 2026-08-20)**: Design items 1–2 above (LeaveBalance admin edit at `/admin/leave/balance-edit`, LeaveRequest admin edit at `/admin/leave/request-edit`, plus post-facto leave application) shipped at M8.1 — see `docs/coverage_matrix.md` M8.1 section. Design item 3 ("Create retroactive LeaveRequest" as a distinct admin action) was not shipped, and its E2E coverage gap is tracked separately as TD-065 (`get_by_label("Availed")` selector bug, xfailed). **E-022 remains OPEN** pending item 3 and TD-065 resolution — do not read the M8.1 shipment of items 1–2 as full closure of this erratum.
+
 **Status: Resolved in M8.1 commits `f931dd3` + `6be2ef5` (LeaveBalance admin) + `0324f72` + `f902edc` + `ff5372e` + `ca98505` (LeaveRequest admin + post-facto + CL forfeit reversal + hotfixes).**

@@ -625,4 +625,53 @@ before the next manual walkthrough. Missing this step causes `PermissionDenied` 
 if user_role.scope_type is not None and scope_type is not None and scope_type not in ("*", "own"):
 ```
 
+## M10 Gate Lessons
+
+### Two-terminal E2E pattern is critical, not optional
+
+Step 1 of this ritual already documents starting Reflex in a second terminal — M10's gate run
+confirmed why that matters. The E2E harness does **not** spawn its own app; it connects to
+`localhost:3000`. Running the suite with no app up (or with the app started backgrounded via
+`&` in the same terminal that then exits) produces mass `ERR_CONNECTION_REFUSED` failures —
+at M10's scale that reads as ~119 broken tests, which looks exactly like a catastrophic
+regression but is purely an infra/ordering mistake. Always confirm the app is reachable
+(`curl -sf http://localhost:3000` or just load it in a browser) before starting the E2E run,
+in a genuinely separate terminal that stays alive for the whole run.
+
+### Benign warning: "Attempting to send delta to disconnected client"
+
+This message appears in the Reflex server log during E2E teardown — it's Playwright closing a
+page/context while a WebSocket delta was in flight. It is a normal teardown race, not a
+failure signal. Do not chase it as a bug; only investigate if it correlates with an actual
+test failure.
+
+### E2E selector drift surfaces only at gate — check assertions when reworking UI copy
+
+E2E runs only at gate time (per the two-terminal requirement above, it isn't part of the fast
+inner dev loop), so when UI copy changes mid-milestone, the corresponding E2E selector can go
+stale for many phases before anyone notices. M10 example: the approver inbox empty-state
+message was reworded from "No requests pending your decision." to "No items found." during
+Phase 7's approver-inbox rework, but `test_approvals_suite.py::test_sys_admin_inbox_renders`
+still asserted the old string — caught only at the Phase 14 gate ritual E2E run, fixed at
+Phase 14-pre. When reworking any user-visible copy mid-milestone, grep `tests/e2e/` for the
+old string before moving on to the next phase, rather than waiting for the gate to catch it.
+
+### Upload-test load-flake — re-run in isolation before treating as a regression
+
+Heavier upload E2E tests (letterhead, template) can time out under full-suite load
+(`net::timeout` on the file-input locator) while passing reliably in isolation. Root cause: a
+single Reflex instance serves all 118 sequential E2E tests, and cumulative load occasionally
+pushes a heavy upload flow past the default 30s locator timeout. Before treating an upload-test
+failure as a regression, re-run just that test file in isolation — if it passes standalone,
+it's the known load-flake (TD-089), not a defect. TD-089 is deferred to M11 test-hygiene
+(bump the timeout to 60s, or add a bounded retry).
+
+### Stale-Reflex artifact — kill zombie processes before a fresh gate run
+
+A manually-started Reflex instance left running from a prior session (or a zombie process on
+:3000/:8000 that didn't exit cleanly) serves a stale `.web` build to the E2E suite — the tests
+run against old frontend code while the backend/DB reflect the latest migration + seed state,
+producing confusing mismatched failures. Before Step 1 of a fresh gate run, kill any process
+bound to :3000 or :8000 (`lsof -i :3000`, `lsof -i :8000`) rather than assuming a clean slate.
+
 Scoped roles (DIRECTOR with scope_type="campus", HOD with scope_type="department") CAN satisfy a `scope="*"` or `scope="own"` permission check. The handler body must separately enforce ownership (for "own") or global applicability (for "*"). This invariant must be preserved when modifying `can()` in future milestones.

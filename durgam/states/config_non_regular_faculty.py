@@ -43,6 +43,13 @@ class NonRegularFacultyConfigState(BaseState):
     form_available_to: str = ""
     form_type: str = "visiting"
 
+    # Phase 9A: contract renewal modal
+    show_renew: bool = False
+    renew_id: str = ""
+    renew_name: str = ""
+    renew_current_to: str = ""
+    form_renew_to: str = ""
+
     confirm_open: bool = False
     confirm_id: str = ""
     confirm_title: str = ""
@@ -122,6 +129,7 @@ class NonRegularFacultyConfigState(BaseState):
                 "approved": "yes" if v.is_admin_approved else "no",
                 "approved_info": approved_info,
                 "non_regular_type": v.non_regular_type,
+                "renewal_count": str(v.renewal_count or 0),
             })
 
     def _load_pending_requests(self, session) -> None:
@@ -221,6 +229,75 @@ class NonRegularFacultyConfigState(BaseState):
         self.editing_id = ""
         self.flash = ""
         self.flash_type = "info"
+
+    # ── Phase 9A: contract renewal ───────────────────────────────────────────
+
+    def open_renew(self, record_id: str) -> None:
+        # Single-arg lookup (M9 / P3a convention): bind only row["id"]; resolve the
+        # display fields from the already-loaded visitors list. Multi-arg menu.item
+        # on_click binding was unreliable and left renew_id empty (9A.1 fix).
+        self.renew_id = record_id
+        self.renew_name = ""
+        self.renew_current_to = ""
+        for v in self.visitors:
+            if v["id"] == record_id:
+                self.renew_name = v["name"]
+                self.renew_current_to = v["available_to"]
+                break
+        self.form_renew_to = ""
+        self.show_renew = True
+        self.flash = ""
+        self.flash_type = "info"
+
+    def set_form_renew_to(self, v: str) -> None:
+        self.form_renew_to = v
+
+    def cancel_renew(self) -> None:
+        self.show_renew = False
+        self.renew_id = ""
+        self.renew_name = ""
+        self.renew_current_to = ""
+        self.form_renew_to = ""
+
+    @require_role(action="write", resource="non_regular_faculty")
+    @audit_action(action="write", resource="non_regular_faculty")
+    async def renew_visitor(self, form_data: dict) -> None:
+        new_to_str = form_data.get("form_renew_to", "").strip()
+        if not new_to_str:
+            self.flash = "New end date is required for renewal."
+            self.flash_type = "error"
+            return
+        try:
+            new_to = date.fromisoformat(new_to_str)
+        except ValueError:
+            self.flash = "Invalid date format. Use YYYY-MM-DD."
+            self.flash_type = "error"
+            return
+
+        try:
+            with open_session() as session:
+                svc = _svc(session)
+                repo = NonRegularFacultyRepository(session)
+                before_snap = audit_snapshot(repo.get_by_id(UUID(self.renew_id)))
+                entity = svc.renew(
+                    UUID(self.renew_id),
+                    new_end_date=new_to,
+                    actor_id=UUID(self.current_user_id),
+                )
+                after_snap = audit_snapshot(entity)
+                session.commit()
+                self._set_audit(
+                    resource_id=str(entity.id), before=before_snap, after=after_snap
+                )
+        except NonRegularFacultyError as e:
+            self.flash = e.message if hasattr(e, "message") else str(e)
+            self.flash_type = "error"
+            return
+        self.show_renew = False
+        self.renew_id = ""
+        await self.load_visitors()
+        self.flash = "Contract renewed."
+        self.flash_type = "success"
 
     @require_role(action="write", resource="non_regular_faculty")
     @audit_action(action="write", resource="non_regular_faculty")

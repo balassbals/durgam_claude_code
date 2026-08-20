@@ -42,6 +42,7 @@ class ApprovalProcessService:
         max_upward_attachments: int = 0,
         max_downward_attachments: int = 0,
         max_attachment_mb: int = 5,
+        allowed_attachment_mime_types_json: list[str] | None = None,
         actor_id: UUID,
     ) -> ApprovalProcess:
         code = code.strip()
@@ -64,6 +65,7 @@ class ApprovalProcessService:
             max_upward_attachments=max_upward_attachments,
             max_downward_attachments=max_downward_attachments,
             max_attachment_mb=max_attachment_mb,
+            allowed_attachment_mime_types_json=allowed_attachment_mime_types_json,
             created_by=actor_id,
             updated_by=actor_id,
             created_at=now,

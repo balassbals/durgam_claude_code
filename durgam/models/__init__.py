@@ -11,7 +11,6 @@ from .centre import CentreOfExcellence
 from .config_anchors import (
     AcademicYear,
     CalendarEntry,
-    ClassCoordinatorAssignment,
     ClassTeacherAssignment,
     ClassTimingsConfig,
     Designation,
@@ -31,8 +30,10 @@ from .config_anchors import (
 )
 from .course import Course
 from .crosscutting import (
+    ApprovalAction,
     ApprovalProcess,
     ApprovalRequest,
+    ApprovalStageOption,
     ApprovalStep,
     AuditLog,
     FileAsset,
@@ -65,6 +66,15 @@ from .vision_mission import (
     UniversityMission,
     UniversityVisionMission,
 )
+from .faculty import (
+    Faculty,
+    FacultyDocument,
+    FacultyEducation,
+    FacultyExperience,
+    FacultyExpertise,
+    FacultyWorkload,
+)
+from .faculty_request import FacultyRequest
 
 __all__ = [
     # Base
@@ -82,6 +92,8 @@ __all__ = [
     "ApprovalProcess",
     "ApprovalRequest",
     "ApprovalStep",
+    "ApprovalStageOption",
+    "ApprovalAction",
     # Config anchors (pre-M3)
     "AcademicYear",
     "Holiday",
@@ -98,7 +110,6 @@ __all__ = [
     "FacultyMentorAssignment",
     "FacultyMentorConfirmation",
     "ClassTeacherAssignment",
-    "ClassCoordinatorAssignment",
     "NonRegularFaculty",
     "NonOwnedCourse",
     "UGTimetable",
@@ -129,6 +140,14 @@ __all__ = [
     "UniversityMission",
     "DepartmentVisionMission",
     "DepartmentMission",
+    # M10 Faculty
+    "Faculty",
+    "FacultyDocument",
+    "FacultyEducation",
+    "FacultyExperience",
+    "FacultyExpertise",
+    "FacultyWorkload",
+    "FacultyRequest",
     # M9 Announcements
     "Announcement",
     "AnnouncementCategory",

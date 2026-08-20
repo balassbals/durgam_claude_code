@@ -122,7 +122,23 @@ def _reactive_table_view(
         for col in columns
     ]
     if actions is not None:
-        header_cells.append(rx.table.column_header_cell("", width="3rem"))
+        header_cells.append(
+            rx.table.column_header_cell(
+                "Actions",
+                font_weight="600",
+                font_size="0.8rem",
+                color="var(--color-muted)",
+                text_transform="uppercase",
+                letter_spacing="0.04em",
+                width="8rem",
+                min_width="8rem",
+                position="sticky",
+                right="0",
+                background="var(--color-background, #f5f0eb)",
+                z_index="2",
+                box_shadow="-2px 0 4px rgba(0,0,0,0.05)",
+            )
+        )
 
     # The row-builder must close over the Python-level columns list and
     # actions callable. rx.foreach calls it with each Var[dict] item.
@@ -132,7 +148,18 @@ def _reactive_table_view(
             for col in columns
         ]
         if actions is not None:
-            cells.append(rx.table.cell(actions(row)))
+            cells.append(
+                rx.table.cell(
+                    actions(row),
+                    width="8rem",
+                    min_width="8rem",
+                    position="sticky",
+                    right="0",
+                    background="white",
+                    z_index="1",
+                    box_shadow="-2px 0 4px rgba(0,0,0,0.05)",
+                )
+            )
         return rx.table.row(*cells)
 
     return rx.table.root(

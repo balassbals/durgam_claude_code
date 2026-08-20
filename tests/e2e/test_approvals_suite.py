@@ -156,7 +156,7 @@ class TestApproverFlow:
 
         # Empty state message
         expect(
-            page.get_by_text("No requests pending your decision.", exact=True)
+            page.get_by_text("No items found.", exact=True)
         ).to_be_visible(timeout=10_000)
 
     # TODO: test_request_detail_page_renders_for_authorized_viewer

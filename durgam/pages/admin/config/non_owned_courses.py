@@ -13,6 +13,7 @@ from durgam.pages.components import (
 )
 from durgam.pages.shared.confirmation_dialog import confirmation_dialog
 from durgam.pages.shared.data_table import TableColumn, data_table
+from durgam.pages.shared.faculty_picker import faculty_picker
 from durgam.states.config_non_owned_course import NonOwnedCourseConfigState
 
 
@@ -36,9 +37,7 @@ def _kebab(row: dict) -> rx.Component:
                 rx.menu.item(
                     "Edit",
                     on_click=NonOwnedCourseConfigState.open_edit(  # type: ignore[call-arg, func-returns-value]
-                        row["id"], row["course_code"], row["course_name"],
-                        row["credits"], row["semester"], row["faculty"],
-                        row["notes"],
+                        row["id"]
                     ),
                 ),
                 rx.menu.item(
@@ -147,16 +146,13 @@ def _inline_form() -> rx.Component:
                         ),
                         align="start", gap="0.25rem", width="100%",
                     ),
-                    rx.vstack(
-                        rx.text("Faculty *", font_size="0.85rem", color="var(--color-muted)"),
-                        rx.input(
-                            name="form_faculty",
-                            value=NonOwnedCourseConfigState.form_faculty,
-                            on_change=NonOwnedCourseConfigState.set_form_faculty,
-                            placeholder="Faculty identifier",
-                            width="100%",
-                        ),
-                        align="start", gap="0.25rem", width="100%",
+                    faculty_picker(
+                        selected_label=NonOwnedCourseConfigState.form_faculty_label,
+                        search_value=NonOwnedCourseConfigState.picker_search,
+                        results=NonOwnedCourseConfigState.picker_results,
+                        on_search=NonOwnedCourseConfigState.on_picker_search,
+                        on_select=NonOwnedCourseConfigState.select_faculty,
+                        on_clear=NonOwnedCourseConfigState.clear_faculty,
                     ),
                     rx.vstack(
                         rx.text("Notes", font_size="0.85rem", color="var(--color-muted)"),

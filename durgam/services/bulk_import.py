@@ -1,10 +1,9 @@
-"""BulkImportService — two-stage CSV import for users, courses, programs (§9.2(d), §16).
+"""BulkImportService — two-stage CSV import for users, courses, programs, faculty (§9.2(d), §16).
 
 Stage 1: validate_*_csv — parse bytes, check schema, validate each row.
 Stage 2: commit_*_import — insert valid rows, return (success_count, errors).
 
 Errors do not commit the row (per §16 risk note). Valid rows commit individually.
-Faculty and student bulk import deferred to M10/M12 (models don't exist yet).
 """
 
 from __future__ import annotations
@@ -12,6 +11,7 @@ from __future__ import annotations
 import csv
 import io
 from dataclasses import dataclass, field
+from datetime import date
 from uuid import UUID
 
 import structlog
@@ -465,6 +465,355 @@ def commit_program_import(
             late_errors.append(InvalidRow(
                 row_number=vrow.row_number,
                 raw={"code": vrow.code, "name": vrow.name},
+                error=str(exc),
+            ))
+
+    return ImportResult(success_count=success, errors=late_errors)
+
+
+# ── Faculty CSV import ───────────────────────────────────────────────────────
+
+_FACULTY_REQUIRED_COLS = {
+    "employee_id", "username", "first_name", "last_name",
+    "designation_code", "dept_code", "campus_code", "joining_date", "gender",
+}
+_FACULTY_VALID_GENDERS = {"M", "F", "O"}
+_FACULTY_ROW_CAP = 1000
+
+
+@dataclass
+class ValidFacultyRow:
+    row_number: int
+    employee_id: str
+    username: str
+    user_id: UUID | None
+    first_name: str
+    last_name: str
+    middle_name: str
+    title: str
+    designation_id: UUID
+    designation_code: str
+    department_id: UUID
+    dept_code: str
+    campus_id: UUID
+    campus_code: str
+    joining_date: date
+    gender: str
+    phone: str
+    whatsapp: str
+    alt_phone: str
+    alt_email: str
+    emergency_contact_name: str
+    emergency_contact_relation: str
+    emergency_contact_phone: str
+    is_phd: bool
+    phd_thesis_title: str
+    phd_registration_number: str
+    phd_awarding_institution: str
+    phd_year: int | None
+    orcid: str
+    linkedin: str
+    google_scholar: str
+    researchgate: str
+    will_create_user: bool = False
+    email: str = ""
+
+
+def validate_faculty_csv(
+    file_bytes: bytes,
+    *,
+    user_repo: "UserRepository",
+    faculty_repo: "FacultyRepository",
+    campus_repo: "CampusRepository",
+    dept_repo: "DepartmentRepository",
+    designation_repo: "DesignationRepository",
+    max_rows: int = _FACULTY_ROW_CAP,
+) -> tuple[list[ValidFacultyRow], list[InvalidRow]]:
+    """Parse a CSV and validate each row against the faculty import schema.
+
+    Mandatory cols: employee_id, username, first_name, last_name,
+    designation_code, dept_code, campus_code, joining_date, gender.
+    Optional cols: all other faculty profile fields per Q11.
+
+    When a username does not exist in the system the row is still accepted if
+    the CSV supplies a valid email address — a new User row is auto-created at
+    commit time with employee_type='regular_teaching', must_change_password=True,
+    and a random strong temporary password (Q-P12.4 correction, Phase 12.1).
+    """
+    try:
+        text = file_bytes.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text = file_bytes.decode("latin-1")
+
+    reader = csv.DictReader(io.StringIO(text))
+    if reader.fieldnames is None:
+        return [], [InvalidRow(row_number=0, raw={}, error="File appears to be empty.")]
+
+    headers = {h.strip().lower() for h in reader.fieldnames if h}
+    missing = _FACULTY_REQUIRED_COLS - headers
+    if missing:
+        return [], [
+            InvalidRow(row_number=0, raw={},
+                       error=f"Missing required columns: {', '.join(sorted(missing))}.")
+        ]
+
+    # Build lookup caches keyed by uppercased code to match CSV normalisation.
+    campus_cache: dict[str, UUID] = {c.code.upper(): c.id for c in campus_repo.list_active()}
+    dept_cache: dict[str, UUID] = {d.code.upper(): d.id for d in dept_repo.list_active()}
+    desig_cache: dict[str, UUID] = {d.code.upper(): d.id for d in designation_repo.list_all_active()}
+
+    valid: list[ValidFacultyRow] = []
+    invalid: list[InvalidRow] = []
+    seen_usernames: set[str] = set()
+    seen_employee_ids: set[str] = set()
+
+    for i, raw_row in enumerate(reader, start=2):
+        if i - 1 > max_rows:
+            invalid.append(InvalidRow(row_number=i, raw={},
+                                      error=f"Row cap exceeded (max {max_rows})."))
+            break
+        row = {k.strip().lower(): (v or "").strip() for k, v in raw_row.items() if k}
+        errors: list[str] = []
+
+        employee_id = row.get("employee_id", "")
+        username = row.get("username", "")
+        first_name = row.get("first_name", "")
+        last_name = row.get("last_name", "")
+        designation_code = row.get("designation_code", "").upper()
+        dept_code = row.get("dept_code", "").upper()
+        campus_code = row.get("campus_code", "").upper()
+        joining_date_str = row.get("joining_date", "")
+        gender = row.get("gender", "").upper()
+
+        if not employee_id:
+            errors.append("employee_id is required")
+        if not username:
+            errors.append("username is required")
+        if not first_name:
+            errors.append("first_name is required")
+        if not last_name:
+            errors.append("last_name is required")
+        if not designation_code:
+            errors.append("designation_code is required")
+        if not dept_code:
+            errors.append("dept_code is required")
+        if not campus_code:
+            errors.append("campus_code is required")
+        if not joining_date_str:
+            errors.append("joining_date is required")
+        if not gender:
+            errors.append("gender is required")
+        elif gender not in _FACULTY_VALID_GENDERS:
+            errors.append(f"gender must be M, F, or O (got '{gender}')")
+
+        joining_date_parsed: date | None = None
+        if joining_date_str:
+            try:
+                joining_date_parsed = date.fromisoformat(joining_date_str)
+            except ValueError:
+                errors.append(f"joining_date must be YYYY-MM-DD (got '{joining_date_str}')")
+
+        campus_id: UUID | None = None
+        dept_id: UUID | None = None
+        desig_id: UUID | None = None
+
+        if campus_code and campus_code not in campus_cache:
+            errors.append(f"campus_code '{campus_code}' not found")
+        elif campus_code:
+            campus_id = campus_cache[campus_code]
+
+        if dept_code and dept_code not in dept_cache:
+            errors.append(f"dept_code '{dept_code}' not found")
+        elif dept_code:
+            dept_id = dept_cache[dept_code]
+
+        if designation_code and designation_code not in desig_cache:
+            errors.append(f"designation_code '{designation_code}' not found")
+        elif designation_code:
+            desig_id = desig_cache[designation_code]
+
+        if employee_id and employee_id in seen_employee_ids:
+            errors.append(f"duplicate employee_id '{employee_id}' within this file")
+        if username and username in seen_usernames:
+            errors.append(f"duplicate username '{username}' within this file")
+
+        user_id: UUID | None = None
+        will_create_user = False
+        email_for_row = ""
+
+        if not errors:
+            existing_emp = faculty_repo.get_by_employee_id(employee_id)
+            if existing_emp is not None:
+                errors.append(f"employee_id '{employee_id}' already in use")
+
+            user = user_repo.get_by_username(username)
+            if user is None:
+                # Auto-create path — email column required.
+                email_csv = row.get("email", "").strip().lower()
+                if not email_csv or "@" not in email_csv:
+                    errors.append(
+                        f"user '{username}' not found — provide a valid 'email' column"
+                        " to auto-create the account"
+                    )
+                elif user_repo.get_by_email(email_csv) is not None:
+                    errors.append(f"email '{email_csv}' is already registered in the system")
+                else:
+                    will_create_user = True
+                    email_for_row = email_csv
+            elif user.employee_type != "regular_teaching":
+                errors.append(
+                    f"user '{username}' employee_type is '{user.employee_type}'"
+                    " — must be 'regular_teaching'"
+                )
+            else:
+                existing_fac = faculty_repo.get_by_user_id(user.id)
+                if existing_fac is not None:
+                    errors.append(f"user '{username}' already has a faculty record")
+                else:
+                    user_id = user.id
+
+        if errors:
+            invalid.append(InvalidRow(row_number=i, raw=dict(row), error="; ".join(errors)))
+        else:
+            seen_employee_ids.add(employee_id)
+            seen_usernames.add(username)
+            valid.append(ValidFacultyRow(
+                row_number=i,
+                employee_id=employee_id,
+                username=username,
+                user_id=user_id,
+                first_name=first_name,
+                last_name=last_name,
+                middle_name=row.get("middle_name", ""),
+                title=row.get("title", ""),
+                designation_id=desig_id,  # type: ignore[arg-type]
+                designation_code=designation_code,
+                department_id=dept_id,  # type: ignore[arg-type]
+                dept_code=dept_code,
+                campus_id=campus_id,  # type: ignore[arg-type]
+                campus_code=campus_code,
+                joining_date=joining_date_parsed,  # type: ignore[arg-type]
+                gender=gender,
+                phone=row.get("phone", ""),
+                whatsapp=row.get("whatsapp", ""),
+                alt_phone=row.get("alt_phone", ""),
+                alt_email=row.get("alt_email", ""),
+                emergency_contact_name=row.get("emergency_contact_name", ""),
+                emergency_contact_relation=row.get("emergency_contact_relation", ""),
+                emergency_contact_phone=row.get("emergency_contact_phone", ""),
+                is_phd=row.get("is_phd", "").lower() in ("true", "1", "yes"),
+                phd_thesis_title=row.get("phd_thesis_title", ""),
+                phd_registration_number=row.get("phd_registration_number", ""),
+                phd_awarding_institution=row.get("phd_awarding_institution", ""),
+                phd_year=int(row["phd_year"]) if row.get("phd_year", "").isdigit() else None,
+                orcid=row.get("orcid", ""),
+                linkedin=row.get("linkedin", ""),
+                google_scholar=row.get("google_scholar", ""),
+                researchgate=row.get("researchgate", ""),
+                will_create_user=will_create_user,
+                email=email_for_row,
+            ))
+
+    return valid, invalid
+
+
+def commit_faculty_import(
+    valid_rows: list[ValidFacultyRow],
+    actor_id: UUID,
+    *,
+    faculty_repo: "FacultyRepository",
+    user_repo: "UserRepository",
+) -> ImportResult:
+    """Commit valid rows from a prior validate_faculty_csv call.
+
+    For rows with will_create_user=True a new User is created first with
+    employee_type='regular_teaching' and must_change_password=True.
+    Creates Faculty rows for each valid entry and updates User.gender.
+    All rows share one outer session/transaction managed by the caller.
+    """
+    from datetime import UTC, datetime as _dt
+
+    from durgam.models.faculty import Faculty as _Faculty
+    from durgam.models.identity import User as _User
+
+    success = 0
+    late_errors: list[InvalidRow] = []
+
+    for vrow in valid_rows:
+        try:
+            now = _dt.now(UTC)
+            resolved_user_id: UUID
+
+            if vrow.will_create_user:
+                temp_pw = generate_temp_password()
+                pw_hash = hash_password(temp_pw)
+                full_name = f"{vrow.first_name} {vrow.last_name}".strip()
+                new_user = user_repo.create(
+                    vrow.username,
+                    vrow.email,
+                    pw_hash,
+                    actor_id,
+                    must_change_password=True,
+                    full_name=full_name or None,
+                )
+                # user_repo.create() defaults employee_type to 'regular_non_teaching';
+                # override to 'regular_teaching' before flush so Faculty FK resolves.
+                new_user.employee_type = "regular_teaching"
+                user_repo.save(new_user)
+                resolved_user_id = new_user.id
+                log.info("bulk_import_user_created",
+                         username=vrow.username, actor=str(actor_id))
+            else:
+                resolved_user_id = vrow.user_id  # type: ignore[assignment]
+
+            faculty = _Faculty(
+                user_id=resolved_user_id,
+                employee_id=vrow.employee_id,
+                title=vrow.title,
+                first_name=vrow.first_name,
+                middle_name=vrow.middle_name or None,
+                last_name=vrow.last_name,
+                designation_id=vrow.designation_id,
+                department_id=vrow.department_id,
+                campus_id=vrow.campus_id,
+                joining_date=vrow.joining_date,
+                phone=vrow.phone,
+                whatsapp=vrow.whatsapp,
+                alt_phone=vrow.alt_phone,
+                alt_email=vrow.alt_email,
+                emergency_contact_name=vrow.emergency_contact_name,
+                emergency_contact_relation=vrow.emergency_contact_relation,
+                emergency_contact_phone=vrow.emergency_contact_phone,
+                is_phd=vrow.is_phd,
+                phd_thesis_title=vrow.phd_thesis_title or None,
+                phd_registration_number=vrow.phd_registration_number or None,
+                phd_awarding_institution=vrow.phd_awarding_institution or None,
+                phd_year=vrow.phd_year,
+                orcid=vrow.orcid or None,
+                linkedin=vrow.linkedin or None,
+                google_scholar=vrow.google_scholar or None,
+                researchgate=vrow.researchgate or None,
+                created_by=actor_id,
+                updated_by=actor_id,
+                created_at=now,
+                updated_at=now,
+            )
+            faculty_repo.create(faculty)
+
+            if vrow.gender:
+                gender_user = user_repo.get_by_id(resolved_user_id)
+                if gender_user is not None:
+                    gender_user.gender = vrow.gender
+                    user_repo.save(gender_user)
+
+            success += 1
+            log.info("bulk_import_faculty_created",
+                     employee_id=vrow.employee_id, actor=str(actor_id))
+        except Exception as exc:
+            log.warning("bulk_import_faculty_failed", row=vrow.row_number, error=str(exc))
+            late_errors.append(InvalidRow(
+                row_number=vrow.row_number,
+                raw={"employee_id": vrow.employee_id, "username": vrow.username},
                 error=str(exc),
             ))
 

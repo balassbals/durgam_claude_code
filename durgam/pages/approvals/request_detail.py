@@ -73,7 +73,8 @@ def _step_row(step: rx.Var) -> rx.Component:
             rx.text(
                 step["comment"],
                 font_size="0.85rem",
-                color="var(--color-body)",
+                color=rx.cond(step["is_redacted"], "var(--color-muted)", "var(--color-body)"),
+                font_style=rx.cond(step["is_redacted"], "italic", "normal"),
                 max_width="300px",
                 overflow="hidden",
                 text_overflow="ellipsis",
@@ -395,6 +396,104 @@ def _nrf_details_section() -> rx.Component:
     )
 
 
+def _noc_details_section() -> rx.Component:
+    return rx.cond(
+        RequestDetailState.noc_payload,
+        rx.vstack(
+            rx.text(
+                "NOC Request Details",
+                font_weight="700",
+                font_size="1rem",
+                color="var(--color-primary)",
+                font_family="var(--font-sans)",
+            ),
+            rx.box(
+                _kv_row("Purpose", RequestDetailState.noc_payload["purpose"]),
+                _kv_row("To Whom", RequestDetailState.noc_payload["to_whom"]),
+                rx.cond(
+                    RequestDetailState.noc_payload["date_required_by"].to(str) != "",
+                    _kv_row("Date Required By", RequestDetailState.noc_payload["date_required_by"]),
+                    rx.fragment(),
+                ),
+                rx.cond(
+                    RequestDetailState.noc_payload["additional_notes"].to(str) != "",
+                    _kv_row("Additional Notes", RequestDetailState.noc_payload["additional_notes"]),
+                    rx.fragment(),
+                ),
+                width="100%",
+            ),
+            align="start",
+            gap="0.5rem",
+            width="100%",
+            padding="1.25rem",
+            background="white",
+            border="1px solid var(--color-rule)",
+            border_radius="6px",
+        ),
+        rx.fragment(),
+    )
+
+
+def _confidentiality_controls() -> rx.Component:
+    return rx.vstack(
+        rx.text(
+            "Visibility",
+            font_weight="600",
+            font_size="0.85rem",
+            font_family="var(--font-sans)",
+            margin_top="0.75rem",
+        ),
+        rx.vstack(
+            rx.hstack(
+                rx.checkbox(
+                    checked=RequestDetailState.decision_hide_from_requestor,
+                    on_change=RequestDetailState.set_decision_hide_from_requestor,
+                ),
+                rx.text("Hide this action from the requestor", font_size="0.85rem"),
+                align="center",
+                gap="0.5rem",
+            ),
+            rx.text(
+                "When checked, the requestor will not see this action in their history.",
+                font_size="0.75rem",
+                color="var(--color-muted)",
+            ),
+            align="start",
+            gap="0.25rem",
+        ),
+        rx.cond(
+            RequestDetailState.prior_action_actors.length() > 0,  # type: ignore[attr-defined]
+            rx.vstack(
+                rx.text(
+                    "Share with prior approvers",
+                    font_size="0.85rem",
+                    font_weight="500",
+                    color="var(--color-muted)",
+                    margin_top="0.5rem",
+                ),
+                rx.foreach(
+                    RequestDetailState.prior_action_actors,
+                    lambda actor: rx.hstack(
+                        rx.checkbox(
+                            checked=RequestDetailState.decision_share_with_user_ids.contains(actor["id"]),  # type: ignore[attr-defined]
+                            on_change=RequestDetailState.toggle_decision_share_with(actor["id"]),
+                        ),
+                        rx.text(actor["display"], font_size="0.85rem"),
+                        align="center",
+                        gap="0.5rem",
+                    ),
+                ),
+                align="start",
+                gap="0.25rem",
+            ),
+            rx.fragment(),
+        ),
+        align="start",
+        gap="0.25rem",
+        width="100%",
+    )
+
+
 def _attachments_section(title: str, items: rx.Var, *, item_renderer=None) -> rx.Component:
     renderer = item_renderer or _attachment_item
     return rx.cond(
@@ -605,6 +704,7 @@ def _approve_dialog() -> rx.Component:
             rows="3",
         ),
         _downward_upload_section(),
+        _confidentiality_controls(),
         align="start",
         gap="0.5rem",
         width="100%",
@@ -674,6 +774,7 @@ def _reject_dialog() -> rx.Component:
             rows="3",
         ),
         _downward_upload_section(),
+        _confidentiality_controls(),
         align="start",
         gap="0.5rem",
         width="100%",
@@ -850,7 +951,11 @@ def request_detail_page() -> rx.Component:
                         rx.cond(
                             RequestDetailState.request["process_code"].to(str) == "NRF_APPROVAL",
                             _nrf_details_section(),
-                            rx.fragment(),
+                            rx.cond(
+                                RequestDetailState.linked_faculty_request_id != "",
+                                _noc_details_section(),
+                                rx.fragment(),
+                            ),
                         ),
                         rx.cond(
                             RequestDetailState.is_leave_request,

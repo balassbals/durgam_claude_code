@@ -16,6 +16,7 @@ from sqlmodel import Session, select
 from durgam.audit.log import write_audit_row
 from durgam.auth.permissions import can
 from durgam.models.crosscutting import (
+    ApprovalAction,
     ApprovalProcess,
     ApprovalRequest,
     ApprovalStep,
@@ -23,6 +24,7 @@ from durgam.models.crosscutting import (
     Notification,
 )
 from durgam.models.identity import Role, User, UserRole
+from durgam.repositories.approval_action import ApprovalActionRepository
 from durgam.repositories.approval_process import ApprovalProcessRepository
 from durgam.repositories.approval_request import ApprovalRequestRepository
 from durgam.repositories.approval_step import ApprovalStepRepository
@@ -47,6 +49,7 @@ class ApprovalRequestService:
         self._req_repo = ApprovalRequestRepository(session)
         self._step_repo = ApprovalStepRepository(session)
         self._proc_repo = ApprovalProcessRepository(session)
+        self._action_repo = ApprovalActionRepository(session)
 
     def submit(
         self,
@@ -204,6 +207,8 @@ class ApprovalRequestService:
         approver_user_id: UUID,
         comment: str | None = None,
         downward_attachment_file_ids: list[UUID] | None = None,
+        is_visible_to_requestor: bool = True,
+        visible_to_lower_user_ids: list[UUID] | None = None,
     ) -> ApprovalRequest:
         request = self._req_repo.get_by_id(request_id)
         if request is None:
@@ -248,6 +253,17 @@ class ApprovalRequestService:
         )
         self._step_repo.create(step)
 
+        self._record_action(
+            request=request,
+            stage_index=request.current_stage,
+            actor_user_id=approver_user_id,
+            action_type="approve",
+            comment=comment,
+            downward_attachment_file_ids=downward_attachment_file_ids or [],
+            is_visible_to_requestor=is_visible_to_requestor,
+            visible_to_lower_user_ids=visible_to_lower_user_ids,
+        )
+
         self._link_attachments(
             downward_attachment_file_ids or [],
             request.id,
@@ -260,6 +276,7 @@ class ApprovalRequestService:
         if is_terminal:
             self._req_repo.update_state(request, "approved", decided_at=now)
             self._run_post_approval(request, process, approver_user_id)
+            self._sync_faculty_request_status(request.id, "approved", approver_user_id)
 
             requestor = self._session.get(User, request.requestor_user_id)
             recipients = [requestor] if requestor else []
@@ -316,6 +333,7 @@ class ApprovalRequestService:
                     break
 
             if became_terminal:
+                self._sync_faculty_request_status(request.id, "approved", approver_user_id)
                 requestor = self._session.get(User, request.requestor_user_id)
                 recipients = [requestor] if requestor else []
                 cc_users = self._get_cc_users(process)
@@ -382,6 +400,9 @@ class ApprovalRequestService:
         request_id: UUID,
         approver_user_id: UUID,
         comment: str,
+        downward_attachment_file_ids: list[UUID] | None = None,
+        is_visible_to_requestor: bool = True,
+        visible_to_lower_user_ids: list[UUID] | None = None,
     ) -> ApprovalRequest:
         if not comment or not comment.strip():
             raise ApprovalRequestError("A comment is required when rejecting.")
@@ -409,6 +430,8 @@ class ApprovalRequestService:
                 "You are not an approver for the current stage."
             )
 
+        self._validate_downward_attachments(process, downward_attachment_file_ids)
+
         # E6: extract role_code via helper (handles M8 dict entries).
         channel = self._get_channel_for_stage(request, process)
         entry = channel[request.current_stage - 1]
@@ -425,6 +448,23 @@ class ApprovalRequestService:
             decided_at=now,
         )
         self._step_repo.create(step)
+
+        self._record_action(
+            request=request,
+            stage_index=request.current_stage,
+            actor_user_id=approver_user_id,
+            action_type="reject",
+            comment=comment.strip(),
+            downward_attachment_file_ids=downward_attachment_file_ids or [],
+            is_visible_to_requestor=is_visible_to_requestor,
+            visible_to_lower_user_ids=visible_to_lower_user_ids,
+        )
+
+        self._link_attachments(
+            downward_attachment_file_ids or [],
+            request.id,
+            "approval_downward",
+        )
 
         old_state = request.state
         self._req_repo.update_state(request, "rejected", decided_at=now)
@@ -462,6 +502,7 @@ class ApprovalRequestService:
         )
 
         self._run_post_rejection(request, process, approver_user_id)  # E6
+        self._sync_faculty_request_status(request.id, "rejected", approver_user_id)
 
         log.info(
             "approval_request_rejected",
@@ -668,6 +709,26 @@ class ApprovalRequestService:
         if file_ids:
             self._session.flush()
 
+    def is_user_eligible_for_current_stage(
+        self,
+        approval_request_id: UUID,
+        user_id: UUID,
+    ) -> bool:
+        """Return True if user_id is in the current-stage approver pool.
+
+        Used by FacultyRequestService.list_inbox_for_user to build the approver inbox
+        via the full OR-set-aware resolver chain (not the legacy-only path).
+        Returns False for terminal or non-existent requests.
+        """
+        request = self._req_repo.get_by_id(approval_request_id)
+        if request is None or request.state not in ("submitted", "in_review"):
+            return False
+        process = self._proc_repo.get_by_id(request.process_id)
+        if process is None:
+            return False
+        approvers = self._resolve_approvers(request, process)
+        return any(u.id == user_id for u in approvers)
+
     def _get_channel_for_stage(
         self, request: ApprovalRequest, process: ApprovalProcess
     ) -> list:
@@ -685,11 +746,68 @@ class ApprovalRequestService:
             return channel
         return process.channel_role_codes or []
 
+    def _resolve_or_set_approvers(
+        self, request: ApprovalRequest
+    ) -> list[User] | None:
+        """Return OR-set approver pool for the current stage, or None to fall through.
+
+        Queries ApprovalStageOption rows for the stage. An empty list (including the
+        result of list()-ing a MagicMock in unit tests, which yields []) causes an
+        immediate None return so existing tests are unaffected.
+
+        TD-073: queries options twice (here + inside resolve_stage_authority).
+        """
+        from durgam.repositories.approval_stage_option import ApprovalStageOptionRepository
+        from durgam.services.approval_engine import MisconfiguredStageError, resolve_stage_authority
+        from durgam.services.approval_resolvers import ResolverContext
+
+        repo = ApprovalStageOptionRepository(self._session)
+        options = repo.list_by_process_stage(request.process_id, request.current_stage)
+        if not options:
+            return None  # No OR-set options for this stage → use legacy path
+
+        picked_str = (request.picked_option_ids_json or {}).get(str(request.current_stage))
+        picked_id = UUID(picked_str) if picked_str else None
+
+        ctx = ResolverContext(
+            requestor_user_id=request.requestor_user_id,
+            process_id=request.process_id,
+            stage_index=request.current_stage,
+            payload=request.payload_json or {},
+        )
+
+        try:
+            status, users = resolve_stage_authority(
+                session=self._session,
+                process_id=request.process_id,
+                stage_index=request.current_stage,
+                ctx=ctx,
+                requestor_picked_option_id=picked_id,
+            )
+        except MisconfiguredStageError:
+            log.warning(
+                "or_set_stage_misconfigured",
+                process_id=str(request.process_id),
+                stage=request.current_stage,
+            )
+            return None
+
+        if status in ("approver_pool", "requestor_pick"):
+            return users
+        if status == "pending_pick":
+            return []  # No pick made → empty pool → eligibility check fails
+        return None  # "legacy" (shouldn't occur after non-empty options check)
+
     def _resolve_approvers(
         self,
         request: ApprovalRequest,
         process: ApprovalProcess,
     ) -> list[User]:
+        # M10 Phase 5C1: OR-set override — stages with ApprovalStageOption rows
+        or_set_users = self._resolve_or_set_approvers(request)
+        if or_set_users is not None:
+            return or_set_users
+
         channel = self._get_channel_for_stage(request, process)
         stage_idx = request.current_stage - 1
         if stage_idx < 0 or stage_idx >= len(channel):
@@ -707,7 +825,21 @@ class ApprovalRequestService:
                 log.warning("approver_resolution_failed", error=str(e))
                 return []
 
-        # M8 path: extracted role_code + scope-chain routing.
+        # M8 path. Q-P10.3: a stage may name a resolver instead of a role_code —
+        # dispatch to the resolver registry (e.g. dept_head_at_requestor_campus).
+        resolver_name = entry.get("resolver_name") if isinstance(entry, dict) else None
+        if resolver_name:
+            from durgam.services.approval_resolvers import ResolverContext, resolve
+
+            ctx = ResolverContext(
+                requestor_user_id=request.requestor_user_id,
+                process_id=request.process_id,
+                stage_index=stage_idx,
+                payload=request.payload_json or {},
+            )
+            return resolve(resolver_name, ctx, self._session)
+
+        # M8 default: extracted role_code + scope-chain routing.
         return self._lookup_approvers_for_role(role_code, request)
 
     def _lookup_approvers_for_role(
@@ -1104,3 +1236,182 @@ class ApprovalRequestService:
                 )
                 self._session.add(notif)
         self._session.flush()
+
+    # ── Phase 7F — FacultyRequest status sync ────────────────────────────────────
+
+    def _sync_faculty_request_status(
+        self,
+        approval_request_id: UUID,
+        new_status: str,
+        actor_user_id: UUID,
+    ) -> None:
+        """Sync FacultyRequest.status when the linked ApprovalRequest reaches a terminal state.
+
+        Called after terminal approve or reject. Wraps in try/except so a missing or
+        unexpected FacultyRequest row never fails the approval transaction.
+        """
+        try:
+            from durgam.models.faculty_request import FacultyRequest  # noqa: PLC0415
+            from durgam.repositories.faculty_request import FacultyRequestRepository  # noqa: PLC0415
+            fr_repo = FacultyRequestRepository(self._session)
+            fr = fr_repo.get_by_approval_request_id(approval_request_id)
+            if fr is None:
+                return
+            if fr.status in ("approved", "rejected", "withdrawn", "cancelled"):
+                return
+            fr_repo.update(fr.id, {"status": new_status}, actor_user_id)
+            log.info(
+                "faculty_request.status_synced",
+                faculty_request_id=str(fr.id),
+                approval_request_id=str(approval_request_id),
+                new_status=new_status,
+            )
+        except Exception as e:
+            log.warning(
+                "faculty_request.status_sync_failed",
+                approval_request_id=str(approval_request_id),
+                error=str(e),
+            )
+
+    # ── Phase 7A — ApprovalAction visibility-controlled records ─────────────────
+
+    def _record_action(
+        self,
+        *,
+        request: ApprovalRequest,
+        stage_index: int,
+        actor_user_id: UUID,
+        action_type: str,
+        comment: str | None,
+        downward_attachment_file_ids: list[UUID],
+        is_visible_to_requestor: bool,
+        visible_to_lower_user_ids: list[UUID] | None,
+    ) -> ApprovalAction:
+        """Write one ApprovalAction row for an approve or reject decision."""
+        now = datetime.now(UTC)
+        file_ids_json = [str(fid) for fid in downward_attachment_file_ids] or None
+        lower_ids_json = (
+            [str(uid) for uid in visible_to_lower_user_ids]
+            if visible_to_lower_user_ids
+            else None
+        )
+        action = ApprovalAction(
+            approval_request_id=request.id,
+            stage_index=stage_index,
+            actor_user_id=actor_user_id,
+            action_type=action_type,
+            comment=comment,
+            downward_attachment_file_ids_json=file_ids_json,
+            is_visible_to_requestor=is_visible_to_requestor,
+            visible_to_lower_user_ids_json=lower_ids_json,
+            created_by=actor_user_id,
+            updated_by=actor_user_id,
+            created_at=now,
+            updated_at=now,
+        )
+        return self._action_repo.create(action)
+
+    def list_actions_for_requestor(self, approval_request_id: UUID) -> list[ApprovalAction]:
+        """Return actions visible to the requestor (is_visible_to_requestor=True)."""
+        all_actions = self._action_repo.list_by_request_id(approval_request_id)
+        return [a for a in all_actions if a.is_visible_to_requestor]
+
+    def list_actions_for_requestor_redacted(
+        self, approval_request_id: UUID
+    ) -> list[ApprovalAction]:
+        """Return ALL actions for the requestor's view (Phase 7G revised design).
+
+        Replaces Q-P7A.3 filter-out behavior: hidden actions are NOT excluded.
+        Caller must check is_visible_to_requestor and redact comment /
+        downward_attachment_file_ids before displaying to the requestor.
+        """
+        return self._action_repo.list_by_request_id(approval_request_id)
+
+    def list_actions_for_approver(
+        self,
+        approval_request_id: UUID,
+        approver_user_id: UUID,
+        approver_stage: int,
+    ) -> list[ApprovalAction]:
+        """Return actions visible to an approver.
+
+        Visibility matrix (authoritative post-Phase-7G.3):
+        - Own actions (actor == viewer): always visible.
+        - Lower stages (stage_index < viewer_effective_stage): always visible.
+          Higher-chain approvers see what lower approvers did.
+        - Peer stage (stage_index == viewer_effective_stage): visible by default.
+          Peers at the same channel stage see each other's actions.
+        - Higher stages (stage_index > viewer_effective_stage): visible ONLY if
+          viewer's id appears in action.visible_to_lower_user_ids_json.
+
+        approver_stage is a FALLBACK used when the viewer has not yet acted
+        (i.e., they are the pending approver at req.current_stage). If the viewer
+        HAS acted, their own action's stage_index overrides approver_stage.
+        This prevents req.current_stage (which advances to the next actor after
+        each approval) from leaking higher-stage actions to lower-stage viewers.
+        """
+        all_actions = self._action_repo.list_by_request_id(approval_request_id)
+        # Phase 7G.3 fix: use viewer's acted stage to prevent visibility leakage.
+        # req.current_stage advances after each approval; a lower-stage approver
+        # viewing after a higher-stage acts would get an inflated effective_stage,
+        # incorrectly revealing the higher approver's actions.
+        viewer_own = next(
+            (a for a in all_actions if a.actor_user_id == approver_user_id),
+            None,
+        )
+        effective_stage = viewer_own.stage_index if viewer_own is not None else approver_stage
+        result: list[ApprovalAction] = []
+        for action in all_actions:
+            if action.actor_user_id == approver_user_id:
+                result.append(action)
+                continue
+            if action.stage_index <= effective_stage:
+                result.append(action)
+                continue
+            # stage_index > effective_stage: check explicit grant
+            if action.visible_to_lower_user_ids_json and str(approver_user_id) in action.visible_to_lower_user_ids_json:
+                result.append(action)
+        return result
+
+    def list_actions_for_approver_redacted(
+        self,
+        approval_request_id: UUID,
+        approver_user_id: UUID,
+        approver_stage: int,
+    ) -> list[tuple[ApprovalAction, bool]]:
+        """Return ALL actions with a per-action redaction flag for the approver's view.
+
+        Mirrors Phase 7G's list_actions_for_requestor_redacted pattern but for the
+        approver: instead of filtering out higher-stage unshared actions, every action
+        is returned with an is_redacted flag. Redacted rows show
+        "Comment not shared with you." — same UX as the requestor view.
+
+        Visibility / redaction matrix (same stages as list_actions_for_approver):
+        - Own actions (actor == viewer):       is_redacted=False (always full)
+        - Lower or peer (stage_index <= effective_stage): is_redacted=False
+        - Higher stage, explicitly shared:     is_redacted=False
+        - Higher stage, NOT shared:            is_redacted=True  (row shown, comment hidden)
+
+        approver_stage is the fallback for the "viewer hasn't acted" case.
+        """
+        all_actions = self._action_repo.list_by_request_id(approval_request_id)
+        viewer_own = next(
+            (a for a in all_actions if a.actor_user_id == approver_user_id),
+            None,
+        )
+        effective_stage = viewer_own.stage_index if viewer_own is not None else approver_stage
+        result: list[tuple[ApprovalAction, bool]] = []
+        for action in all_actions:
+            if action.actor_user_id == approver_user_id:
+                result.append((action, False))
+                continue
+            if action.stage_index <= effective_stage:
+                result.append((action, False))
+                continue
+            # higher stage — redacted unless explicitly shared
+            shared = (
+                action.visible_to_lower_user_ids_json is not None
+                and str(approver_user_id) in action.visible_to_lower_user_ids_json
+            )
+            result.append((action, not shared))
+        return result

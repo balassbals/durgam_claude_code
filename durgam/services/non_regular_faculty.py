@@ -18,6 +18,10 @@ class NonRegularFacultyError(OrgServiceError):
     pass
 
 
+class RenewalDateInvalidError(NonRegularFacultyError):
+    """Raised when a renewal end date is not after the current contract end date."""
+
+
 class NonRegularFacultyService:
     def __init__(self, repo: NonRegularFacultyRepository) -> None:
         self._repo = repo
@@ -37,6 +41,8 @@ class NonRegularFacultyService:
         available_to: date,
         actor_id: UUID,
         non_regular_type: str = "visiting",
+        renewal_count: int = 0,
+        latest_contract_file_id: UUID | None = None,
     ) -> NonRegularFaculty:
         name = name.strip()
         designation = designation.strip()
@@ -59,6 +65,8 @@ class NonRegularFacultyService:
             raise NonRegularFacultyError(
                 f"Invalid type '{non_regular_type}'. Must be one of: {', '.join(sorted(valid_types))}."
             )
+        if renewal_count < 0:
+            raise NonRegularFacultyError("Renewal count cannot be negative.")
 
         now = datetime.now(UTC)
         record = NonRegularFaculty(
@@ -71,6 +79,8 @@ class NonRegularFacultyService:
             available_to=available_to,
             is_admin_approved=False,
             non_regular_type=non_regular_type,
+            renewal_count=renewal_count,
+            latest_contract_file_id=latest_contract_file_id,
             created_by=actor_id,
             updated_by=actor_id,
             created_at=now,
@@ -78,6 +88,40 @@ class NonRegularFacultyService:
         )
         record = self._repo.save(record)
         log.info("non_regular_faculty_created", id=str(record.id), actor=str(actor_id))
+        return record
+
+    def renew(
+        self,
+        nrf_id: UUID,
+        *,
+        new_end_date: date,
+        actor_id: UUID,
+        latest_contract_file_id: UUID | None = None,
+    ) -> NonRegularFaculty:
+        """Renew a contract term: extend available_to + increment renewal_count.
+
+        new_end_date must be after the current available_to. Optionally attaches
+        the new contract file. Raises RenewalDateInvalidError on an invalid date.
+        """
+        record = self._repo.get_by_id(nrf_id)
+        if record is None:
+            raise NonRegularFacultyError("Non-regular faculty record not found.")
+        if new_end_date <= record.available_to:
+            raise RenewalDateInvalidError(
+                "Renewal end date must be after the current end date."
+            )
+        record.available_to = new_end_date
+        record.renewal_count = (record.renewal_count or 0) + 1
+        if latest_contract_file_id is not None:
+            record.latest_contract_file_id = latest_contract_file_id
+        record.updated_by = actor_id
+        record = self._repo.save(record)
+        log.info(
+            "non_regular_faculty_renewed",
+            id=str(nrf_id),
+            renewal_count=record.renewal_count,
+            actor=str(actor_id),
+        )
         return record
 
     def update(

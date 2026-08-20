@@ -6,11 +6,14 @@ from durgam.pages.admin import index as _admin_nav_register  # noqa: F401 — re
 from durgam.pages.admin.config import __init__ as _config_nav_register  # noqa: F401 — registers config nav entries
 from durgam.pages.audit import __init__ as _audit_nav_register  # noqa: F401 — registers audit nav entry
 from durgam.pages.admin.import_users import admin_import_users
+from durgam.pages.admin.faculty_import import admin_faculty_import_page
 from durgam.pages.admin.index import admin_index
 from durgam.pages.admin.permissions import AdminPermissionsState, admin_permissions
 from durgam.pages.admin.roles import admin_role_create, admin_role_detail, admin_roles
 from durgam.pages.admin.user_detail import admin_user_create
+from durgam.pages.admin.faculty_list import faculty_admin_list_page
 from durgam.pages.admin.users import admin_users
+from durgam.states.faculty_admin import FacultyAdminListState
 from durgam.pages.audit.index import AuditLogState, audit_log
 from durgam.pages.change_password import change_password
 from durgam.pages.forgot_password import forgot_password
@@ -19,6 +22,7 @@ from durgam.pages.login import login
 from durgam.pages.reset_password import reset_password
 from durgam.pages.shared.permission_check_widget import PermissionCheckState
 from durgam.states.admin_bulk_import import BulkImportState
+from durgam.states.faculty_bulk_import import FacultyBulkImportState
 from durgam.states.admin_index import AdminIndexState
 from durgam.states.admin_roles import AdminRolesState
 from durgam.states.admin_users import AdminUsersState
@@ -61,6 +65,8 @@ app.add_page(admin_users, route="/admin/users", on_load=AdminUsersState.load_use
 app.add_page(admin_user_create, route="/admin/users/new",
              on_load=[AdminUsersState.load_available_roles, PermissionCheckState.clear_widget])
 app.add_page(admin_roles, route="/admin/roles", on_load=AdminRolesState.load_roles)
+app.add_page(faculty_admin_list_page, route="/admin/faculty",
+             on_load=FacultyAdminListState.load_records)
 app.add_page(admin_role_create, route="/admin/roles/new",
              on_load=AdminRolesState.load_roles)
 app.add_page(admin_role_detail, route="/admin/roles/[role_id]",
@@ -69,6 +75,8 @@ app.add_page(admin_permissions, route="/admin/permissions",
              on_load=AdminPermissionsState.load_permissions)
 app.add_page(admin_import_users, route="/admin/import",
              on_load=BulkImportState.load_import)
+app.add_page(admin_faculty_import_page, route="/admin/faculty/import",
+             on_load=FacultyBulkImportState.load_import)
 app.add_page(audit_log, route="/audit", on_load=AuditLogState.load_audit)
 
 # ── M3 Config routes ────────────────────────────────────────────────────────────
@@ -176,16 +184,12 @@ app.add_page(admin_config_faculty_mentors, route="/admin/config/faculty-mentors"
              on_load=FacultyMentorConfigState.load_mentors)
 
 from durgam.pages.admin.config.class_teachers import admin_config_class_teachers
-from durgam.pages.admin.config.class_coordinators import admin_config_class_coordinators
 from durgam.pages.admin.config.non_regular_faculty import admin_config_non_regular_faculty
 from durgam.states.config_class_teacher import ClassTeacherConfigState
-from durgam.states.config_class_coordinator import ClassCoordinatorConfigState
 from durgam.states.config_non_regular_faculty import NonRegularFacultyConfigState
 
 app.add_page(admin_config_class_teachers, route="/admin/config/class-teachers",
              on_load=ClassTeacherConfigState.load_teachers)
-app.add_page(admin_config_class_coordinators, route="/admin/config/class-coordinators",
-             on_load=ClassCoordinatorConfigState.load_coordinators)
 app.add_page(admin_config_non_regular_faculty, route="/admin/config/non-regular-faculty",
              on_load=NonRegularFacultyConfigState.load_visitors)
 
@@ -222,6 +226,11 @@ app.add_page(admin_config_approval_processes, route="/admin/config/approval-proc
 from durgam.api.download import download_file
 
 app._api.add_route("/api/files/{file_id}", download_file, methods=["GET"])
+
+# ── M10 Phase 11C authenticated Faculty picker API ───────────────────────────
+from durgam.api.faculty_picker import faculty_picker
+
+app._api.add_route("/api/faculty/picker", faculty_picker, methods=["GET"])
 
 app.add_page(about_university, route="/about/university",
              on_load=AboutUniversityState.load_university_about)
@@ -325,3 +334,82 @@ app.add_page(
         AnnouncementDetailState.close_detail,
     ],
 )
+
+# ── M10 Faculty self-service profile ──────────────────────────────────────────
+from durgam.pages.faculty import __init__ as _faculty_nav_register  # noqa: F401
+from durgam.pages.faculty.profile import faculty_profile_page
+from durgam.pages.faculty.profile_education import faculty_education_page
+from durgam.pages.faculty.profile_documents import faculty_documents_page
+from durgam.pages.faculty.profile_experience import faculty_experience_page
+from durgam.pages.faculty.profile_expertise import faculty_expertise_page
+from durgam.pages.faculty.directory import faculty_directory_page
+from durgam.pages.faculty.detail import faculty_detail_page
+from durgam.pages.faculty.requests_overlay import faculty_requests_overlay
+from durgam.states.faculty_document import FacultyDocumentState
+from durgam.states.faculty_education import FacultyEducationState
+from durgam.states.faculty_experience import FacultyExperienceState
+from durgam.states.faculty_expertise import FacultyExpertiseState
+from durgam.states.faculty_directory import FacultyDirectoryState
+from durgam.states.faculty_detail import FacultyDetailState
+from durgam.states.faculty_profile import FacultyProfileState
+
+app.add_page(
+    faculty_profile_page,
+    route="/faculty/profile",
+    on_load=FacultyProfileState.load_profile,
+    title="My Profile — DURGAM",
+)
+
+app.add_page(
+    faculty_education_page,
+    route="/faculty/profile/education",
+    on_load=FacultyEducationState.load_education,
+    title="My Education — DURGAM",
+)
+
+app.add_page(
+    faculty_experience_page,
+    route="/faculty/profile/experience",
+    on_load=FacultyExperienceState.load_experience,
+    title="My Experience — DURGAM",
+)
+
+app.add_page(
+    faculty_expertise_page,
+    route="/faculty/profile/expertise",
+    on_load=FacultyExpertiseState.load_expertise,
+    title="My Expertise — DURGAM",
+)
+
+app.add_page(
+    faculty_documents_page,
+    route="/faculty/profile/documents",
+    on_load=FacultyDocumentState.load_documents,
+    title="My Documents — DURGAM",
+)
+
+# Phase 8A: peer-view directory + detail
+app.add_page(
+    faculty_directory_page,
+    route="/faculty",
+    on_load=FacultyDirectoryState.load_records,
+    title="Faculty Directory — DURGAM",
+)
+
+app.add_page(
+    faculty_requests_overlay,
+    route="/faculty/requests",
+    on_load=AuthState.resolve_session,
+    title="Faculty Requests — DURGAM",
+)
+
+app.add_page(
+    faculty_detail_page,
+    # URL segment named 'fid' (not 'faculty_id') — a dynamic route arg is injected
+    # as a state var on every state, and 'faculty_id' already exists on several
+    # faculty states (FacultyProfileState etc.). 'fid' avoids that collision.
+    route="/faculty/[fid]",
+    on_load=FacultyDetailState.load_detail,
+    title="Faculty — DURGAM",
+)
+

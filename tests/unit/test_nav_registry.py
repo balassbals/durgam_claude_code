@@ -139,3 +139,181 @@ class TestApprovalsNavGate:
         )
         assert my_req_entry is not None
         assert my_req_entry.permission_action is None
+
+
+class TestFacultyNavGate:
+    @classmethod
+    def setup_class(cls):
+        import durgam.pages.faculty  # noqa: F401 — triggers nav registration
+
+    def test_faculty_profile_nav_entry_registered(self):
+        """'My Profile' entry must be present in the registry after module import."""
+        entries = get_all()
+        entry = next(
+            (e for e in entries if e.label == "My Profile" and e.href == "/faculty/profile"),
+            None,
+        )
+        assert entry is not None, "'My Profile' nav entry not found in registry"
+
+    def test_faculty_profile_gated_by_faculty_write_own(self):
+        """Entry must be gated by faculty:write:own — visible only to FACULTY role holders."""
+        entries = get_all()
+        entry = next(
+            (e for e in entries if e.label == "My Profile" and e.href == "/faculty/profile"),
+            None,
+        )
+        assert entry is not None
+        assert entry.permission_action == "write"
+        assert entry.permission_resource == "faculty"
+        assert entry.permission_scope_type == "own"
+
+    def test_faculty_profile_nav_group_is_faculty(self):
+        """Entry must be in the 'Faculty' nav group."""
+        entries = get_all()
+        entry = next(
+            (e for e in entries if e.label == "My Profile" and e.href == "/faculty/profile"),
+            None,
+        )
+        assert entry is not None
+        assert entry.group == "Faculty"
+
+    def test_faculty_education_nav_entry_registered(self):
+        """'My Education' entry must be present after module import."""
+        entries = get_all()
+        entry = next(
+            (
+                e
+                for e in entries
+                if e.label == "My Education" and e.href == "/faculty/profile/education"
+            ),
+            None,
+        )
+        assert entry is not None, "'My Education' nav entry not found in registry"
+        assert entry.permission_action == "write"
+        assert entry.permission_resource == "faculty"
+        assert entry.permission_scope_type == "own"
+        assert entry.group == "Faculty"
+
+    def test_faculty_experience_nav_entry_registered(self):
+        """'My Experience' entry must be present after module import."""
+        entries = get_all()
+        entry = next(
+            (
+                e
+                for e in entries
+                if e.label == "My Experience" and e.href == "/faculty/profile/experience"
+            ),
+            None,
+        )
+        assert entry is not None, "'My Experience' nav entry not found in registry"
+        assert entry.permission_action == "write"
+        assert entry.permission_resource == "faculty"
+        assert entry.permission_scope_type == "own"
+        assert entry.group == "Faculty"
+
+    def test_faculty_expertise_nav_entry_registered(self):
+        """'My Expertise' entry must be present after module import."""
+        entries = get_all()
+        entry = next(
+            (
+                e
+                for e in entries
+                if e.label == "My Expertise" and e.href == "/faculty/profile/expertise"
+            ),
+            None,
+        )
+        assert entry is not None, "'My Expertise' nav entry not found in registry"
+        assert entry.permission_action == "write"
+        assert entry.permission_resource == "faculty"
+        assert entry.permission_scope_type == "own"
+        assert entry.group == "Faculty"
+
+    def test_faculty_documents_nav_entry_registered(self):
+        """'My Documents' entry must be present after module import."""
+        entries = get_all()
+        entry = next(
+            (
+                e
+                for e in entries
+                if e.label == "My Documents" and e.href == "/faculty/profile/documents"
+            ),
+            None,
+        )
+        assert entry is not None, "'My Documents' nav entry not found in registry"
+        assert entry.permission_action == "write"
+        assert entry.permission_resource == "faculty"
+        assert entry.permission_scope_type == "own"
+        assert entry.group == "Faculty"
+
+    def test_raise_fdp_request_nav_entry_registered(self):
+        """Phase 6: 'Raise FDP Request' deep-link under Faculty, faculty:write:own."""
+        entries = get_all()
+        entry = next(
+            (
+                e
+                for e in entries
+                if e.label == "Raise FDP Request"
+                and e.href == "/approvals/submit?process=faculty_fdp"
+            ),
+            None,
+        )
+        assert entry is not None, "'Raise FDP Request' nav entry not found in registry"
+        assert entry.permission_action == "write"
+        assert entry.permission_resource == "faculty"
+        assert entry.permission_scope_type == "own"
+        assert entry.group == "Faculty"
+
+    def test_faculty_directory_nav_entry_registered(self):
+        """Phase 8A: 'Faculty Directory' peer-view entry under Faculty, faculty:read."""
+        entries = get_all()
+        entry = next(
+            (
+                e
+                for e in entries
+                if e.label == "Faculty Directory" and e.href == "/faculty"
+            ),
+            None,
+        )
+        assert entry is not None, "'Faculty Directory' nav entry not found in registry"
+        assert entry.permission_action == "read"
+        assert entry.permission_resource == "faculty"
+        assert entry.group == "Faculty"
+
+    def test_faculty_requests_nav_entry_registered(self):
+        """Phase 8B: 'Faculty Requests' overlay entry under Faculty, faculty:write:own."""
+        entries = get_all()
+        entry = next(
+            (
+                e
+                for e in entries
+                if e.label == "Faculty Requests" and e.href == "/faculty/requests"
+            ),
+            None,
+        )
+        assert entry is not None, "'Faculty Requests' nav entry not found in registry"
+        assert entry.permission_action == "write"
+        assert entry.permission_resource == "faculty"
+        assert entry.permission_scope_type == "own"
+        assert entry.group == "Faculty"
+
+
+class TestAdminFacultyNavGate:
+    @classmethod
+    def setup_class(cls):
+        import durgam.pages.admin  # noqa: F401 — triggers admin nav registration
+
+    def test_admin_faculty_nav_entry_registered(self):
+        """'Faculty' admin directory entry gated by faculty:read:* (P6)."""
+        entries = get_all()
+        entry = next(
+            (
+                e
+                for e in entries
+                if e.label == "Faculty" and e.href == "/admin/faculty"
+            ),
+            None,
+        )
+        assert entry is not None, "'Faculty' admin nav entry not found in registry"
+        assert entry.permission_action == "read"
+        assert entry.permission_resource == "faculty"
+        assert entry.group == "Admin"

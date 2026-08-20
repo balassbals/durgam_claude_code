@@ -6,7 +6,7 @@ from uuid import UUID
 
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlmodel import Column, Field, SQLModel
+from sqlmodel import Column, Field
 
 from .base import TimestampedSoftDelete
 
@@ -194,11 +194,13 @@ class FacultyMentorAssignment(TimestampedSoftDelete, table=True):
     __tablename__ = "faculty_mentor_assignments"
     __table_args__ = (
         sa.Index("ix_fma_ay_campus", "academic_year_id", "campus_id"),
+        sa.Index("ix_fma_faculty_id", "faculty_id"),
     )
 
     academic_year_id: UUID = Field(foreign_key="academic_years.id", nullable=False)
     campus_id: UUID = Field(foreign_key="campuses.id", nullable=False)
-    faculty_id_placeholder: str = Field(max_length=128, nullable=False)
+    # M10 Phase 11A (D-020): faculty_id_placeholder → faculty_id FK backfill.
+    faculty_id: UUID = Field(foreign_key="faculties.id", nullable=False)
     student_id_placeholder: str = Field(max_length=128, nullable=False)
     notes: str | None = Field(default=None)
 
@@ -208,9 +210,14 @@ class FacultyMentorConfirmation(TimestampedSoftDelete, table=True):
 
     __tablename__ = "faculty_mentor_confirmations"
     __table_args__ = (
-        sa.UniqueConstraint(
+        # Partial unique index (M10 Phase 11E): at most one ACTIVE confirmation
+        # per AY+campus.  The WHERE clause allows soft-deleted rows to coexist
+        # for audit chain purposes, enabling re-confirm after invalidation.
+        sa.Index(
+            "uq_fmc_ay_campus",
             "academic_year_id", "campus_id",
-            name="uq_fmc_ay_campus",
+            unique=True,
+            postgresql_where=sa.text("is_deleted = FALSE"),
         ),
     )
 
@@ -231,34 +238,20 @@ class ClassTeacherAssignment(TimestampedSoftDelete, table=True):
     __tablename__ = "class_teacher_assignments"
     __table_args__ = (
         sa.Index("ix_cta_ay_dept", "academic_year_id", "department_id"),
+        sa.Index("ix_cta_faculty_id", "faculty_id"),
     )
 
     academic_year_id: UUID = Field(foreign_key="academic_years.id", nullable=False)
     department_id: UUID = Field(foreign_key="departments.id", nullable=False)
-    faculty_id_placeholder: str = Field(max_length=128, nullable=False)
+    # M10 Phase 11A (D-020): faculty_id_placeholder → faculty_id FK backfill.
+    faculty_id: UUID = Field(foreign_key="faculties.id", nullable=False)
     class_identifier: str = Field(max_length=64, nullable=False)
     notes: str | None = Field(default=None)
 
 
-class ClassCoordinatorAssignment(TimestampedSoftDelete, table=True):
-    """Student serving as class coordinator, assigned by class teacher (faculty).
-
-    Max 2 per class per AY (§9.3, line 150). Student picker deferred to M12.
-    Write-access correctly gated on class-teacher assignment once M10/M12 exist;
-    current HoD/SysAdmin write access is a placeholder until the class-teacher
-    role can be identity-verified.
-    """
-
-    __tablename__ = "class_coordinator_assignments"
-    __table_args__ = (
-        sa.Index("ix_cca_ay_dept", "academic_year_id", "department_id"),
-    )
-
-    academic_year_id: UUID = Field(foreign_key="academic_years.id", nullable=False)
-    department_id: UUID = Field(foreign_key="departments.id", nullable=False)
-    faculty_id_placeholder: str = Field(max_length=128, nullable=False)
-    class_identifier: str = Field(max_length=64, nullable=False)
-    notes: str | None = Field(default=None)
+# class_coordinator_assignments removed in M10 Phase 11D (Q-P11D.1): class
+# coordinators are STUDENTS, not faculty; re-introduce correctly when the
+# student domain ships (TD-088).
 
 
 class NonRegularFaculty(TimestampedSoftDelete, table=True):
@@ -289,12 +282,27 @@ class NonRegularFaculty(TimestampedSoftDelete, table=True):
     available_to: date = Field(nullable=False)
     is_admin_approved: bool = Field(default=False, nullable=False)
     non_regular_type: str = Field(max_length=32, default="visiting", nullable=False)
+    # M10 Phase 9A (D-022): contract-term expansion. available_from/available_to
+    # already serve the contract window; non_regular_type is the term type.
+    renewal_count: int = Field(default=0, nullable=False)
+    latest_contract_file_id: UUID | None = Field(
+        default=None, foreign_key="file_assets.id",
+    )
     approved_at: datetime | None = Field(default=None, sa_type=_TIMESTAMPTZ)
     approved_by_user_id: UUID | None = Field(
         default=None, foreign_key="users.id",
     )
     approval_request_id: UUID | None = Field(
-        default=None, foreign_key="approval_requests.id",
+        default=None,
+        sa_column=sa.Column(
+            sa.Uuid,
+            sa.ForeignKey(
+                "approval_requests.id",
+                name="fk_nrf_approval_request_id",
+                ondelete="SET NULL",
+            ),
+            nullable=True,
+        ),
     )
 
 
@@ -308,6 +316,7 @@ class NonOwnedCourse(TimestampedSoftDelete, table=True):
     __tablename__ = "non_owned_courses"
     __table_args__ = (
         sa.Index("ix_noc_academic_year_id", "academic_year_id"),
+        sa.Index("ix_noc_faculty_id", "faculty_id"),
     )
 
     academic_year_id: UUID = Field(foreign_key="academic_years.id", nullable=False)
@@ -315,7 +324,8 @@ class NonOwnedCourse(TimestampedSoftDelete, table=True):
     course_name: str = Field(max_length=200, nullable=False)
     credits: int = Field(default=0, nullable=False)
     semester: str = Field(max_length=10, nullable=False)
-    faculty_id_placeholder: str = Field(max_length=128, nullable=False)
+    # M10 Phase 11B (D-020): faculty_id_placeholder -> faculty_id FK backfill.
+    faculty_id: UUID = Field(foreign_key="faculties.id", nullable=False)
     notes: str | None = Field(default=None)
 
 
@@ -334,6 +344,7 @@ class UGTimetable(TimestampedSoftDelete, table=True):
             name="uq_ug_timetable_slot",
         ),
         sa.Index("ix_ugt_academic_year_id", "academic_year_id"),
+        sa.Index("ix_ugt_faculty_id", "faculty_id"),
     )
 
     academic_year_id: UUID = Field(foreign_key="academic_years.id", nullable=False)
@@ -343,7 +354,8 @@ class UGTimetable(TimestampedSoftDelete, table=True):
     period_number: int = Field(nullable=False)
     course_code: str = Field(max_length=20, nullable=False)
     course_name: str = Field(max_length=200, nullable=False)
-    faculty_id_placeholder: str = Field(max_length=128, nullable=False)
+    # M10 Phase 11B (D-020): faculty_id_placeholder -> faculty_id FK backfill.
+    faculty_id: UUID = Field(foreign_key="faculties.id", nullable=False)
     room: str | None = Field(default=None, max_length=64)
     notes: str | None = Field(default=None)
 

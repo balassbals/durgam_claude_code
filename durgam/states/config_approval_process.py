@@ -34,6 +34,8 @@ class ApprovalProcessConfigState(BaseState):
     form_max_upward: int = 0
     form_requires_downward: bool = False
     form_max_downward: int = 0
+    form_max_attachment_mb: int = 5
+    form_allowed_mimes: list[str] = []
 
     confirm_open: bool = False
     confirm_id: str = ""
@@ -69,6 +71,10 @@ class ApprovalProcessConfigState(BaseState):
                     "raw_max_upward": str(p.max_upward_attachments),
                     "raw_requires_downward": "1" if p.requires_downward_attachments else "0",
                     "raw_max_downward": str(p.max_downward_attachments),
+                    "max_attachment_mb": str(p.max_attachment_mb),
+                    "raw_max_attachment_mb": str(p.max_attachment_mb),
+                    "allowed_mimes": ", ".join(p.allowed_attachment_mime_types_json or []) or "Any",
+                    "raw_allowed_mimes": ",".join(p.allowed_attachment_mime_types_json or []),
                 })
 
         self._load_nav_entries()
@@ -133,6 +139,18 @@ class ApprovalProcessConfigState(BaseState):
         except (ValueError, TypeError):
             self.form_max_downward = 0
 
+    def set_form_max_attachment_mb(self, v: str) -> None:
+        try:
+            self.form_max_attachment_mb = max(1, min(100, int(v)))
+        except (ValueError, TypeError):
+            self.form_max_attachment_mb = 5
+
+    def toggle_allowed_mime(self, mime: str) -> None:
+        if mime in self.form_allowed_mimes:
+            self.form_allowed_mimes = [m for m in self.form_allowed_mimes if m != mime]
+        else:
+            self.form_allowed_mimes = [*self.form_allowed_mimes, mime]
+
     def open_create(self):
         self.flash = ""
         self.flash_type = "info"
@@ -147,6 +165,8 @@ class ApprovalProcessConfigState(BaseState):
         self.form_max_upward = 0
         self.form_requires_downward = False
         self.form_max_downward = 0
+        self.form_max_attachment_mb = 5
+        self.form_allowed_mimes = []
         self.show_form = True
 
     def open_edit(
@@ -154,6 +174,7 @@ class ApprovalProcessConfigState(BaseState):
         channel: str, finance: str, cc: str,
         requires_upward: str = "0", max_upward: str = "0",
         requires_downward: str = "0", max_downward: str = "0",
+        max_attachment_mb: str = "5", allowed_mimes: str = "",
     ):
         self.flash = ""
         self.flash_type = "info"
@@ -174,13 +195,57 @@ class ApprovalProcessConfigState(BaseState):
             self.form_max_downward = int(max_downward)
         except (ValueError, TypeError):
             self.form_max_downward = 0
+        try:
+            self.form_max_attachment_mb = max(1, int(max_attachment_mb))
+        except (ValueError, TypeError):
+            self.form_max_attachment_mb = 5
+        self.form_allowed_mimes = [m for m in allowed_mimes.split(",") if m.strip()]
         self.show_form = True
+
+    def open_edit_by_id(self, pid: str) -> None:
+        """Look up the process row by ID from the loaded list and open the edit form.
+
+        Passes only one Var arg from the row (the ID), avoiding partial-application
+        complexity with 13 Vars. Looks up remaining fields from self.processes.
+        """
+        self.flash = ""
+        self.flash_type = "info"
+        for p in self.processes:
+            if p["id"] == pid:
+                self.editing_id = p["id"]
+                self.form_code = p["code"]
+                self.form_title = p["title"]
+                self.form_requestors_selected = [r for r in p["raw_requestors"].split(",") if r]
+                self.form_channel_selected = [c for c in p["raw_channel"].split(",") if c]
+                self.form_cc_selected = [c for c in p["raw_cc"].split(",") if c]
+                self.form_is_finance = p["raw_finance"] == "1"
+                self.form_requires_upward = p["raw_requires_upward"] == "1"
+                try:
+                    self.form_max_upward = int(p["raw_max_upward"])
+                except (ValueError, TypeError):
+                    self.form_max_upward = 0
+                self.form_requires_downward = p["raw_requires_downward"] == "1"
+                try:
+                    self.form_max_downward = int(p["raw_max_downward"])
+                except (ValueError, TypeError):
+                    self.form_max_downward = 0
+                try:
+                    self.form_max_attachment_mb = max(1, int(p["raw_max_attachment_mb"]))
+                except (ValueError, TypeError):
+                    self.form_max_attachment_mb = 5
+                self.form_allowed_mimes = [m for m in p["raw_allowed_mimes"].split(",") if m.strip()]
+                self.show_form = True
+                return
+        self.flash = "Process not found."
+        self.flash_type = "error"
 
     def cancel_form(self):
         self.show_form = False
         self.editing_id = ""
         self.flash = ""
         self.flash_type = "info"
+        self.form_max_attachment_mb = 5
+        self.form_allowed_mimes = []
 
     @require_role(action="write", resource="approval_process")
     @audit_action(action="write", resource="approval_process")
@@ -206,6 +271,7 @@ class ApprovalProcessConfigState(BaseState):
             with open_session() as session:
                 svc = _svc(session)
                 actor_id = UUID(self.current_user_id)
+                allowed_mimes = self.form_allowed_mimes or None
                 if not editing_id:
                     entity = svc.create(
                         code=code,
@@ -218,6 +284,8 @@ class ApprovalProcessConfigState(BaseState):
                         max_upward_attachments=self.form_max_upward,
                         requires_downward_attachments=self.form_requires_downward,
                         max_downward_attachments=self.form_max_downward,
+                        max_attachment_mb=self.form_max_attachment_mb,
+                        allowed_attachment_mime_types_json=allowed_mimes,
                         actor_id=actor_id,
                     )
                     after_snap = audit_snapshot(entity)
@@ -240,6 +308,8 @@ class ApprovalProcessConfigState(BaseState):
                             "max_upward_attachments": self.form_max_upward,
                             "requires_downward_attachments": self.form_requires_downward,
                             "max_downward_attachments": self.form_max_downward,
+                            "max_attachment_mb": self.form_max_attachment_mb,
+                            "allowed_attachment_mime_types_json": allowed_mimes,
                         },
                         actor_id,
                     )
@@ -257,6 +327,22 @@ class ApprovalProcessConfigState(BaseState):
         await self.load_processes()
         self.flash = "Approval process saved."
         self.flash_type = "success"
+
+    def open_deactivate_by_id(self, pid: str) -> None:
+        """Look up the process by ID from the loaded list and open deactivate confirm.
+
+        Passes only one Var arg from the row, avoiding partial-application failure
+        with multiple rx.Var args in Reflex 0.9.x. Looks up code from self.processes.
+        """
+        for p in self.processes:
+            if p["id"] == pid:
+                self.confirm_id = pid
+                self.confirm_title = f"Deactivate '{p['code']}'?"
+                self.confirm_body = "This will remove the approval process template."
+                self.confirm_open = True
+                return
+        self.flash = "Process not found."
+        self.flash_type = "error"
 
     def open_deactivate_confirm(self, record_id: str, code: str) -> None:
         self.confirm_id = record_id

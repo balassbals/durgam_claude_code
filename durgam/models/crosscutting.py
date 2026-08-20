@@ -99,12 +99,21 @@ class ApprovalProcess(TimestampedSoftDelete, table=True):
     max_upward_attachments: int = Field(default=0)
     max_downward_attachments: int = Field(default=0)
     max_attachment_mb: int = Field(default=5)
+    allowed_attachment_mime_types_json: list[str] | None = Field(
+        default=None,
+        sa_column=Column(JSONB, nullable=True),
+    )
     is_finance: bool = Field(default=False)
     informational_cc_role_codes: list[str] | None = Field(
         default=None, sa_column=Column(JSONB, nullable=True)
     )
     auto_announce_on_approve: bool = Field(default=False, nullable=False)
     auto_announce_target_json: dict[str, Any] | None = Field(
+        default=None, sa_column=Column(JSONB, nullable=True)
+    )
+    # M10 Phase 3A: per-stage pick_mode for OR-set stages.
+    # Dict: {"1": "approver", "2": "requestor"}. NULL = all legacy single-role stages.
+    stage_pick_modes_json: dict[str, str] | None = Field(
         default=None, sa_column=Column(JSONB, nullable=True)
     )
 
@@ -136,6 +145,11 @@ class ApprovalRequest(TimestampedSoftDelete, table=True):
     resolved_channel_json: list[dict[str, Any]] | None = Field(
         default=None, sa_column=Column(JSONB, nullable=True)
     )
+    # M10 Phase 5B: requestor's stage-option picks (keyed by stage_index as string).
+    # {"1": "<option_uuid>", ...} — only set when a stage uses pick_mode="requestor".
+    picked_option_ids_json: dict[str, str] | None = Field(
+        default=None, sa_column=Column(JSONB, nullable=True)
+    )
 
 
 class ApprovalStep(SQLModel, table=True):
@@ -152,4 +166,86 @@ class ApprovalStep(SQLModel, table=True):
     comment: str | None = Field(default=None)
     decided_at: datetime | None = Field(
         default=None, sa_type=_TIMESTAMPTZ, nullable=True
+    )
+
+
+class ApprovalStageOption(TimestampedSoftDelete, table=True):
+    """OR-set option for a specific stage of an approval process (M10 Phase 3A).
+
+    Each row names one resolver that can satisfy stage_index for the given process.
+    When a stage has ≥1 active ApprovalStageOption row, the engine uses the OR-set
+    path instead of the legacy single-role-code path.
+    """
+
+    __tablename__ = "approval_stage_options"
+    __table_args__ = (
+        sa.Index(
+            "ix_approval_stage_options_process_stage",
+            "approval_process_id",
+            "stage_index",
+            postgresql_where=sa.text("is_deleted = false"),
+        ),
+        sa.Index(
+            "uq_approval_stage_options_process_stage_resolver",
+            "approval_process_id",
+            "stage_index",
+            "resolver_name",
+            unique=True,
+            postgresql_where=sa.text("is_deleted = false"),
+        ),
+    )
+
+    approval_process_id: UUID = Field(
+        foreign_key="approval_processes.id",
+        nullable=False,
+    )
+    # 1-based integer matching ApprovalRequest.current_stage / channel_role_codes index.
+    stage_index: int = Field(nullable=False)
+    resolver_name: str = Field(max_length=200, nullable=False)
+    label: str = Field(max_length=200, nullable=False)
+    sort_order: int = Field(default=0, nullable=False)
+
+
+class ApprovalAction(TimestampedSoftDelete, table=True):
+    """Visibility-controlled per-decision action record (M10 Phase 7A).
+
+    One row is written per approve/reject decision alongside the existing ApprovalStep row.
+    Unlike ApprovalStep (internal engine bookkeeping), ApprovalAction rows are surfaced to
+    users through visibility rules (is_visible_to_requestor, visible_to_lower_user_ids_json).
+
+    Visibility semantics:
+    - Requestor sees this action iff is_visible_to_requestor=True.
+    - An approver at stage N sees actions from stages ≤ N always; actions from stages > N
+      only if their user_id appears in visible_to_lower_user_ids_json.
+    - An approver always sees their own action regardless of flags (TD-081).
+    """
+
+    __tablename__ = "approval_actions"
+    __table_args__ = (
+        sa.Index("ix_approval_actions_request_id", "approval_request_id"),
+        sa.CheckConstraint(
+            "action_type IN ('approve', 'reject')",
+            name="ck_approval_actions_action_type",
+        ),
+    )
+
+    approval_request_id: UUID = Field(
+        foreign_key="approval_requests.id",
+        nullable=False,
+    )
+    stage_index: int = Field(nullable=False)
+    actor_user_id: UUID = Field(
+        foreign_key="users.id",
+        nullable=False,
+    )
+    action_type: str = Field(max_length=20, nullable=False)  # 'approve' | 'reject'
+    comment: str | None = Field(default=None)
+    downward_attachment_file_ids_json: list[str] | None = Field(
+        default=None,
+        sa_column=Column(JSONB, nullable=True),
+    )
+    is_visible_to_requestor: bool = Field(default=True, nullable=False)
+    visible_to_lower_user_ids_json: list[str] | None = Field(
+        default=None,
+        sa_column=Column(JSONB, nullable=True),
     )

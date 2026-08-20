@@ -550,6 +550,21 @@ def _apply_modal() -> rx.Component:
                     gap="0.5rem",
                     align="center",
                 ),
+                # Q-P10.2: Prof-tier opt-in HoD recommendation. Visible to all
+                # faculty; only effective for Prof-tier (the requires_optin matrix
+                # rule keys on prof/assoc_prof/sr_prof).
+                rx.hstack(
+                    rx.checkbox(
+                        checked=LeavePageState.hod_recommend_optin,
+                        on_change=LeavePageState.set_hod_recommend_optin,
+                    ),
+                    rx.text(
+                        "Send through my HoD for recommendation",
+                        font_size="0.85rem",
+                    ),
+                    gap="0.5rem",
+                    align="center",
+                ),
                 # In-charge designation (Director only)
                 rx.cond(
                     LeavePageState.is_director,

@@ -62,6 +62,7 @@ from durgam.models.program import (
     ProgramSpecialisation,
 )
 from durgam.models.school import School
+from durgam.models.faculty import Faculty
 from durgam.models.vision_mission import (
     DepartmentMission,
     DepartmentVisionMission,
@@ -143,8 +144,9 @@ def seed(session: Session) -> dict[str, int]:
         {"code": "DIRECTOR",             "name": "Director",                "level": 75},
         {"code": "DEPUTY_DIRECTOR",      "name": "Deputy Director",         "level": 72},
         {"code": "DIRECTOR_OFFICE",      "name": "Director Office",         "level": 69},
-        # IQAC (M4)
+        # IQAC (M4 + M10)
         {"code": "IQAC_COORDINATOR",     "name": "IQAC Coordinator",        "level": 71},
+        {"code": "IQAC_OFFICE",          "name": "IQAC Office",             "level": 64},
         # Dean (school-scoped via UserRole.scope_type='school')
         {"code": "DEAN",                 "name": "Dean",                    "level": 70},
         {"code": "DEAN_STUDENT_WELFARE", "name": "Dean of Student Welfare",                          "level": 70},
@@ -340,10 +342,6 @@ def seed(session: Session) -> dict[str, int]:
         {"resource": "class_teacher_assignment",   "action": "read",      "scope": "*"},
         {"resource": "class_teacher_assignment",   "action": "write",     "scope": "*"},
         {"resource": "class_teacher_assignment",   "action": "delete",    "scope": "*"},
-        # Class coordinator assignment (Dean Academic Affairs family + HOD + SysAdmin)
-        {"resource": "class_coordinator_assignment", "action": "read",    "scope": "*"},
-        {"resource": "class_coordinator_assignment", "action": "write",   "scope": "*"},
-        {"resource": "class_coordinator_assignment", "action": "delete",  "scope": "*"},
         # Non-regular faculty (HoD family read/write/delete + SysAdmin; approve = SysAdmin only)
         {"resource": "non_regular_faculty",          "action": "read",    "scope": "*"},
         {"resource": "non_regular_faculty",          "action": "write",   "scope": "*"},
@@ -390,6 +388,28 @@ def seed(session: Session) -> dict[str, int]:
         {"resource": "announcement_category",        "action": "configure", "scope": "*"},
         {"resource": "audience_group",               "action": "read",      "scope": "*"},
         {"resource": "audience_group",               "action": "configure", "scope": "*"},
+        # ── M10 Faculty Module permissions ────────────────────────────────────
+        # Faculty profile — all authenticated can read directory; own/admin write split
+        {"resource": "faculty",           "action": "read",        "scope": "*"},
+        {"resource": "faculty",           "action": "write",       "scope": "own"},
+        {"resource": "faculty",           "action": "write",       "scope": "*"},   # admin-tier (Registrar/HR_HEAD)
+        # Sensitive PII fields — Registrar + IQAC family only (RFP §9.7)
+        {"resource": "faculty_sensitive", "action": "read",        "scope": "*"},
+        # Faculty-uploaded documents — Registrar + IQAC family only
+        {"resource": "faculty_document",  "action": "read",        "scope": "*"},
+        # Faculty requests — own create/read; * read for Registrar audit
+        {"resource": "faculty_request",   "action": "create",      "scope": "own"},
+        {"resource": "faculty_request",   "action": "read",        "scope": "own"},
+        {"resource": "faculty_request",   "action": "read",        "scope": "*"},
+        # Faculty workload — all read (for admin); own write (self-entry)
+        {"resource": "faculty_workload",  "action": "read",        "scope": "*"},
+        {"resource": "faculty_workload",  "action": "write",       "scope": "own"},
+        # Faculty bulk import — Registrar + HR_HEAD
+        {"resource": "faculty",           "action": "bulk_import", "scope": "*"},
+        # Designation configure — SYSTEM_ADMIN only (vocabulary-level change)
+        {"resource": "designation",       "action": "configure",   "scope": "*"},
+        # ApprovalProcess configure — SYSTEM_ADMIN only (extended for OR-set channels at M10)
+        {"resource": "approval_process",  "action": "configure",   "scope": "*"},
     ]
     perm_inserted = 0
     for p in perms_data:
@@ -442,8 +462,6 @@ def seed(session: Session) -> dict[str, int]:
         # M5b — non-owned courses + UG timetable (scheduling info all users see)
         ("non_owned_course",          "read", "*"),
         ("ug_timetable",              "read", "*"),
-        # M5b — class coordinator list viewable by all (B1: coordinator is a student)
-        ("class_coordinator_assignment", "read", "*"),
         # M9 — Announcement Module reads (broad transparency: every role can see announcements,
         # the composer roster, categories, and audience groups)
         ("announcement",                 "read", "*"),
@@ -584,7 +602,6 @@ def seed(session: Session) -> dict[str, int]:
         ("calendar_entry",             "write",     "*"),
         ("student_category_count",     "read",      "*"),
         ("class_teacher_assignment",   "read",      "*"),
-        ("class_coordinator_assignment", "read",    "*"),
         # M5b — non-owned courses (DAA family; NOT ug_timetable — Director only)
         ("non_owned_course",           "read",      "*"),
         ("non_owned_course",           "write",     "*"),
@@ -672,40 +689,62 @@ def seed(session: Session) -> dict[str, int]:
         ("announcement_composer_config", "configure", "*"),
     ]
 
+    # M10 — Faculty Module (D-011)
+    # Base set for all regular-teaching employees: directory read + self-edit + own requests.
+    _FACULTY_OWN = [
+        ("faculty",          "read",        "*"),    # all authenticated can see faculty directory
+        ("faculty",          "write",       "own"),  # self-edit own profile
+        ("faculty_request",  "create",      "own"),  # raise faculty requests
+        ("faculty_request",  "read",        "own"),  # track own requests
+        ("faculty_workload", "write",       "own"),  # enter own workload
+        ("faculty_workload", "read",        "*"),    # view workload (own included in *)
+    ]
+
+    # Admin-tier write: Registrar/HR_HEAD can edit any faculty record + bulk import + audit
+    _FACULTY_ADMIN = [
+        ("faculty",          "write",       "*"),    # admin-level write any faculty record
+        ("faculty_request",  "read",        "*"),    # audit: view all faculty requests
+        ("faculty",          "bulk_import", "*"),    # bulk import
+    ]
+
+    # Sensitive PII read: Registrar + IQAC family only (RFP §9.7)
+    _FACULTY_SENSITIVE_READ = [
+        ("faculty_sensitive", "read",       "*"),    # PAN/Aadhaar/sensitive fields
+        ("faculty_document",  "read",       "*"),    # uploaded faculty documents
+    ]
+
     role_perm_map: dict[str, list[tuple[str, str, str]]] = {
-        "REGISTRAR":            _PUBLIC_READ + _LEAVE_REQUESTOR + _REGISTRAR_SPECIFIC + _CL_CREDIT_POLICY_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN + _ANNOUNCEMENT_COMPOSER + _ANNOUNCEMENT_REGISTRAR_CONFIG + [
+        "REGISTRAR":            _PUBLIC_READ + _LEAVE_REQUESTOR + _REGISTRAR_SPECIFIC + _CL_CREDIT_POLICY_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN + _ANNOUNCEMENT_COMPOSER + _ANNOUNCEMENT_REGISTRAR_CONFIG + _FACULTY_OWN + _FACULTY_ADMIN + _FACULTY_SENSITIVE_READ + [
             ("approval_request",           "approve",   "*"),
         ],
-        "DEPUTY_REGISTRAR":     _PUBLIC_READ + _LEAVE_REQUESTOR + _REGISTRAR_SPECIFIC + _CL_CREDIT_POLICY_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN + [
+        "DEPUTY_REGISTRAR":     _PUBLIC_READ + _LEAVE_REQUESTOR + _REGISTRAR_SPECIFIC + _CL_CREDIT_POLICY_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN + _FACULTY_OWN + _FACULTY_ADMIN + _FACULTY_SENSITIVE_READ + [
             ("approval_request",           "approve",   "*"),
         ],
-        "REGISTRAR_OFFICE":     _PUBLIC_READ + _LEAVE_REQUESTOR + _REGISTRAR_SPECIFIC + _CL_CREDIT_POLICY_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN + _ANNOUNCEMENT_COMPOSER + _ANNOUNCEMENT_REGISTRAR_CONFIG,
-        "DIRECTOR":             _PUBLIC_READ + _LEAVE_REQUESTOR + _DIRECTOR_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN + _ANNOUNCEMENT_COMPOSER,
-        "DEPUTY_DIRECTOR":      _PUBLIC_READ + _LEAVE_REQUESTOR + _DIRECTOR_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN,
-        "DIRECTOR_OFFICE":      _PUBLIC_READ + _LEAVE_REQUESTOR + _DIRECTOR_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN + _ANNOUNCEMENT_COMPOSER,
-        "IQAC_COORDINATOR":     _PUBLIC_READ + _LEAVE_REQUESTOR + _IQAC_SPECIFIC + _ANNOUNCEMENT_COMPOSER,
-        "DEAN":                 _PUBLIC_READ + _LEAVE_REQUESTOR + _DEAN_SPECIFIC + _ANNOUNCEMENT_COMPOSER + [
+        "REGISTRAR_OFFICE":     _PUBLIC_READ + _LEAVE_REQUESTOR + _REGISTRAR_SPECIFIC + _CL_CREDIT_POLICY_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN + _ANNOUNCEMENT_COMPOSER + _ANNOUNCEMENT_REGISTRAR_CONFIG + _FACULTY_OWN + _FACULTY_ADMIN + _FACULTY_SENSITIVE_READ,
+        "DIRECTOR":             _PUBLIC_READ + _LEAVE_REQUESTOR + _DIRECTOR_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN + _ANNOUNCEMENT_COMPOSER + _FACULTY_OWN,
+        "DEPUTY_DIRECTOR":      _PUBLIC_READ + _LEAVE_REQUESTOR + _DIRECTOR_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN + _FACULTY_OWN,
+        "DIRECTOR_OFFICE":      _PUBLIC_READ + _LEAVE_REQUESTOR + _DIRECTOR_SPECIFIC + _LEAVE_BALANCE_IMPORT + _LEAVE_BALANCE_ADMIN + _LEAVE_REQUEST_ADMIN + _ANNOUNCEMENT_COMPOSER + _FACULTY_OWN,
+        "IQAC_COORDINATOR":     _PUBLIC_READ + _LEAVE_REQUESTOR + _IQAC_SPECIFIC + _ANNOUNCEMENT_COMPOSER + _FACULTY_OWN + _FACULTY_SENSITIVE_READ,
+        # M10 — IQAC_OFFICE mirrors IQAC_COORDINATOR exactly (Q-P2.1 authority 2026-06-14)
+        "IQAC_OFFICE":          _PUBLIC_READ + _LEAVE_REQUESTOR + _IQAC_SPECIFIC + _ANNOUNCEMENT_COMPOSER + _FACULTY_OWN + _FACULTY_SENSITIVE_READ,
+        "DEAN":                 _PUBLIC_READ + _LEAVE_REQUESTOR + _DEAN_SPECIFIC + _ANNOUNCEMENT_COMPOSER + _FACULTY_OWN + [
             ("approval_request",           "approve",   "*"),
         ],
-        "DEAN_STUDENT_WELFARE": _PUBLIC_READ + _LEAVE_REQUESTOR + _DEAN_SW_SPECIFIC + _ANNOUNCEMENT_COMPOSER,
-        "DEAN_STUDENT_WELFARE_OFFICE": _PUBLIC_READ + _LEAVE_REQUESTOR + _DEAN_SW_SPECIFIC + _ANNOUNCEMENT_COMPOSER,
-        "DEAN_ACADEMIC_AFFAIRS": _PUBLIC_READ + _LEAVE_REQUESTOR + _DEAN_AA_SPECIFIC + _ANNOUNCEMENT_COMPOSER,
-        "DEAN_ACADEMIC_AFFAIRS_OFFICE": _PUBLIC_READ + _LEAVE_REQUESTOR + _DEAN_AA_SPECIFIC + _ANNOUNCEMENT_COMPOSER,
-        "HOD":                  _PUBLIC_READ + _LEAVE_REQUESTOR + _HOD_SPECIFIC + _ANNOUNCEMENT_COMPOSER + [
+        "DEAN_STUDENT_WELFARE": _PUBLIC_READ + _LEAVE_REQUESTOR + _DEAN_SW_SPECIFIC + _ANNOUNCEMENT_COMPOSER + _FACULTY_OWN,
+        "DEAN_STUDENT_WELFARE_OFFICE": _PUBLIC_READ + _LEAVE_REQUESTOR + _DEAN_SW_SPECIFIC + _ANNOUNCEMENT_COMPOSER + _FACULTY_OWN,
+        "DEAN_ACADEMIC_AFFAIRS": _PUBLIC_READ + _LEAVE_REQUESTOR + _DEAN_AA_SPECIFIC + _ANNOUNCEMENT_COMPOSER + _FACULTY_OWN,
+        "DEAN_ACADEMIC_AFFAIRS_OFFICE": _PUBLIC_READ + _LEAVE_REQUESTOR + _DEAN_AA_SPECIFIC + _ANNOUNCEMENT_COMPOSER + _FACULTY_OWN,
+        "HOD":                  _PUBLIC_READ + _LEAVE_REQUESTOR + _HOD_SPECIFIC + _ANNOUNCEMENT_COMPOSER + _FACULTY_OWN + [
+            ("faculty_request",            "read",      "*"),  # dept scope enforced at handler body (M3 pattern)
             ("class_teacher_assignment",   "read",      "*"),
             ("class_teacher_assignment",   "write",     "*"),
             ("class_teacher_assignment",   "delete",    "*"),
-            ("class_coordinator_assignment", "read",    "*"),
-            ("class_coordinator_assignment", "write",   "*"),
-            ("class_coordinator_assignment", "delete",  "*"),
         ],
-        "AHOD":                 _PUBLIC_READ + _LEAVE_REQUESTOR + _HOD_SPECIFIC + [
+        "AHOD":                 _PUBLIC_READ + _LEAVE_REQUESTOR + _HOD_SPECIFIC + _FACULTY_OWN + [
+            ("faculty_request",            "read",      "*"),  # dept scope enforced at handler body (M3 pattern)
             ("class_teacher_assignment",   "read",      "*"),
             ("class_teacher_assignment",   "write",     "*"),
             ("class_teacher_assignment",   "delete",    "*"),
-            ("class_coordinator_assignment", "read",    "*"),
-            ("class_coordinator_assignment", "write",   "*"),
-            ("class_coordinator_assignment", "delete",  "*"),
         ],
         "HOD_OFFICE":           _PUBLIC_READ + _LEAVE_REQUESTOR + [
             ("calendar_entry",             "read",      "*"),
@@ -719,28 +758,31 @@ def seed(session: Session) -> dict[str, int]:
             ("department_vision_mission",  "write",     "department"),
             # M5b-R3 V2 — HoD Office can bulk-import courses
             ("course_import",              "write",     "*"),
+            # M10 — faculty directory read (no self-edit: HOD_OFFICE is admin staff)
+            ("faculty",                    "read",      "*"),
         ],
         # M5b/M7 — approver/channel roles
-        "VC":                   _PUBLIC_READ + _LEAVE_REQUESTOR + _ANNOUNCEMENT_COMPOSER + [
+        "VC":                   _PUBLIC_READ + _LEAVE_REQUESTOR + _ANNOUNCEMENT_COMPOSER + _FACULTY_OWN + [
             ("approval_request",           "approve",   "*"),
         ],
-        "VC_OFFICE":            _PUBLIC_READ + _LEAVE_REQUESTOR + _ANNOUNCEMENT_COMPOSER,
-        "FINANCE_OFFICER":      _PUBLIC_READ + _LEAVE_REQUESTOR + _FINANCE_SPECIFIC + _ANNOUNCEMENT_COMPOSER,
+        "VC_OFFICE":            _PUBLIC_READ + _LEAVE_REQUESTOR + _ANNOUNCEMENT_COMPOSER + _FACULTY_OWN,
+        "FINANCE_OFFICER":      _PUBLIC_READ + _LEAVE_REQUESTOR + _FINANCE_SPECIFIC + _ANNOUNCEMENT_COMPOSER + _FACULTY_OWN,
         "CPC_CHAIRPERSON":      _PUBLIC_READ + _LEAVE_REQUESTOR + [
             ("approval_request",           "approve",   "*"),
+            ("faculty",                    "read",      "*"),
         ],
         # M8 — new roles
-        "CONTROLLER_OF_EXAMINATIONS": _PUBLIC_READ + _LEAVE_REQUESTOR + _CONTROLLER_OF_EXAMINATIONS_SPECIFIC + _ANNOUNCEMENT_COMPOSER,
-        "HR_HEAD":              _PUBLIC_READ + _LEAVE_REQUESTOR + _HR_HEAD_SPECIFIC + _ANNOUNCEMENT_COMPOSER,
-        "HR_OFFICE":            _PUBLIC_READ + _LEAVE_REQUESTOR + _HR_OFFICE_SPECIFIC,
-        # Faculty designation roles (M8 — inherit PUBLIC_READ + LEAVE_REQUESTOR)
-        "PROFESSOR":            _PUBLIC_READ + _LEAVE_REQUESTOR + [("approval_request", "approve", "*")],
-        "ASSOC_PROFESSOR":      _PUBLIC_READ + _LEAVE_REQUESTOR + [("approval_request", "approve", "*")],
-        "FACULTY":              _PUBLIC_READ + _LEAVE_REQUESTOR,
-        "LIBRARIAN":            _PUBLIC_READ + _LEAVE_REQUESTOR,
-        "PLACEMENT_OFFICER":    _PUBLIC_READ + _LEAVE_REQUESTOR + _ANNOUNCEMENT_COMPOSER,
-        "CESRC_COORDINATOR":    _PUBLIC_READ + _LEAVE_REQUESTOR + _ANNOUNCEMENT_COMPOSER,
-        "CENTRE_COORDINATOR":   _PUBLIC_READ + _LEAVE_REQUESTOR + _ANNOUNCEMENT_COMPOSER,
+        "CONTROLLER_OF_EXAMINATIONS": _PUBLIC_READ + _LEAVE_REQUESTOR + _CONTROLLER_OF_EXAMINATIONS_SPECIFIC + _ANNOUNCEMENT_COMPOSER + _FACULTY_OWN,
+        "HR_HEAD":              _PUBLIC_READ + _LEAVE_REQUESTOR + _HR_HEAD_SPECIFIC + _ANNOUNCEMENT_COMPOSER + _FACULTY_OWN + _FACULTY_ADMIN + _FACULTY_SENSITIVE_READ,
+        "HR_OFFICE":            _PUBLIC_READ + _LEAVE_REQUESTOR + _HR_OFFICE_SPECIFIC + _FACULTY_OWN + _FACULTY_ADMIN + _FACULTY_SENSITIVE_READ,
+        # Faculty designation roles (M8 — inherit PUBLIC_READ + LEAVE_REQUESTOR; M10 adds faculty perms)
+        "PROFESSOR":            _PUBLIC_READ + _LEAVE_REQUESTOR + _FACULTY_OWN + [("approval_request", "approve", "*")],
+        "ASSOC_PROFESSOR":      _PUBLIC_READ + _LEAVE_REQUESTOR + _FACULTY_OWN + [("approval_request", "approve", "*")],
+        "FACULTY":              _PUBLIC_READ + _LEAVE_REQUESTOR + _FACULTY_OWN,
+        "LIBRARIAN":            _PUBLIC_READ + _LEAVE_REQUESTOR + _FACULTY_OWN,
+        "PLACEMENT_OFFICER":    _PUBLIC_READ + _LEAVE_REQUESTOR + _ANNOUNCEMENT_COMPOSER + _FACULTY_OWN,
+        "CESRC_COORDINATOR":    _PUBLIC_READ + _LEAVE_REQUESTOR + _ANNOUNCEMENT_COMPOSER + _FACULTY_OWN,
+        "CENTRE_COORDINATOR":   _PUBLIC_READ + _LEAVE_REQUESTOR + _ANNOUNCEMENT_COMPOSER + _FACULTY_OWN,
         "STUDENT":              _PUBLIC_READ,
         "BASIC_USER":           _PUBLIC_READ,
     }
@@ -2105,12 +2147,18 @@ def seed(session: Session) -> dict[str, int]:
     # M5b Session 7: Purchase Policy & Approval Config (E-007)
     # ─────────────────────────────────────────────────────────────────────────
 
-    # ── Designation vocabulary (§8.3 — extensible, editable via admin UI) ────
+    # ── Designation vocabulary (§8.3 — M10 Phase 1B expanded taxonomy) ─────────
+    # Legacy codes (senior_professor, professor, associate_professor,
+    # assistant_professor) are soft-deleted by migration cb2de963f0b8.
+    # This seed inserts only the 7 new codes (idempotent via ON CONFLICT DO NOTHING).
     designations_raw = [
-        ("senior_professor",    "Senior Professor",    1),
-        ("professor",           "Professor",           2),
-        ("associate_professor", "Associate Professor", 3),
-        ("assistant_professor", "Assistant Professor", 4),
+        ("sr_prof",       "Senior Professor",                        1),
+        ("prof",          "Professor",                               2),
+        ("assoc_prof",    "Associate Professor",                     3),
+        ("asst_prof_l10", "Assistant Professor (Academic Level 10)", 4),
+        ("asst_prof_l11", "Assistant Professor (Academic Level 11)", 5),
+        ("asst_prof_l12", "Assistant Professor (Academic Level 12)", 6),
+        ("instructor",    "Instructor",                              7),
     ]
     desig_inserted = 0
     for code, name, rank in designations_raw:
@@ -2252,7 +2300,7 @@ def seed(session: Session) -> dict[str, int]:
         .values(
             committee_type="campus_purchase_committee",
             eligible_designations=[
-                "senior_professor", "professor", "associate_professor",
+                "sr_prof", "prof", "assoc_prof",
             ],
             faculty_member_count=3,
             members_from_different_departments=True,
@@ -2278,7 +2326,7 @@ def seed(session: Session) -> dict[str, int]:
         .values(
             committee_type="central_purchase_committee",
             eligible_designations=[
-                "senior_professor", "professor", "associate_professor",
+                "sr_prof", "prof", "assoc_prof",
             ],
             faculty_member_count=3,
             members_from_different_departments=True,
@@ -2599,8 +2647,351 @@ def seed(session: Session) -> dict[str, int]:
     )
     counts["leave_credit_policies"] = _exec_insert(session, cl_policy_stmt)
 
+    # ── Faculty seed backfill (M10 Phase 1B) ─────────────────────────────────
+    counts["faculty_backfill"] = _seed_faculty_backfill(session)
+
+    # ── ApprovalProcess — faculty_noc (M10 Phase 5B) ─────────────────────────
+    counts["faculty_noc_process"] = _seed_faculty_noc_process(session)
+
+    # ── ApprovalProcess — 4 linear faculty processes (M10 Phase 5D) ──────────
+    counts["faculty_invited_talk_process"] = _seed_faculty_simple_linear_process(
+        session,
+        code="faculty_invited_talk",
+        title="Faculty Invited Talk Request",
+        channel_role_codes=["HOD", "DIRECTOR"],
+    )
+    counts["faculty_professional_membership_process"] = _seed_faculty_simple_linear_process(
+        session,
+        code="faculty_professional_membership",
+        title="Faculty Professional Body Membership Request",
+        channel_role_codes=["HOD", "DIRECTOR"],
+    )
+    counts["faculty_wfh_process"] = _seed_faculty_simple_linear_process(
+        session,
+        code="faculty_wfh",
+        title="Faculty Work From Home Request",
+        channel_role_codes=["HOD", "DIRECTOR"],
+    )
+    counts["faculty_field_visit_process"] = _seed_faculty_simple_linear_process(
+        session,
+        code="faculty_field_visit",
+        title="Faculty Field/Industry Visit Request",
+        channel_role_codes=["HOD", "DIRECTOR"],
+    )
+
+    # ── ApprovalProcess — 3 terminal-variant faculty processes (M10 Phase 5E) ─
+    counts["faculty_apc_process"] = _seed_faculty_simple_linear_process(
+        session,
+        code="faculty_apc",
+        title="Faculty Article Processing Charge Request",
+        channel_role_codes=["HOD", "FINANCE_OFFICER", "VC"],
+    )
+    counts["faculty_travel_process"] = _seed_faculty_simple_linear_process(
+        session,
+        code="faculty_travel",
+        title="Faculty Travel Request",
+        channel_role_codes=["HOD", "DIRECTOR", "VC"],
+    )
+    counts["faculty_external_grant_proposal_process"] = _seed_faculty_simple_linear_process(
+        session,
+        code="faculty_external_grant_proposal",
+        title="Faculty External Grant Proposal Submission Request",
+        channel_role_codes=["HOD", "REGISTRAR"],
+    )
+
+    # ── ApprovalProcess — 3 OR-set faculty processes (M10 Phase 5F) ──────────
+    counts["faculty_fdp_process"] = _seed_faculty_simple_linear_process(
+        session,
+        code="faculty_fdp",
+        title="Faculty Development Programme Request",
+        channel_role_codes=["HOD", "DIRECTOR", "VC"],
+        or_set_stages={2: [("director_at_requestor_campus", "Director"), ("dean_at_requestor_campus", "Dean")]},
+        stage_pick_modes_json={"1": "approver", "2": "approver"},
+    )
+    counts["faculty_conference_process"] = _seed_faculty_simple_linear_process(
+        session,
+        code="faculty_conference",
+        title="Faculty Conference/Symposium/Seminar/Workshop Request",
+        channel_role_codes=["HOD", "DIRECTOR", "VC"],
+        or_set_stages={2: [("director_at_requestor_campus", "Director"), ("dean_at_requestor_campus", "Dean")]},
+        stage_pick_modes_json={"1": "approver", "2": "approver"},
+    )
+    counts["faculty_inhouse_research_funding_process"] = _seed_faculty_simple_linear_process(
+        session,
+        code="faculty_inhouse_research_funding",
+        title="Faculty In-house Research Funding Request",
+        channel_role_codes=["HOD", "DEAN", "REGISTRAR", "VC"],
+        or_set_stages={2: [("dean_at_requestor_campus", "Dean"), ("director_at_requestor_campus", "Director")]},
+        stage_pick_modes_json={"1": "approver", "2": "approver"},
+    )
+
     session.commit()
     return counts
+
+
+def _seed_faculty_backfill(session: Session) -> int:
+    """Create Faculty rows for the 7 regular_teaching seeded users.
+
+    Idempotent: upsert on uq_faculties_employee_id (ON CONFLICT DO NOTHING).
+    If any referenced user/dept/campus/designation is absent, raises KeyError
+    to surface the gap rather than silently skipping rows.
+
+    Mapping frozen in M10 Phase 1B prompt (2026-06-14, Bala authority).
+    """
+    from datetime import date as _date
+
+    # Resolve FK UUIDs from already-seeded rows.
+    dmacs = session.exec(
+        select(Department).where(Department.code == "DMACS", Department.is_deleted == False)  # noqa: E712
+    ).first()
+    if dmacs is None:
+        raise KeyError("Dept DMACS not found in seed — cannot backfill Faculty rows")
+
+    psn = session.exec(
+        select(Campus).where(Campus.code == "PSN", Campus.is_deleted == False)  # noqa: E712
+    ).first()
+    if psn is None:
+        raise KeyError("Campus PSN not found in seed — cannot backfill Faculty rows")
+
+    # Designation lookup: code -> Designation row (active only)
+    desig_rows = session.exec(
+        select(Designation).where(Designation.is_deleted == False)  # noqa: E712
+    ).all()
+    desig_map = {d.code: d for d in desig_rows}
+
+    # Backfill spec: (username, employee_id, desig_code, first_name, last_name,
+    #                  phone, ec_name, ec_relation, ec_phone, is_phd, joining_date)
+    backfill = [
+        ("vc_user",             "DEV-FAC-0001", "sr_prof",      "Vc",      "DevUser",  "9000000001", "Test Contact 1", "Spouse", "9000000101", True,  _date(2010, 6, 1)),
+        ("dean_sci",            "DEV-FAC-0002", "prof",         "Dean",    "DevSci",   "9000000002", "Test Contact 2", "Spouse", "9000000102", True,  _date(2012, 6, 1)),
+        ("director_psn",        "DEV-FAC-0003", "prof",         "Director","DevPsn",   "9000000003", "Test Contact 3", "Spouse", "9000000103", True,  _date(2013, 6, 1)),
+        ("hod_dmacs",           "DEV-FAC-0004", "prof",         "Hod",     "DevDmacs", "9000000004", "Test Contact 4", "Spouse", "9000000104", True,  _date(2014, 6, 1)),
+        ("ahod_dmacs",          "DEV-FAC-0005", "assoc_prof",   "Ahod",    "DevDmacs", "9000000005", "Test Contact 5", "Spouse", "9000000105", True,  _date(2016, 6, 1)),
+        ("deputy_director_psn", "DEV-FAC-0006", "assoc_prof",   "Deputy",  "DevPsn",   "9000000006", "Test Contact 6", "Spouse", "9000000106", True,  _date(2017, 6, 1)),
+        ("faculty_user",        "DEV-FAC-0007", "asst_prof_l10","Faculty", "DevUser",  "9000000007", "Test Contact 7", "Spouse", "9000000107", False, _date(2022, 6, 1)),
+    ]
+
+    inserted = 0
+    for username, emp_id, desig_code, first_name, last_name, phone, ec_name, ec_rel, ec_phone, is_phd, joining_date in backfill:
+        user = session.exec(
+            select(User).where(User.username == username, User.is_deleted == False)  # noqa: E712
+        ).first()
+        if user is None:
+            raise KeyError(f"User {username!r} not found — cannot backfill Faculty row")
+
+        desig = desig_map.get(desig_code)
+        if desig is None:
+            raise KeyError(f"Designation {desig_code!r} not found — cannot backfill Faculty row for {username!r}")
+
+        title = "Dr." if is_phd else "Mr."
+        inserted += _exec_insert(
+            session,
+            pg_insert(Faculty).values(
+                user_id=user.id,
+                employee_id=emp_id,
+                title=title,
+                first_name=first_name,
+                last_name=last_name,
+                designation_id=desig.id,
+                department_id=dmacs.id,
+                campus_id=psn.id,
+                joining_date=joining_date,
+                is_vacation_employee=True,
+                phone=phone,
+                emergency_contact_name=ec_name,
+                emergency_contact_relation=ec_rel,
+                emergency_contact_phone=ec_phone,
+                is_phd=is_phd,
+            ).on_conflict_do_nothing(constraint="uq_faculties_employee_id"),
+        )
+
+    return inserted
+
+
+def _seed_faculty_simple_linear_process(
+    session: Session,
+    *,
+    code: str,
+    title: str,
+    channel_role_codes: list[str],
+    or_set_stages: "dict[int, list[tuple[str, str]]] | None" = None,
+    stage_pick_modes_json: "dict[str, str] | None" = None,
+) -> int:
+    """Seed a faculty_* ApprovalProcess with Stage 1 resolver + optional OR-set stages (idempotent).
+
+    Channel shape: dept_head_at_requestor_campus resolver at Stage 1; remaining
+    channel_role_codes drive legacy linear routing for subsequent stages unless
+    or_set_stages is provided.
+
+    or_set_stages: dict mapping stage_index → list of (resolver_name, label) tuples.
+    Each tuple becomes one ApprovalStageOption row. Idempotent: guarded by
+    (approval_process_id, stage_index, resolver_name).
+
+    stage_pick_modes_json: used in the INSERT values (default {"1": "approver"}).
+    Existing callers omit both new params — behavior unchanged (backward-compatible).
+
+    Returns total rows inserted (0–N where N = 1 stage-1 option + len(or_set options)).
+    """
+    from datetime import UTC, datetime
+
+    from durgam.models.crosscutting import ApprovalProcess, ApprovalStageOption
+
+    pick_modes = stage_pick_modes_json if stage_pick_modes_json is not None else {"1": "approver"}
+
+    inserted = _exec_insert(
+        session,
+        pg_insert(ApprovalProcess)
+        .values(
+            code=code,
+            title=title,
+            requestor_role_codes=["FACULTY"],
+            channel_role_codes=channel_role_codes,
+            is_finance=False,
+            stage_pick_modes_json=pick_modes,
+        )
+        .on_conflict_do_nothing(constraint="uq_approval_processes_code"),
+    )
+
+    process = session.exec(
+        select(ApprovalProcess).where(
+            ApprovalProcess.code == code,
+            ApprovalProcess.is_deleted == False,  # noqa: E712
+        )
+    ).first()
+
+    if process is not None:
+        # Idempotently set attachment config from defaults (preserves manual sys-admin edits).
+        if process.max_upward_attachments == 0 and process.allowed_attachment_mime_types_json is None:
+            process.max_upward_attachments = 3
+            process.allowed_attachment_mime_types_json = ["application/pdf"]
+            session.add(process)
+            session.flush()
+
+        # Stage 1: resolver option (always seeded).
+        existing_option = session.exec(
+            select(ApprovalStageOption).where(
+                ApprovalStageOption.approval_process_id == process.id,
+                ApprovalStageOption.stage_index == 1,
+                ApprovalStageOption.resolver_name == "dept_head_at_requestor_campus",
+                ApprovalStageOption.is_deleted == False,  # noqa: E712
+            )
+        ).first()
+        if existing_option is None:
+            now = datetime.now(UTC)
+            option = ApprovalStageOption(
+                approval_process_id=process.id,
+                stage_index=1,
+                resolver_name="dept_head_at_requestor_campus",
+                label="Head of Department",
+                sort_order=0,
+                created_at=now,
+                updated_at=now,
+            )
+            session.add(option)
+            session.flush()
+            inserted += 1
+
+        # OR-set stages: one ApprovalStageOption per (resolver_name, label) tuple.
+        if or_set_stages:
+            for stage_idx, members in or_set_stages.items():
+                for sort_order, (resolver_nm, label) in enumerate(members):
+                    exists = session.exec(
+                        select(ApprovalStageOption).where(
+                            ApprovalStageOption.approval_process_id == process.id,
+                            ApprovalStageOption.stage_index == stage_idx,
+                            ApprovalStageOption.resolver_name == resolver_nm,
+                            ApprovalStageOption.is_deleted == False,  # noqa: E712
+                        )
+                    ).first()
+                    if exists is None:
+                        now = datetime.now(UTC)
+                        opt = ApprovalStageOption(
+                            approval_process_id=process.id,
+                            stage_index=stage_idx,
+                            resolver_name=resolver_nm,
+                            label=label,
+                            sort_order=sort_order,
+                            created_at=now,
+                            updated_at=now,
+                        )
+                        session.add(opt)
+                        session.flush()
+                        inserted += 1
+
+    return inserted
+
+
+def _seed_faculty_noc_process(session: Session) -> int:
+    """Seed the faculty_noc ApprovalProcess and its Stage 1 OR-set option (idempotent).
+
+    Stage 1: OR-set with pick_mode='approver' — pool is resolved by
+    'dept_head_at_requestor_campus' (HoD→AhoD fallback for the requestor's dept+campus).
+    Stage 2: legacy Registrar via channel_role_codes[1].
+
+    Returns total rows inserted (0–2).
+    """
+    from datetime import UTC, datetime
+
+    from durgam.models.crosscutting import ApprovalProcess, ApprovalStageOption
+
+    inserted = _exec_insert(
+        session,
+        pg_insert(ApprovalProcess)
+        .values(
+            code="faculty_noc",
+            title="Faculty No Objection Certificate",
+            requestor_role_codes=["FACULTY"],
+            channel_role_codes=["HOD", "REGISTRAR"],
+            is_finance=False,
+            stage_pick_modes_json={"1": "approver"},
+        )
+        .on_conflict_do_nothing(constraint="uq_approval_processes_code"),
+    )
+
+    process = session.exec(
+        select(ApprovalProcess).where(
+            ApprovalProcess.code == "faculty_noc",
+            ApprovalProcess.is_deleted == False,  # noqa: E712
+        )
+    ).first()
+
+    if process is not None:
+        # Phase 6: idempotently upgrade attachment config from defaults.
+        # Only update when values are still at defaults (preserves manual sys admin edits).
+        if process.max_upward_attachments == 0 and process.allowed_attachment_mime_types_json is None:
+            process.max_upward_attachments = 3
+            process.allowed_attachment_mime_types_json = ["application/pdf"]
+            session.add(process)
+            session.flush()
+        # Phase 7G: enable downward attachments for approver NOC response documents.
+        if process.max_downward_attachments == 0 and not process.requires_downward_attachments:
+            process.max_downward_attachments = 3
+            session.add(process)
+            session.flush()
+        existing_option = session.exec(
+            select(ApprovalStageOption).where(
+                ApprovalStageOption.approval_process_id == process.id,
+                ApprovalStageOption.stage_index == 1,
+                ApprovalStageOption.resolver_name == "dept_head_at_requestor_campus",
+                ApprovalStageOption.is_deleted == False,  # noqa: E712
+            )
+        ).first()
+        if existing_option is None:
+            now = datetime.now(UTC)
+            option = ApprovalStageOption(
+                approval_process_id=process.id,
+                stage_index=1,
+                resolver_name="dept_head_at_requestor_campus",
+                label="Head of Department",
+                sort_order=0,
+                created_at=now,
+                updated_at=now,
+            )
+            session.add(option)
+            session.flush()
+            inserted += 1
+
+    return inserted
 
 
 def main() -> None:

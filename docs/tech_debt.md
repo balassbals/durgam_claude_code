@@ -682,17 +682,21 @@ the direct and table-based pathways.
 
 ### TD-038 — Withdrawal notification recipient resolution is university-wide (no campus-dept scope)
 
-**Location:** `durgam/services/leave_notification.py` (M8.1 Phase 5, not yet created); planned scope: `resolve_withdrawal_notification_recipients()`.
+**STATUS: Open — deferred to M11.** An initial M10 Phase 9 attempt (commit `8923abf`, discarded by hard-reset) implemented the campus/dept filter in `resolve_withdrawal_notification_recipients`, but it introduced order-dependent fixture contamination across the test suite — the production code passed in isolation, yet cross-test session/DB state varied unpredictably between test orderings (non-deterministic suite). The fix was reverted; the M10 Faculty model (`Faculty.campus_id`/`department_id`) now provides the linkage the original trigger waited on, so the remaining work is the filter itself **plus** proper fixture-isolation infrastructure (a separate workstream). Re-scope both together in M11 (retargeted at the M10 close docs sweep — M10 Phase 13 sweep only closed the TD-047/051/058/064/069/087 cluster; TD-038 carries forward).
+
+**Location:** `durgam/services/leave_notification.py`; scope: `resolve_withdrawal_notification_recipients()`.
 
 **What it is:** E-017 withdrawal notifications will notify HOD/AHOD/DIRECTOR roles using `UserRole.scope_type` and `scope_id` matching. The resolution function walks the role list but has no access to the employee-to-campus mapping (which belongs to the M10 Faculty model). In M8.1 the function returns all role-holders at any scope; it cannot filter by the employee's campus or department. Recipients from unrelated campuses or departments will receive notifications they don't need.
 
 **Why this is not an M8.1 blocker:** Withdrawal notifications are informational. An excess recipient is annoying but not harmful; a missed recipient would be worse. Conservative over-notification is acceptable until the Faculty/Campus assignment model exists.
 
-**Trigger to re-open:** M10 Faculty module ships the employee-to-campus/department linkage table. Resolution: pass the employee's campus UUID into `resolve_withdrawal_notification_recipients` and add a `.where(scope_id == campus_id)` filter to the HOD/AHOD lookup.
+**Trigger to re-open:** M11. The M10 Faculty module shipped the employee-to-campus/department linkage table (`Faculty.campus_id`/`department_id`, Phase 1A) — the linkage this TD was waiting on now exists. Remaining work: pass the employee's campus UUID into `resolve_withdrawal_notification_recipients` and add a `.where(scope_id == campus_id)` filter to the HOD/AHOD lookup, plus the fixture-isolation infrastructure noted above.
 
 ---
 
 ### TD-039 — Leave balance and request admin pages lack campus-scope enforcement
+
+**Status:** Open — deferred to M11.
 
 **Location:** `durgam/pages/admin/leave_balance_admin.py` and `durgam/pages/admin/leave_request_admin.py` (M8.1 Phases 7–8, not yet created); planned permission: `leave_balance_admin:write:*` and `leave_request_admin:write:*`.
 
@@ -700,7 +704,7 @@ the direct and table-based pathways.
 
 **Why this is not an M8.1 blocker:** Employee-to-campus assignment requires the M10 Faculty model. The pages are used by Registrar-family roles in v1; DIRECTOR-tier usage deferred.
 
-**Trigger to re-open:** M10 Faculty module ships employee-to-campus linkage. Resolution: add a `campus_filter` query argument to `admin_search_balances` and `admin_list_requests` based on the actor's `scope_id`.
+**Trigger to re-open:** M11. The M10 Faculty module shipped the employee-to-campus linkage (`Faculty.campus_id`). Resolution: add a `campus_filter` query argument to `admin_search_balances` and `admin_list_requests` based on the actor's `scope_id`.
 
 ---
 
@@ -873,7 +877,7 @@ as TD-062 for a future tightening pass.
 
 ### TD-054 — Auto-announcement `composer_role_code = "SYSTEM"` literal
 
-**Phase:** M9 Phase 8a
+**Phase:** M9 Phase 8a. **Status:** Open — deferred to M11.
 
 **Symptom:** Auto-announcements created via `_run_post_approval` use the literal
 string `"SYSTEM"` as `composer_role_code` because the approver's actual composer-
@@ -895,7 +899,7 @@ model with a nullable `composer_role_code` for `source_type="auto"` rows.
 
 ### TD-056 — Announcement attachments: no download-permission restriction
 
-**Phase:** M9 Phase 8b
+**Phase:** M9 Phase 8b. **Status:** Open — deferred to M11.
 
 **Symptom:** Files uploaded with `purpose="announcement_attachment"` are downloadable
 by any authenticated user with `file_asset:read` permission (the permissive default
@@ -921,7 +925,7 @@ URLs (MinIO presigned URLs) for attachments with a short TTL.
 
 ### TD-057 — Announcement attachments: single-file limit enforced only by UI
 
-**Phase:** M9 Phase 8b
+**Phase:** M9 Phase 8b. **Status:** Open — deferred to M11.
 
 **Symptom:** The spec allows one attachment per announcement (M9 design decision).
 This limit is enforced only at the UI layer (one file upload zone, no multi-select).
@@ -942,7 +946,7 @@ When the spec is relaxed to N attachments, replace `1` with the configured limit
 
 ### TD-062 — Decorator meta-test: data presence ≠ auth resolution for scoped users
 
-**Phase:** M9 Phase 8b.2
+**Phase:** M9 Phase 8b.2. **Status:** Open — deferred to M11.
 
 **Symptom:** `test_announcement_decorator_actions.py` verified that every `@require_role`
 decorator's `(resource, action)` pair has a seeded `Permission` row. This did NOT catch
@@ -1019,29 +1023,33 @@ the `scope_type not in ("*", "own")` bypass semantics as a live runtime check.
 ### TD-047 — True baseline is ~61 failures, not 22 (TD-044 undercount)
 
 **Phase:** M9 Phase 7 (baseline recalibrated after seeded_db contamination spread).
-**Severity:** Low — administrative.
+**Severity:** Low — administrative. **Status: Closed (M10 Phase 13 docs sweep).**
 
 **Root cause:** TD-044 was filed at Phase 2 when only `tests/unit/` failures were counted (22). Full-suite `pytest tests/` runs reveal additional order-dependent failures in `tests/integration/` (seeded_db_engine contaminating db_session tests). The 61-failure baseline is the correct operational number from Phase 7 onward.
 
 **Resolution path:** Update TD-044 to note the 61-failure operational baseline. Triage and fix the contamination at a test-hygiene milestone (likely a small M9.1 or between M9 and M10).
+
+**Closed:** Administrative — the 61-failure baseline is documented here and in gate verification notes. Contamination fix deferred to a dedicated test-hygiene milestone.
 
 ---
 
 ### TD-051 — Seed re-run discipline undocumented for fresh-clone setup
 
 **Phase:** M9 Phase 7 (discovered when walkthrough failed due to missing seed data).
-**Severity:** Low — affects new developer setup, not production.
+**Severity:** Low — affects new developer setup, not production. **Status: Closed (M10 Phase 13).**
 
 **Root cause:** The CLAUDE.md Session start checklist does not include `uv run python scripts/seed.py` as a step after `alembic upgrade head` on a fresh clone. A developer who migrates the DB but does not seed it sees `PermissionDenied` for all announcement operations, which is hard to diagnose.
 
 **Resolution path:** Add a Step 5 to the Session start checklist in CLAUDE.md: "If this is a fresh clone or DB was reset: `uv run python scripts/seed.py`." Also document in runbook.md (already added in Phase 9 sweep).
+
+**Closed (M10 Phase 13):** Step 5 added to CLAUDE.md Session start checklist.
 
 ---
 
 ### TD-053 — Auth meta-test: decorator (action, resource) existence ≠ runtime resolution for scoped users
 
 **Phase:** M9 Phase 8b.1 (meta-test filed); Phase 8b.2 (scoped-role gap confirmed).
-**Severity:** Medium — bugs in this class bypass CI.
+**Severity:** Medium — bugs in this class bypass CI. **Status:** Open — deferred to M11.
 
 **Root cause:** `test_announcement_decorator_actions.py` checks that every `@require_role` decorator's `(action, resource)` pair has a matching seeded `Permission` row. This confirmed correctness at the schema level but not at the runtime `can()` resolution level. Phase 8b.2 showed that a campus-scoped `DIRECTOR` was denied despite having a valid permission row — because `can()` filtered out their `UserRole` before examining permissions (pre-8b.2 bug). The meta-test would have missed this.
 
@@ -1063,11 +1071,13 @@ the `scope_type not in ("*", "own")` bypass semantics as a live runtime check.
 ### TD-058 — CC test-suite report numbers were paraphrased, not verbatim
 
 **Phase:** M9 (cross-phase observation; formalized in Phase 9 sweep).
-**Severity:** Low — process discipline only.
+**Severity:** Low — process discipline only. **Status: Closed (M10 Phase 13 docs sweep).**
 
 **Root cause:** Multiple phase reports (Phase 6a "898", Phase 6b "1474", Phase 8b "87") stated test counts that didn't match actual `pytest` output. The root cause is that CC paraphrased suite results instead of pasting verbatim `tail -3` output. This made it impossible to verify whether regressions were introduced between phases.
 
 **Resolution path:** All phase reports must paste verbatim `pytest ... 2>&1 | tail -3` output. The raw output mandate is documented in `docs/prompts/gate_verification.md` M9 lessons section. `docs/milestones/M9.md` Phase 9 row corrects the Phase 8c stale numbers.
+
+**Closed:** Process discipline documented and enforced since M9 Phase 9. Verbatim output now standard in all phase reports.
 
 ---
 
@@ -1108,7 +1118,7 @@ Protocol established: before declaring a test suite baseline, the full non-E2E s
 
 ### TD-064 — E-017 E2E tests xfailed: `_create_approved_leave` missing `half_day` column
 
-**Phase:** M9 Phase 10.1. **Status: Open.**
+**Phase:** M9 Phase 10.1. **Status: Closed (M10 Phase 13, commit `d3c069c`).**
 
 **Location:** `tests/e2e/test_leave_withdraw_approved.py` — `TestWithdrawApprovedLeave` (all 3 tests).
 
@@ -1116,7 +1126,9 @@ Protocol established: before declaring a test suite baseline, the full non-E2E s
 
 All 3 tests are marked `@pytest.mark.xfail(strict=False, reason="E-017 ...")` so the M9 E2E gate is green. The underlying E-017 feature (withdraw post-approval) was not implemented in M9.
 
-**Trigger to re-open:** When E-017 is scheduled for implementation, the fix requires two changes: (1) add `half_day = false` to the INSERT in `_create_approved_leave()`; (2) implement the post-approval withdraw service method and UI. Remove the xfail decorators and verify all 3 tests pass.
+**Closed (M10 Phase 13):** `half_day = false` added to the INSERT in `_create_approved_leave()`. The fixture setup no longer errors on the missing column — TD-064's original scope (the missing-column fixture bug) is fully fixed. Note: the `@pytest.mark.xfail` decorators on these 3 tests still carry the stale reason text `"E-017 ..."` even though E-017 (withdraw post-approval) was actually implemented at M8.1 — that xfail-removal / re-verification is a separate, not-yet-filed test-hygiene follow-up outside TD-064's scope, not a re-opening of this TD.
+
+**Trigger to re-open:** N/A — closed. A future test-hygiene pass may separately re-verify and un-xfail `TestWithdrawApprovedLeave` now that E-017 is shipped.
 
 ---
 
@@ -1136,7 +1148,7 @@ The underlying E-022 feature (admin manual edit of leave records) may be partial
 
 ### TD-066 — Composer scope label resolved at display time, not stored
 
-**Phase:** M9 Phase 10.2. **Status: Open.**
+**Phase:** M9 Phase 10.2. **Status: Open — deferred to M11.**
 
 **Location:** `durgam/services/announcement.py` — `_resolve_composer_scope_label()`; called from `durgam/states/announcements.py` (`load_announcements`, `open_detail`) and `durgam/pages/shared/recent_announcements_widget.py` (`load_widget_data`).
 
@@ -1150,7 +1162,7 @@ The underlying E-022 feature (admin manual edit of leave records) may be partial
 
 ### TD-067 — `_resolve_composer_scope_label` underscore convention vs cross-module import
 
-**Phase:** M9 Phase 10.2. **Status:** Open.
+**Phase:** M9 Phase 10.2. **Status:** Open — deferred to M11.
 
 **Location:** `durgam/services/announcement.py` exposes `_resolve_composer_scope_label` as a module-private function (leading underscore), but it is imported across module boundaries from `durgam/states/announcements.py` and `durgam/pages/shared/recent_announcements_widget.py`.
 
@@ -1178,3 +1190,369 @@ The underlying E-022 feature (admin manual edit of leave records) may be partial
 3. Add regression test that seeds twice on fresh DB and asserts user count unchanged after second run.
 
 **Priority:** Address at the start of M10 (Faculty Module) since faculty seed is likely a touchpoint.
+
+---
+
+### TD-069 — non_regular_faculty FK metadata skew
+
+**Phase:** M10 Phase 1A (filed at Phase 1B). **Status: Resolved (M10 Phase 13, commit `d3c069c`).**
+
+**Location:** `durgam/models/config_anchors.py` — `NonRegularFaculty.approval_request_id` FK; existing DB constraint `fk_nrf_approval_request_id` with `ondelete='SET NULL'`.
+
+**What it is:** Alembic autogenerate at Phase 1A detected a name + ondelete mismatch between the DB constraint (named `fk_nrf_approval_request_id` with `ondelete='SET NULL'`) and the model definition (unnamed constraint, no ondelete). This is pre-existing metadata skew from M5b/M7 and was excluded from the Phase 1A migration to keep scope tight.
+
+**Impact:** None functionally — DB behaviour is correct (SET NULL on referenced row delete). Purely declarative skew that surfaces as autogen noise on future migrations involving NonRegularFaculty.
+
+**Resolved (M10 Phase 13):** Used `sa_column=sa.Column(sa.ForeignKey(..., name="fk_nrf_approval_request_id", ondelete="SET NULL"), ...)` in the model. No migration needed — DB is already correct.
+
+---
+
+### TD-070 — Migration test isolation: seeded-DB contamination from downgrade cycles
+
+**Phase:** M10 Phase 1B (filed at Phase 2). **Status:** Open.
+
+**Location:** `tests/integration/test_migrations.py` — `test_m10_phase1b_designation_expansion`.
+
+**What it is:** Migration tests that run a downgrade/upgrade cycle on the test DB risk contaminating the seeded fixture shared by the rest of the integration suite. `_reset_test_db()` drops all SQLModel tables + alembic_version and re-migrates — but it does NOT re-seed, so subsequent `seeded_session` tests in the same pytest session see an empty DB and fail in cascading fashion. The Phase 1B migration test works around this by (a) NOT calling `_reset_test_db()`, (b) using `stamp head` + targeted downgrade/upgrade instead, and (c) cleaning up the manually-inserted legacy rows in a `finally` block. The trade-off: the reverse (downgrade-from-head) direction is verified only structurally (the downgrade SQL runs as part of the targeted cycle), not with full before/after assertions.
+
+**Impact:** Medium. Downgrade-direction tests are weaker than ideal. A future data migration test that requires `_reset_test_db()` for correctness will need to run in isolation (separate pytest session or separate test DB) or re-seed after the reset.
+
+**Resolution path:** Long-term: give migration tests their own dedicated DB (`settings.migration_test_database_url`) independent of the integration seeded DB, so `_reset_test_db()` can be called freely without contaminating `seeded_db_engine`. Short-term: document the constraint at the top of `test_migrations.py` and enforce it in code review.
+
+**Priority:** Medium. Address before any milestone that introduces a data migration requiring full round-trip assertions (both forward and reverse with data-state verification).
+
+### TD-071 — Resolver `_resolve_dept_head_at_requestor_campus` has wrong semantic
+
+**Phase:** M10 Phase 3A. **Status:** Resolved. **Priority:** HIGH (blocks Phase 3B real-process wiring).
+
+**Location:** `durgam/services/approval_resolvers.py` — `_resolve_dept_head_at_requestor_campus`.
+
+**What it is:** The Q4a freeze specifies a HoD → AhoD → [] fallback chain that finds the head of the requestor's *specific department* (filtered to their campus). The current implementation returns the union of HoDs across *every department at the requestor's campus(es)* and has no AhoD fallback. Self-consistent with its 6 tests; semantically wrong against Q4a.
+
+**Concrete bugs:**
+1. Uses `UserRole.scope_type='department'` to derive requestor's dept, instead of `Faculty.department_id` (Phase 1A Faculty model). May pick up multiple depts if requestor holds multiple dept-scoped roles.
+2. Collects HoDs of *every* dept on the campus, not just the requestor's specific dept.
+3. No AhoD fallback when HoD is vacant.
+4. No `Faculty.campus_id` filter on the HoD candidates (the HoD's physical campus is not checked).
+
+**Resolution path (Phase 3B prompt):** Rewrite to:
+1. Look up requestor's `Faculty` row by `user_id`; extract `department_id` + `campus_id`.
+2. Query `User` joined to `UserRole` + `Faculty` for `Role.code='HOD'` scoped to that `department_id`, filtered by `Faculty.campus_id` matching requestor's campus.
+3. If empty, repeat with `Role.code='AHOD'`.
+4. Return `[user]` or `[]`.
+
+The replacement function body is staged in the Phase 3B prompt drafted by Claude (see chat). Tests in `tests/integration/test_approval_resolve_stage_candidates.py` must be rewritten to assert against ground-truth Q4a semantic (HoD vs AhoD vs neither) using seeded faculty rows.
+
+**Impact if not fixed before Phase 5:** FacultyRequest approval flows route to wrong approvers across the institute.
+
+**Resolution (M10 Phase 3B, aa6f52a58a542c16f07fa9fba43d1b653e686de5):** Resolver rewritten per the resolution path. Uses `Faculty.department_id` + `Faculty.campus_id` to identify requestor's specific dept and campus. HoD -> AhoD -> [] fallback. Unit-tested in `tests/unit/test_approval_resolvers_unit.py`. Integration-level testing deferred to Phase 5 wiring -- see TD-072.
+
+### TD-072 — `_resolve_dept_head_at_requestor_campus` lacks integration-level test
+
+**Phase:** M10 Phase 3B (filed during recovery). **Status:** Open. **Priority:** Medium.
+
+**Location:** `tests/integration/test_approval_resolve_stage_candidates.py` and seeded data.
+
+**What it is:** The resolver is unit-tested in `tests/unit/test_approval_resolvers_unit.py` with mocked sessions, verifying semantic logic (HoD found, AhoD fallback, no Faculty, etc.). No integration test exercises the resolver against real seeded data.
+
+The Phase 3B prompt originally specified 4 ground-truth integration tests using `seeded_session` with `session.delete()` + `flush()` to set up the AhoD-fallback scenario. Those tests caused 28+ cascading failures because `seeded_session`'s rollback doesn't reliably revert mutations against the session-scoped `seeded_db_engine`'s pooled connections. The tests were dropped during Phase 3B recovery (2026-06-15).
+
+**Resolution path:** When Phase 5 wires FacultyRequest to use OR-set with this resolver, end-to-end integration tests will exercise the resolver against real seeded data naturally. Alternatively, write dedicated integration tests using `db_session` (function-scoped, fresh schema) that create synthetic Campus + Department + Roles + Users + Faculty from scratch — significant boilerplate but proper isolation.
+
+**Impact if not fixed:** Resolver logic is covered by unit tests with mocks but not by integration tests with real DB queries. Schema-level bugs (FK constraint mismatches, column name typos in joins) would not be caught until Phase 5 wiring exercises this path.
+
+**Priority:** Medium. Phase 5 will surface this naturally; explicit remediation not required before then.
+
+---
+
+### TD-073 — `_resolve_or_set_approvers` double-queries `ApprovalStageOption`
+
+**Phase:** M10 Phase 5C1. **Status:** Open. **Priority:** Low.
+
+**Location:** `durgam/services/approval_request.py` — `_resolve_or_set_approvers()`.
+
+**What it is:** `_resolve_or_set_approvers()` calls `ApprovalStageOptionRepository.list_by_process_stage()` to check whether OR-set options exist, then delegates to `resolve_stage_authority()` which calls the same repository method a second time. Two DB round-trips for the same rows per approval action.
+
+**Why not fixed now:** Avoiding a signature change to `resolve_stage_authority()` (adding a pre-fetched `options` parameter) to keep the engine API stable mid-milestone. The double-query is within the same transaction, adds negligible latency at M10 scale, and does not affect correctness.
+
+**Resolution path:** Add an `options: list[ApprovalStageOption] | None = None` parameter to `resolve_stage_authority()` so the caller can pass pre-fetched rows. When provided and non-None, the function skips the repo query. Re-evaluate at M11 or when OR-set is used at high load.
+
+---
+
+### TD-074 — `FacultyRequestService.approve_request()` violates service→service layering
+
+**Phase:** M10 Phase 5C1. **Status:** Open. **Priority:** Low.
+
+**Location:** `durgam/services/faculty_request.py` — `FacultyRequestService.approve_request()`.
+
+**What it is:** `FacultyRequestService.approve_request()` instantiates `ApprovalRequestService` (a deferred import inside the method body) — a cross-service call that violates the CLAUDE.md rule "No import from another service inside a service."
+
+**Why not fixed now:** The approval engine (`ApprovalRequestService.approve()`) is the only production path for advancing approval steps atomically (state change + audit + notifications). Lifting the call into the page-state layer would expose approval-request internals (process lookup, stage resolution) to the UI layer, which is a worse violation. A thin bridge module was considered but deferred: at Phase 5C1 scope it adds indirection without adding logic.
+
+**Resolution path:** Introduce a `durgam/services/faculty_approval_bridge.py` (or similar cross-cutting coordinator) that owns the "advance a FacultyRequest approval step" action, importing both services. This mirrors how `auth` and `notifications` are cross-cutting. Re-evaluate at M10 Phase 7 when full approval CRUD is wired to page states.
+
+---
+
+### TD-075 — `seeded_session.flush()` in idempotency test
+
+**Phase:** M10 Phase 5B (filed in 5C2). **Status:** Open. **Priority:** Medium.
+
+**Location:** `tests/integration/test_faculty_noc_seed.py:59` (inside `test_faculty_noc_seed_idempotent`).
+
+**What it is:** Test calls `seeded_session.flush()` to verify the seed function is idempotent. The seed function's idempotency means no pending writes exist at flush time, so this is benign in practice (verified across 3 deterministic test runs at Phase 5B close — 1479 passed × 3 identical). However, this violates the hard rule established in Phase 3B recovery: `seeded_session` must be read-only because rollback against the session-scoped `seeded_db_engine` is unreliable for mutations.
+
+**Risk:** Future seed function changes that introduce non-idempotent paths could cascade into 28+ collateral failures (as seen in Phase 3B with `seeded_session.delete()`, which is the source of TD-072's gap before resolution).
+
+**Resolution path:** Refactor `test_faculty_noc_seed_idempotent` to use `db_session` with explicit migration setup + manual seed re-invocation, mirroring the synthetic-fixture pattern in `tests/integration/test_faculty_request_submit.py`. Estimated effort: 30 minutes.
+
+**Filed:** M10 Phase 5C2, 2026-06-15.
+
+---
+
+### TD-076 — OR-set stage approval semantics in engine — RESOLVED
+
+**Phase:** M10 Phase 5C1. **Status:** RESOLVED at commit `4d2a578` (Phase 5C1 substantive).
+
+**Original problem:** Phase 5B's NOC process introduced ApprovalStageOption rows with `pick_mode='approver'`, creating a pool of multiple eligible users at Stage 1 (HoD + AhoD via dept_head_at_requestor_campus resolver). The existing M5b/M7 stage-advancement engine expected a single `approver_user_id` to mark a stage as approved.
+
+**Resolution:** Phase 5C1 extended `ApprovalRequestService._resolve_approvers` (durgam/services/approval_request.py) with a new `_resolve_or_set_approvers` helper that:
+1. Queries `ApprovalStageOption` for the current stage
+2. If options exist, delegates to `resolve_stage_authority` (Phase 4) and returns the resolved pool
+3. If no options, returns `None` so the legacy M7/M8 paths execute unchanged
+
+First-action-wins semantics per Q-P5C.1 freeze: any user in the resolved pool can approve; first action advances the stage. Verified by `test_approve_or_set_hod_eligible`, `test_approve_or_set_ahod_eligible`, `test_approve_or_set_non_pool_actor_raises_unauthorized`, `test_approve_rejects_already_advanced_stage`, `test_existing_legacy_process_eligibility_unchanged` in `tests/integration/test_faculty_request_approve.py`.
+
+**Filed for traceability:** M10 Phase 5C2, 2026-06-15.
+
+---
+
+### TD-078 — Isolation-skip pattern in `test_faculty_request_reject_withdraw.py`
+
+**Phase:** M10 Phase 5C2 (filed in Phase 6). **Status:** Open. **Priority:** Low.
+
+**Location:** `tests/integration/test_faculty_request_reject_withdraw.py` (uses `_get_seeded_noc_process` which calls `pytest.skip` when faculty_noc isn't seeded).
+
+**What it is:** 11 of 15 tests in this file depend on the seeded NOC process being in the DB; in isolation (smoke-check invocation), they pytest.skip. This means the test file cannot be smoke-tested standalone. The pattern works in full-suite runs because conftest's seeded_db_engine seeds before these tests execute (verified by 3-determinism passing 1505 × 3 at Phase 5C2 close).
+
+**Risk:** Future contributors may run this file in isolation expecting full coverage and miss regressions. Also inconsistent with Phase 5C1's test_faculty_request_approve.py which used synthetic fixtures + monkeypatched resolvers (no seed dependency).
+
+**Resolution path:** Refactor the 11 seed-dependent tests to set up ApprovalProcess + ApprovalStageOption synthetically via db_session, mirroring Phase 5C1's pattern. Estimated effort: 1-2 hours.
+
+**Filed:** M10 Phase 6, 2026-06-16.
+
+---
+
+### TD-079 — M9 announcement attachment MIME/size limits are hardcoded in state handler
+
+**Phase:** M9 (filed in M10 Phase 6). **Status:** Open. **Priority:** Medium.
+
+**Location:** `durgam/states/announcements.py:362-370` — `UploadService` constructed with `allowed_mimes=frozenset({"application/pdf", "image/png", "image/jpeg"})` and `max_size_mb=2` hardcoded in the state handler body.
+
+**What it is:** M9 announcement attachment size/MIME limits are hardcoded constants in the state handler. Sys admin cannot reconfigure without a code deploy. This is inconsistent with the M7/M10 DB-backed approach (`ApprovalProcess.max_attachment_mb`, `allowed_attachment_mime_types_json`).
+
+**Resolution path:** Add `allowed_attachment_mime_types_json JSONB` + `max_attachment_mb INT` columns to `AnnouncementCategory`. Migrate hardcoded values into DB defaults via Alembic. Read those values in `attach_upload` state handler and pass to `UploadService` constructor. Sys admin UI in Phase 7+ Admin section. Estimated effort: 4-6 hours.
+
+**Filed:** M10 Phase 6, 2026-06-16.
+
+---
+
+### TD-080 — Sys admin UI for ApprovalProcess attachment configuration — RESOLVED
+
+**Phase:** M10 Phase 6 (filed for Phase 7). **Status:** RESOLVED in Phase 7D, 2026-06-17. **Priority:** —.
+
+**Location:** `durgam/pages/admin/config/approval_processes.py`, `durgam/states/config_approval_process.py`, `durgam/services/approval_process.py`.
+
+**What it was:** Phase 6 shipped DB-backed attachment configuration on ApprovalProcess (max_attachment_mb, max_upward_attachments, allowed_attachment_mime_types_json). Sys admin could only change these values via direct DB UPDATE or seed re-run; no admin UI existed.
+
+**Resolution (Phase 7D):** Extended the existing `/admin/config/approval-processes` page (which already had CRUD for approval process templates):
+- `ApprovalProcessService.create()` extended with `allowed_attachment_mime_types_json: list[str]|None=None` kwarg (backward-compatible)
+- `ApprovalProcessConfigState` extended: `form_max_attachment_mb`, `form_allowed_mimes` state vars; `set_form_max_attachment_mb`, `toggle_allowed_mime` setters; all lifecycle methods (`open_create`, `open_edit`, `cancel_form`, `save_process`) updated
+- Edit form extended with: number input for `max_attachment_mb` (1–100 MB), 9-option MIME type checkbox picker (PDF, JPEG, PNG, DOCX, DOC, XLSX, XLS, plain text, CSV — empty = any)
+- Data table shows `max_attachment_mb` ("Max MB" column) and `allowed_mimes` ("Allowed Types" column)
+- 16 integration tests in `tests/integration/test_approval_process_config.py`
+- Permission triple: `approval_process:write:*` (existing, SYSTEM_ADMIN only via all-perms sweep)
+
+**Filed:** M10 Phase 6, 2026-06-16. **Resolved:** Phase 7D, 2026-06-17.
+
+---
+
+### TD-081 — ApprovalAction visibility model defers DB-level RLS to application layer
+
+**Phase:** M10 Phase 7A. **Status:** Open. **Priority:** Low.
+
+**Location:** `durgam/services/approval_request.py` — `list_actions_for_requestor()` and `list_actions_for_approver()` filter in Python after fetching all actions for a request.
+
+**What it is:** The Phase 7A visibility model (`is_visible_to_requestor`, `visible_to_lower_user_ids_json`) is enforced in the application service layer rather than as PostgreSQL Row-Level Security (RLS) policies. The repository returns all non-deleted `approval_actions` rows for a request; the service filters to the caller's visibility slice.
+
+**Why this is acceptable now:** Per-request action counts are tiny (one per stage per decision — typically 2–5 rows). Python filtering at that scale is negligible. RLS would require a dedicated DB role-switching pattern not yet established in DURGAM. The tradeoff is acceptable at Phase 7A.
+
+**Risk:** If visibility filtering logic diverges between two call paths (e.g., a future REST endpoint calling the repo directly), the app-layer filter could be bypassed. The repository currently exposes `list_by_request_id()` which returns all rows.
+
+**Resolution path:** When per-request action counts exceed ~50 rows OR when a REST/GraphQL layer is introduced that bypasses the service, migrate visibility filtering to a PostgreSQL view or RLS policy. Tag with "before REST layer introduction." Estimated effort: 1 day.
+
+**Filed:** M10 Phase 7A, 2026-06-16.
+
+---
+
+### TD-082 — ApprovalAction visibility model implementation marker — RESOLVED
+
+**Phase:** M10 Phase 7A. **Status:** RESOLVED at commit `d97ddfe` (Phase 7A substantive).
+
+**What it is:** Phase 7A implemented `ApprovalAction` (schema, model, repository, service filtering methods). The visibility model (`is_visible_to_requestor`, `visible_to_lower_user_ids_json`) is fully operational. The application-layer enforcement tradeoff is separately tracked under TD-081.
+
+**Resolution:** All five Phase 7A deliverables shipped: migration `c4d7e9f2a831`, `ApprovalAction` model, `ApprovalActionRepository`, engine extension (`approve()`/`reject()` visibility kwargs, `_record_action()`), and `FacultyRequestService` pass-throughs. 18 integration tests, 0 skips.
+
+**Filed:** M10 Phase 7B, 2026-06-16.
+
+
+---
+
+### TD-083 — Phase 7C approver UI deviations (permission triple + comment-on-approve + downward attachments)
+
+**Phase:** M10 Phase 7C. **Status:** Partially resolved (TD-083.2 ✓, TD-083.3 ✓, TD-083.1 open). **Priority:** Low.
+
+**Location:** `durgam/states/approver_requests.py`, `durgam/services/faculty_request.py`.
+
+**What it is:** Three honest deviations from the intended Phase 7C design:
+
+1. **Permission triple mismatch** (TD-083.1 — OPEN): `ApproverRequestDetailState.approve()` and `.reject()` use `@require_role(action="approve", resource="approval_request", scope="*")` — the seeded triple from M7. The intended triple would be `faculty_request:approve:*` and `faculty_request:reject:*`, which do not exist in the seed. Adding them without a design review and seed update is out of Phase 7C scope (seed-only permissions rule). *Deferred to later cleanup phase.*
+
+2. **Comment-on-approve deferred** (TD-083.2 — **RESOLVED** in Phase 7C-fix, 2026-06-17): `ApprovalRequestService.approve()` extended with `comment: str | None = None`; `_record_action()` already accepted `comment`; `FacultyRequestService.approve_request()` now passes `comment` through; `ApproverRequestDetailState.approve()` now passes `comment=self.action_comment.strip() or None`. 6 integration tests added in `TestCommentAndDownwardAttachments`.
+
+3. **Downward attachment upload deferred** (TD-083.3 — **RESOLVED** in Phase 7C-fix, 2026-06-17): `ApprovalRequestService.reject()` extended with `downward_attachment_file_ids`; `FacultyRequestService.approve_request()` and `reject_request()` both pass through `downward_attachment_file_ids`; new `FacultyRequestService.add_downward_attachment()` validates MIME + size against `ApprovalProcess` config; upload zone added to detail page; `ApproverRequestDetailState` gains `action_downward_attachments`, `handle_downward_upload()`, `remove_downward_attachment()`. 6 integration tests cover comment persistence, downward attachment persistence, and MIME/size validation.
+
+**Risk (remaining):** TD-083.1 only — approvers without `approval_request:approve:*` cannot act. Functional for HOD/AHOD/REGISTRAR/SYSTEM_ADMIN who hold that triple via M7 seeding.
+
+**Resolution path:**
+- TD-083.1 (permissions — OPEN → deferred to M11): Phase 7F (UI Unification) consolidated `ApproverRequestDetailState.approve()/reject()` into `RequestDetailState.submit_approve()/submit_reject()` in `durgam/states/approval_requests.py`, which now serves ALL request types (leave, faculty, NRF). Changing decorators to `faculty_request:approve:*` would break leave approvals. Correct fix requires multi-type permission design; deferred to M11 as a permissions design task.
+- TD-083.2 (comment-on-approve — RESOLVED): See description above.
+- TD-083.3 (downward attachments — RESOLVED): See description above.
+
+**Filed:** M10 Phase 7C, 2026-06-17. **Partially resolved:** Phase 7C-fix, 2026-06-17. **TD-083.1 re-scoped to M11** (M10 Phase 13, 2026-07-05).
+
+
+---
+
+### TD-084 — PAN/Aadhaar encryption-at-rest layer required before P5 UI can ship
+
+**Phase:** M10 Phase P5 (attempted during the combined P5+P6 turn). **Status:** Open — deferred to M11 as an explicit design phase. **Priority:** Medium-High (sensitive PII).
+
+**Note on numbering:** The originating prompt referenced this as "TD-070", but TD-070 is already in use (Migration test isolation). Filed as TD-084 (next free number); all P5/P6 code, M10.md, and CLAUDE.md references point to TD-084.
+
+**What it is:** `User.pan_enc` + `User.aadhaar_enc` are declared with the `_enc`
+suffix indicating encryption-at-rest intent (also listed in `User._audit_redact_fields`,
+and sized 128/512 — far wider than plaintext PAN(10)/Aadhaar(12), i.e. sized for
+ciphertext). No encryption layer (Fernet, KMS, or otherwise) currently exists in the
+codebase, and the two fields are never read or written by any code — they are
+unimplemented Phase 1A placeholders.
+
+**Why P5 is blocked:** Phase P5 (sensitive section UI on `/faculty/profile`) assumed
+plain PAN/Aadhaar fields on the `Faculty` model. Reality: the fields live on `User`,
+encrypted-by-intent. Every path forward hits a wall:
+- Adding `pan`/`aadhaar` to the `Faculty` model is a schema change (out of P5 scope).
+- Writing plaintext into `User.pan_enc`/`aadhaar_enc` is a security regression — it
+  defeats the at-rest-encryption intent for the system's most sensitive identifiers.
+- Building an encryption module + config key + crypto dependency is a milestone-boundary
+  decision needing its own design.
+
+**Blocking decisions:**
+a) Key storage strategy (env var minimum; ideally external secret store).
+b) Key rotation policy.
+c) Audit-on-decrypt (likely required for sensitive PII access; relates to deferred audit-on-reveal).
+d) Fixture key for tests.
+e) Schema validation that existing column types/widths accommodate ciphertext + IV/nonce.
+
+**Suggested execution:** an explicit M11 design phase (confirmed at the M10 close docs sweep, 2026-08-20) — key storage strategy, rotation policy, audit-on-decrypt, and a test fixture key, before Phase P5 (deferred faculty PAN/Aadhaar UI) can ship.
+
+**Resolution path:** Resolve (a)–(e), implement the crypto module + decrypt-on-read
+path, then ship Phase P5 (sensitive section UI) against `User.pan_enc`/`aadhaar_enc`.
+
+**Filed:** M10 Phase P5+P6 attempt, 2026-06-20. P5 deferred; P6 (`/admin/faculty`) shipped independently.
+
+---
+
+### TD-085 — NonRegularFaculty extension workflow (HoD-initiated, university-admin-approved)
+
+**Status:** Open — deferred to M11. **Priority:** Medium. (Prompt referenced this as "TD-086"; filed as TD-085, the next free number.)
+
+Phase 9A shipped sys_admin **direct** NRF renewal (`NonRegularFacultyService.renew` + admin config "Renew contract" modal) as an admin-override capability. The proper workflow per SSSIHL practice is not yet implemented: department HoD raises an NRF **extension request** → university admin approves through the existing approval engine → renewal applied automatically. Needs:
+- (a) `nrf_extension` ApprovalProcess seed with HoD-as-requestor + university-admin approval chain,
+- (b) request-creation UI for the HoD,
+- (c) an approval-on-completion hook that calls `NonRegularFacultyService.renew` on terminal approval.
+
+The direct-renew override stays (parallels the `is_admin_approved` flag). See Q-P9A.1 for context. Discovered at M10 Phase 9A.1 walkthrough.
+
+---
+
+### TD-086 — Leave-balance seed gap (blocks manual leave-flow walkthroughs)
+
+**Status:** Open — deferred to M11. **Priority:** Low-Medium. (The M10 Phase 14 gate ritual passed without needing a leave-flow walkthrough as a gate criterion, so the deferred trigger did not fire during M10; carried forward to M11.)
+
+The dev DB has no `leave_balances` seeded for faculty users (test fixtures seed balances per-test, but `scripts/seed.py` does not). This blocks manual UI walkthroughs of any leave-submit flow (e.g. Phase 10B's HoD recommend-via scenarios) because balance checks fail before routing is exercised. Resolution: either (a) extend `scripts/seed.py` to seed initial balances for the seeded faculty users, or (b) accept and require explicit balance seeding before walkthroughs. Discovered during the Phase 10B/11 block.
+
+### TD-087 — Audit labels carry faculty_id as a raw UUID, not a human name
+
+**Status: Resolved (M10 Phase 13, commit `b568d94`). Priority:** Low.
+
+After the Phase 11 faculty_id backfills (11A: faculty_mentor_assignments,
+class_teacher_assignments, class_coordinator_assignments; 11B: non_owned_courses,
+ug_timetable), `faculty_id` is a UUID FK on all five tables, and audit captures it
+two ways that currently render the raw UUID rather than a readable label:
+
+1. **List/detail resolvers** (`durgam/audit/labels.py`): the three assignment
+   resolvers emit `f"{faculty_id} → …"` / `f"{faculty_id} (…)"` (the UUID inline).
+   The non_owned_course / ug_timetable resolvers label course_code/course_name only
+   and never show faculty, so they are unaffected for the resource label — but see (2).
+2. **diff_json FK resolution** (`FK_FIELDS` in `durgam/audit/labels.py`): `faculty_id`
+   is NOT registered as an FK field for any of the five resources, so a before/after
+   diff on `faculty_id` shows the raw UUID instead of `employee_id — Title First Last`.
+
+Resolution (one source change, all five tables): (a) add a `faculty` resolver lookup
+keyed on `faculties.id` that formats `employee_id — title first last`, (b) change the
+three assignment resolvers to render that label instead of the UUID, and (c) add
+`"faculty_id": "faculty"` to the `FK_FIELDS` entry for all five resources so diffs
+resolve. Pure readability; no schema or behaviour change. First surfaced as an honest
+deviation in 11A.1 (resolver-test assertions had to assert the UUID) and re-noted in 11B.
+
+**Update (Phase 11D):** class_coordinator_assignments was removed (Q-P11D.1), so its
+resolver + FK_FIELDS entry are gone. TD-087 now covers FOUR tables:
+faculty_mentor_assignments, class_teacher_assignments, non_owned_courses, ug_timetable.
+
+**Resolved (M10 Phase 13, commit `b568d94`):** Added `faculty` resolver, rewrote `faculty_mentor_assignment` and `class_teacher_assignment` resolvers to join Faculty and show human-readable label, added `faculty_id: "faculty"` to FK_FIELDS for all four tables. 1 new test (TestFacultyResolver), 2 test assertions updated.
+
+### TD-088 — Re-introduce class coordinator feature when the student domain ships
+
+**Status:** Open — deferred to M13 (the milestone that introduces the student domain).
+**Priority:** Medium. Confirmed explicitly out of M11 scope at the M10 close docs sweep
+(2026-08-20) — class coordinators are student-bound (see below), and M11 is a
+hardening/encryption/test-hygiene milestone with no student-records work. Note:
+`docs/milestones/M13.md` is currently a stub titled "Program & Course Management"
+and does not yet mention the student domain or class coordinators; this TD's M13
+target should be confirmed (or the work re-numbered) during M13 planning.
+
+Phase 11D removed `class_coordinator_assignments` entirely (misclassification
+correction per Q-P11D.1). The table had been built with `faculty_id`, but per the
+SSSIHL domain class coordinators are STUDENTS — capped at 2 per class per AY, appointed
+by the class teacher. Removal was chosen over building a speculative students table now,
+which would risk throwaway architecture once the real student domain exists. The table
+had 0 rows, so there was no data or functional regression.
+
+When the students table + student domain exist, re-introduce class coordinator correctly:
+`student_id` FK (not faculty_id), max-2-per-class enforcement, a student picker for
+assignment (mirroring the M10 Phase 11C faculty picker), and the class teacher as the
+appointing authority. The dropped DROP migration (c9f1a2b3d417) documents the prior
+schema; the re-introduction is a fresh, student-bound design, not a revert.
+
+---
+
+### TD-089 — E2E upload tests flake under full-suite load (timeout, not defect)
+
+**Status:** Open — deferred to M11 test-hygiene workstream. **Priority:** Low.
+
+**Symptom:** E2E upload tests (letterhead, template) flake under full-suite load; they pass reliably in isolation. The failure mode is a `net::timeout` on the file-input locator, not an assertion failure.
+
+**Root cause:** A single Reflex instance serves all 118 sequential E2E tests in the M10 gate ritual run. Under that cumulative load, heavier upload flows occasionally exceed the default 30s locator timeout. This is a load/timing artifact of the shared-instance E2E harness, not a code defect in the upload feature itself.
+
+**Resolution path:** In M11's test-hygiene workstream, bump the locator timeout on upload tests to 60s, or add a bounded retry around the file-input interaction. Group with TD-044 (61-baseline seeded_db contamination) and TD-068 (seed idempotency) as the M11 test-hygiene cluster.
+
+**Filed:** M10 close docs sweep, 2026-08-20 (observed during Phase 14 gate ritual E2E runs).

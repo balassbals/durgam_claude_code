@@ -197,3 +197,16 @@ The category config list table does not show `publish_delay_seconds`. Admins mus
 The informal requirement says "Announcement meant for them should come to their module or page." M9 ships: (a) `/announcements` dedicated page, (b) dashboard widget (top 3). Surfacing announcements within other module pages (e.g., in the leave module header) is deferred.
 
 **Target: M15 (Role-based dashboards).** See coverage_matrix.md M9 deferred items.
+
+---
+
+## M10 Faculty Module — polish backlog
+
+Audit-label readability for faculty FK fields (raw UUID displayed instead of a human-readable
+`employee_id — Title First Last` label) was tracked as TD-087 and **resolved** at M10 Phase 13
+(commit `b568d94`) — see `docs/tech_debt.md`.
+
+No other UI polish items were deferred from M10 at gate verification. The module shipped
+clean: faculty self-service profile, directory, admin directory, NRF contract-term UI, the
+faculty picker rollout across 4 admin forms, bulk CSV import, and the mentor-confirmation
+re-confirm banner all closed without a UI-polish carry-forward.

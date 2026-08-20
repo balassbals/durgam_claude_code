@@ -44,6 +44,13 @@ def _rule_to_dict(raw: dict) -> dict[str, Any]:
         "applicant_designation_regex": raw.get("applicant_designation_regex"),
         "sanctioner_role_code": str(raw["sanctioner_role_code"]),
         "recommend_via_role_code": raw.get("recommend_via_role_code"),
+        # M10 Phase 10B (Q-P10) — optional designation/employee-type keying +
+        # resolver-based recommend stage + opt-in gate. Absent fields → wildcard /
+        # default, preserving every pre-10B rule unchanged.
+        "applicant_designation_codes": raw.get("applicant_designation_codes"),
+        "applicant_employee_types": raw.get("applicant_employee_types"),
+        "recommend_via_resolver": raw.get("recommend_via_resolver"),
+        "requires_optin": bool(raw.get("requires_optin", False)),
         "requires_in_charge": bool(raw.get("requires_in_charge", False)),
         "scope_type": raw.get("scope_type"),
         "notes": raw.get("notes"),

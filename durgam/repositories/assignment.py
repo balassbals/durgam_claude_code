@@ -1,7 +1,7 @@
 """AssignmentRepository — AY-locked repo for faculty/class assignment tables (§9.3).
 
-Parameterised by model type. Used for FacultyMentorAssignment,
-ClassTeacherAssignment, and ClassCoordinatorAssignment.
+Parameterised by model type. Used for FacultyMentorAssignment and
+ClassTeacherAssignment.
 """
 
 from uuid import UUID
@@ -46,20 +46,6 @@ class AssignmentRepository[T: TimestampedSoftDelete](BaseRepository[T]):
                 )
             ).all()
         )
-
-    def count_by_ay_class(
-        self, academic_year_id: UUID, class_identifier: str,
-    ) -> int:
-        """Count active rows for a given AY + class (for max-2-coordinator check)."""
-        stmt = (
-            select(self._model)
-            .where(
-                self._model.academic_year_id == academic_year_id,  # type: ignore[attr-defined]
-                self._model.class_identifier == class_identifier,  # type: ignore[attr-defined]
-                self._model.is_deleted == False,  # noqa: E712
-            )
-        )
-        return len(list(self._session.exec(stmt).all()))
 
     def save(self, record: T) -> T:
         self._check_ay_locked(record.academic_year_id)  # type: ignore[attr-defined]

@@ -10,7 +10,10 @@ from durgam.audit.snapshot import audit_snapshot
 from durgam.auth.decorators import audit_action, require_role
 from durgam.db import open_session
 from durgam.repositories.academic_year import AcademicYearRepository
+from durgam.repositories.faculty import FacultyRepository
 from durgam.repositories.ug_timetable import UGTimetableRepository
+from durgam.services.assignment import faculty_display
+from durgam.services.faculty_picker import FacultyPickerService
 from durgam.services.org_exceptions import AcademicYearLockedError
 from durgam.services.ug_timetable import UGTimetableError, UGTimetableService
 from durgam.states.base import BaseState
@@ -41,9 +44,14 @@ class UGTimetableConfigState(BaseState):
     form_period_number: str = "1"
     form_course_code: str = ""
     form_course_name: str = ""
-    form_faculty: str = ""
     form_room: str = ""
     form_notes: str = ""
+
+    # Faculty picker (M10 Phase 11C)
+    form_faculty_id: str = ""
+    form_faculty_label: str = ""
+    picker_search: str = ""
+    picker_results: list[dict[str, str]] = []
 
     confirm_open: bool = False
     confirm_id: str = ""
@@ -94,7 +102,8 @@ class UGTimetableConfigState(BaseState):
                 "period_number": str(s.period_number),
                 "course_code": s.course_code,
                 "course_name": s.course_name,
-                "faculty": s.faculty_id_placeholder,
+                "faculty_id": str(s.faculty_id),
+                "faculty": faculty_display(session, s.faculty_id),
                 "room": s.room or "",
                 "notes": s.notes or "",
             })
@@ -132,14 +141,44 @@ class UGTimetableConfigState(BaseState):
     def set_form_course_name(self, v: str) -> None:
         self.form_course_name = v
 
-    def set_form_faculty(self, v: str) -> None:
-        self.form_faculty = v
-
     def set_form_room(self, v: str) -> None:
         self.form_room = v
 
     def set_form_notes(self, v: str) -> None:
         self.form_notes = v
+
+    # ── Faculty picker (M10 Phase 11C) ────────────────────────────────────────
+
+    def on_picker_search(self, value: str) -> None:
+        self.picker_search = value
+        if not value.strip():
+            self.picker_results = []
+            return
+        with open_session() as session:
+            self.picker_results = FacultyPickerService(
+                FacultyRepository(session)
+            ).search(search=value, limit=50)
+
+    def select_faculty(self, faculty_id: str) -> None:
+        for row in self.picker_results:
+            if row["id"] == faculty_id:
+                self.form_faculty_id = faculty_id
+                self.form_faculty_label = row["display"]
+                break
+        self.picker_search = ""
+        self.picker_results = []
+
+    def clear_faculty(self) -> None:
+        self.form_faculty_id = ""
+        self.form_faculty_label = ""
+        self.picker_search = ""
+        self.picker_results = []
+
+    def _reset_picker(self) -> None:
+        self.form_faculty_id = ""
+        self.form_faculty_label = ""
+        self.picker_search = ""
+        self.picker_results = []
 
     def open_create(self):
         self.flash = ""
@@ -150,31 +189,34 @@ class UGTimetableConfigState(BaseState):
         self.form_period_number = "1"
         self.form_course_code = ""
         self.form_course_name = ""
-        self.form_faculty = ""
+        self._reset_picker()
         self.form_room = ""
         self.form_notes = ""
         self.show_form = True
 
-    def open_edit(
-        self, sid: str, year: str, day: str, period: str,
-        code: str, name: str, faculty: str, room: str, notes: str,
-    ):
+    def open_edit(self, sid: str):
         self.flash = ""
         self.flash_type = "info"
+        self._reset_picker()
+        for row in self.slots:
+            if row["id"] == sid:
+                self.form_year_of_study = row["year_of_study"]
+                self.form_day_of_week = row["day_of_week"]
+                self.form_period_number = row["period_number"]
+                self.form_course_code = row["course_code"]
+                self.form_course_name = row["course_name"]
+                self.form_faculty_id = row["faculty_id"]
+                self.form_faculty_label = row["faculty"]
+                self.form_room = row["room"]
+                self.form_notes = row["notes"]
+                break
         self.editing_id = sid
-        self.form_year_of_study = year
-        self.form_day_of_week = day
-        self.form_period_number = period
-        self.form_course_code = code
-        self.form_course_name = name
-        self.form_faculty = faculty
-        self.form_room = room
-        self.form_notes = notes
         self.show_form = True
 
     def cancel_form(self):
         self.show_form = False
         self.editing_id = ""
+        self._reset_picker()
         self.flash = ""
         self.flash_type = "info"
 
@@ -186,10 +228,14 @@ class UGTimetableConfigState(BaseState):
         period_str = form_data.get("form_period_number", "1").strip()
         course_code = form_data.get("form_course_code", "").strip()
         course_name = form_data.get("form_course_name", "").strip()
-        faculty = form_data.get("form_faculty", "").strip()
         room = form_data.get("form_room", "").strip() or None
         notes = form_data.get("form_notes", "").strip() or None
         editing_id = form_data.get("editing_id", "").strip()
+
+        if not self.form_faculty_id:
+            self.flash = "Select a faculty from the picker."
+            self.flash_type = "error"
+            return
 
         try:
             year_of_study = int(year_str)
@@ -204,6 +250,7 @@ class UGTimetableConfigState(BaseState):
             with open_session() as session:
                 svc = _svc(session)
                 actor_id = UUID(self.current_user_id)
+                faculty_id = UUID(self.form_faculty_id)
                 if not editing_id:
                     entity = svc.create(
                         academic_year_id=UUID(self.selected_ay_id),
@@ -213,7 +260,7 @@ class UGTimetableConfigState(BaseState):
                         period_number=period_number,
                         course_code=course_code,
                         course_name=course_name,
-                        faculty_id_placeholder=faculty,
+                        faculty_id=faculty_id,
                         actor_id=actor_id,
                         room=room,
                         notes=notes,
@@ -233,7 +280,7 @@ class UGTimetableConfigState(BaseState):
                             "period_number": period_number,
                             "course_code": course_code,
                             "course_name": course_name,
-                            "faculty_id_placeholder": faculty,
+                            "faculty_id": faculty_id,
                             "room": room,
                             "notes": notes,
                         },

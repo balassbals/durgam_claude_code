@@ -7,6 +7,7 @@ from uuid import UUID
 
 import reflex as rx
 
+from durgam.audit.log import write_audit_row
 from durgam.audit.snapshot import audit_snapshot
 from durgam.auth.decorators import audit_action, require_role
 from durgam.db import open_session
@@ -18,8 +19,16 @@ from durgam.repositories.academic_year import AcademicYearRepository
 from durgam.repositories.assignment import AssignmentRepository
 from durgam.repositories.campus import CampusRepository
 from durgam.repositories.document_template import DocumentTemplateRepository
+from durgam.repositories.faculty import FacultyRepository
 from durgam.repositories.file_asset import FileAssetRepository
-from durgam.services.assignment import AssignmentError, FacultyMentorService
+from durgam.services.assignment import (
+    AssignmentError,
+    FacultyMentorService,
+    faculty_display,
+    invalidate_confirmation,
+    is_material_mentor_edit,
+)
+from durgam.services.faculty_picker import FacultyPickerService
 from durgam.services.org_exceptions import AcademicYearLockedError
 from durgam.states.base import BaseState
 from durgam.storage import get_storage_backend
@@ -48,13 +57,19 @@ class FacultyMentorConfigState(BaseState):
     # Form
     show_form: bool = False
     editing_id: str = ""
-    form_faculty: str = ""
     form_student: str = ""
     form_notes: str = ""
+
+    # Faculty picker (M10 Phase 11C)
+    form_faculty_id: str = ""
+    form_faculty_label: str = ""
+    picker_search: str = ""
+    picker_results: list[dict[str, str]] = []
 
     # Roster confirmation
     is_confirmed: bool = False
     confirmed_info: str = ""
+    roster_stale: bool = False
 
     # Confirmation dialog
     confirm_open: bool = False
@@ -103,6 +118,7 @@ class FacultyMentorConfigState(BaseState):
         self.mentors = []
         self.is_confirmed = False
         self.confirmed_info = ""
+        self.roster_stale = False
         if not self.selected_ay_id or not self.selected_campus_id:
             self.ay_is_locked = False
             return
@@ -122,6 +138,19 @@ class FacultyMentorConfigState(BaseState):
             self.confirmed_info = (
                 f"Confirmed on {confirmation.confirmed_at.strftime('%b %-d, %Y %I:%M %p')}"
             )
+        else:
+            # Check for a previously-confirmed but now-invalidated confirmation.
+            # If one exists (is_deleted=True), show the stale banner so the
+            # Director knows re-confirmation is needed.
+            prior = session.exec(
+                select(FacultyMentorConfirmation).where(
+                    FacultyMentorConfirmation.academic_year_id == UUID(self.selected_ay_id),
+                    FacultyMentorConfirmation.campus_id == UUID(self.selected_campus_id),
+                    FacultyMentorConfirmation.is_deleted == True,  # noqa: E712
+                )
+            ).first()
+            if prior is not None:
+                self.roster_stale = True
 
         repo = AssignmentRepository(FacultyMentorAssignment, session)
         for m in repo.list_by_ay_and_scope(
@@ -129,7 +158,8 @@ class FacultyMentorConfigState(BaseState):
         ):
             self.mentors.append({
                 "id": str(m.id),
-                "faculty": m.faculty_id_placeholder,
+                "faculty_id": str(m.faculty_id),
+                "faculty": faculty_display(session, m.faculty_id),
                 "student": m.student_id_placeholder,
                 "notes": m.notes or "",
             })
@@ -154,14 +184,44 @@ class FacultyMentorConfigState(BaseState):
 
     # ── Form setters ──────────────────────────────────────────────────────────
 
-    def set_form_faculty(self, v: str) -> None:
-        self.form_faculty = v
-
     def set_form_student(self, v: str) -> None:
         self.form_student = v
 
     def set_form_notes(self, v: str) -> None:
         self.form_notes = v
+
+    # ── Faculty picker (M10 Phase 11C) ────────────────────────────────────────
+
+    def on_picker_search(self, value: str) -> None:
+        self.picker_search = value
+        if not value.strip():
+            self.picker_results = []
+            return
+        with open_session() as session:
+            self.picker_results = FacultyPickerService(
+                FacultyRepository(session)
+            ).search(search=value, limit=50)
+
+    def select_faculty(self, faculty_id: str) -> None:
+        for row in self.picker_results:
+            if row["id"] == faculty_id:
+                self.form_faculty_id = faculty_id
+                self.form_faculty_label = row["display"]
+                break
+        self.picker_search = ""
+        self.picker_results = []
+
+    def clear_faculty(self) -> None:
+        self.form_faculty_id = ""
+        self.form_faculty_label = ""
+        self.picker_search = ""
+        self.picker_results = []
+
+    def _reset_picker(self) -> None:
+        self.form_faculty_id = ""
+        self.form_faculty_label = ""
+        self.picker_search = ""
+        self.picker_results = []
 
     # ── Form open / cancel ────────────────────────────────────────────────────
 
@@ -169,23 +229,29 @@ class FacultyMentorConfigState(BaseState):
         self.flash = ""
         self.flash_type = "info"
         self.editing_id = ""
-        self.form_faculty = ""
+        self._reset_picker()
         self.form_student = ""
         self.form_notes = ""
         self.show_form = True
 
-    def open_edit(self, mid: str, faculty: str, student: str, notes: str):
+    def open_edit(self, mid: str):
         self.flash = ""
         self.flash_type = "info"
+        self._reset_picker()
+        for row in self.mentors:
+            if row["id"] == mid:
+                self.form_faculty_id = row["faculty_id"]
+                self.form_faculty_label = row["faculty"]
+                self.form_student = row["student"]
+                self.form_notes = row["notes"]
+                break
         self.editing_id = mid
-        self.form_faculty = faculty
-        self.form_student = student
-        self.form_notes = notes
         self.show_form = True
 
     def cancel_form(self):
         self.show_form = False
         self.editing_id = ""
+        self._reset_picker()
         self.flash = ""
         self.flash_type = "info"
 
@@ -194,21 +260,26 @@ class FacultyMentorConfigState(BaseState):
     @require_role(action="write", resource="faculty_mentor_assignment")
     @audit_action(action="write", resource="faculty_mentor_assignment")
     async def save_mentor(self, form_data: dict) -> None:
-        faculty = form_data.get("form_faculty", "").strip()
         student = form_data.get("form_student", "").strip()
         notes = form_data.get("form_notes", "").strip() or None
         editing_id = form_data.get("editing_id", "").strip()
+
+        if not self.form_faculty_id:
+            self.flash = "Select a faculty from the picker."
+            self.flash_type = "error"
+            return
 
         try:
             with open_session() as session:
                 svc = _svc(session)
                 repo = AssignmentRepository(FacultyMentorAssignment, session)
                 actor_id = UUID(self.current_user_id)
+                faculty_id = UUID(self.form_faculty_id)
                 if not editing_id:
                     entity = svc.create(
                         academic_year_id=UUID(self.selected_ay_id),
                         campus_id=UUID(self.selected_campus_id),
-                        faculty_id_placeholder=faculty,
+                        faculty_id=faculty_id,
                         student_id_placeholder=student,
                         actor_id=actor_id,
                         notes=notes,
@@ -217,19 +288,47 @@ class FacultyMentorConfigState(BaseState):
                     session.commit()
                     self._set_audit(resource_id=str(entity.id), after=after_snap)
                 else:
-                    before_snap = audit_snapshot(repo.get_by_id(UUID(editing_id)))
-                    entity = svc.update(
-                        UUID(editing_id),
-                        {
-                            "faculty_id_placeholder": faculty,
-                            "student_id_placeholder": student,
-                            "notes": notes,
-                        },
-                        actor_id,
-                    )
+                    new_fields = {
+                        "faculty_id": faculty_id,
+                        "student_id_placeholder": student,
+                        "notes": notes,
+                    }
+                    existing = repo.get_by_id(UUID(editing_id))
+                    before_snap = audit_snapshot(existing)
+                    material = is_material_mentor_edit(existing, new_fields)
+                    entity = svc.update(UUID(editing_id), new_fields, actor_id)
                     after_snap = audit_snapshot(entity)
+                    # Invalidate roster confirmation when a material field changed
+                    # (faculty_id or student_id_placeholder). Notes-only changes
+                    # are cosmetic and leave the confirmation intact.
+                    conf_id: str | None = None
+                    if material:
+                        conf_id = invalidate_confirmation(
+                            UUID(self.selected_ay_id),
+                            UUID(self.selected_campus_id),
+                            actor_id,
+                            session,
+                        )
+                        if conf_id:
+                            write_audit_row(
+                                actor_user_id=actor_id,
+                                actor_role_code=None,
+                                action="soft_delete",
+                                resource="faculty_mentor_confirmation",
+                                resource_id=conf_id,
+                                request_id=None,
+                                ip=None,
+                                user_agent=None,
+                                before={"reason": "material_assignment_edit"},
+                                after=None,
+                                session=session,
+                            )
                     session.commit()
-                    self._set_audit(resource_id=str(entity.id), before=before_snap, after=after_snap)
+                    self._set_audit(
+                        resource_id=str(entity.id),
+                        before=before_snap,
+                        after=after_snap,
+                    )
         except (AssignmentError, AcademicYearLockedError) as e:
             self.flash = e.message if hasattr(e, "message") else str(e)
             self.flash_type = "error"
@@ -258,9 +357,30 @@ class FacultyMentorConfigState(BaseState):
                 repo = AssignmentRepository(FacultyMentorAssignment, session)
                 entity = repo.get_by_id(UUID(self.confirm_id))
                 before_snap = audit_snapshot(entity)
-                _svc(session).soft_delete(
-                    UUID(self.confirm_id), UUID(self.current_user_id),
+                actor_id = UUID(self.current_user_id)
+                _svc(session).soft_delete(UUID(self.confirm_id), actor_id)
+                # Removing any assignment from a confirmed roster voids the
+                # confirmation — the Director must re-confirm the updated roster.
+                conf_id = invalidate_confirmation(
+                    UUID(self.selected_ay_id),
+                    UUID(self.selected_campus_id),
+                    actor_id,
+                    session,
                 )
+                if conf_id:
+                    write_audit_row(
+                        actor_user_id=actor_id,
+                        actor_role_code=None,
+                        action="soft_delete",
+                        resource="faculty_mentor_confirmation",
+                        resource_id=conf_id,
+                        request_id=None,
+                        ip=None,
+                        user_agent=None,
+                        before={"reason": "assignment_removal"},
+                        after=None,
+                        session=session,
+                    )
                 session.commit()
                 self._set_audit(resource_id=str(entity.id), before=before_snap)
         except (AssignmentError, AcademicYearLockedError) as e:
@@ -365,7 +485,7 @@ class FacultyMentorConfigState(BaseState):
                 mentor_list = [
                     {
                         "sno": i + 1,
-                        "faculty": m.faculty_id_placeholder,
+                        "faculty": faculty_display(session, m.faculty_id),
                         "student": m.student_id_placeholder,
                         "notes": m.notes or "",
                     }
