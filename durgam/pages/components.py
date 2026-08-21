@@ -178,6 +178,242 @@ def nav_shell() -> rx.Component:
     )
 
 
+# ── M10.5 Phase 2a — grouped sidebar + app shell ─────────────────────────────
+# nav_shell() below is UNCHANGED and continues to serve the ~62 pages not yet
+# migrated. These new functions are additive; _sidebar_link() is deliberately
+# a new function (not a rewrite of _nav_link()) so the old horizontal bar's
+# rendering has zero risk of regressing while both paths coexist this phase.
+
+_CONTAINER_TOKENS: dict[str, str] = {
+    "sm": "var(--container-sm)",
+    "md": "var(--container-md)",
+    "lg": "var(--container-lg)",
+    "xl": "var(--container-xl)",
+}
+
+
+def _sidebar_link(entry: dict, *, indent: bool) -> rx.Component:
+    is_active = entry["href"] == BaseState.router.page.path
+    left_pad = "--space-8" if indent else "--space-4"
+    return rx.link(
+        rx.hstack(
+            rx.icon(entry["icon"], size=15),
+            rx.text(entry["label"], font_size="var(--text-sm)"),
+            gap="var(--space-2)",
+            align="center",
+        ),
+        href=entry["href"],
+        display="block",
+        width="100%",
+        padding=f"var(--space-2) var(--space-4) var(--space-2) var({left_pad})",
+        border_left=rx.cond(is_active, "3px solid var(--color-accent)", "3px solid transparent"),
+        background=rx.cond(is_active, "var(--color-surface-hover)", "transparent"),
+        color=rx.cond(is_active, "var(--color-primary)", "var(--color-body)"),
+        font_family="var(--font-sans)",
+        text_decoration="none",
+        _hover={"background": "var(--color-surface-hover)"},
+        transition="background var(--motion-fast) var(--ease-standard)",
+    )
+
+
+def _group_entries(group_name: rx.Var, *, indent: bool) -> rx.Component:
+    return rx.foreach(
+        BaseState.visible_nav_entries,
+        lambda entry: rx.cond(
+            entry["group"] == group_name,
+            _sidebar_link(entry, indent=indent),
+            rx.fragment(),
+        ),
+    )
+
+
+def _sidebar_group(group_name: rx.Var) -> rx.Component:
+    """One sidebar section. Single-entry groups render as a plain link — no
+    collapsible header, no chevron (Personal, Announcements today)."""
+    is_single = BaseState.group_entry_counts.get(group_name, 0) == 1
+    is_expanded = BaseState.expanded_groups.contains(group_name)
+    return rx.cond(
+        is_single,
+        rx.box(_group_entries(group_name, indent=False), width="100%"),
+        rx.vstack(
+            rx.hstack(
+                rx.text(
+                    group_name,
+                    font_size="var(--text-xs)",
+                    font_weight="var(--font-weight-semibold)",
+                    color="var(--color-muted)",
+                    text_transform="uppercase",
+                    letter_spacing="0.04em",
+                ),
+                rx.spacer(),
+                rx.icon(
+                    rx.cond(is_expanded, "chevron-down", "chevron-right"),
+                    size=14,
+                    color="var(--color-muted)",
+                ),
+                on_click=BaseState.toggle_group(group_name),
+                cursor="pointer",
+                width="100%",
+                padding="var(--space-3) var(--space-4)",
+                align="center",
+                _hover={"background": "var(--color-surface-hover)"},
+            ),
+            rx.cond(
+                is_expanded,
+                rx.vstack(
+                    _group_entries(group_name, indent=True),
+                    width="100%",
+                    gap="0",
+                ),
+                rx.fragment(),
+            ),
+            width="100%",
+            gap="0",
+        ),
+    )
+
+
+def _sidebar() -> rx.Component:
+    """Fixed-width left rail: institution mark + grouped, collapsible nav.
+
+    Self-contained (own height="100vh", own scroll on the entries region) —
+    never rendered outside app_shell(), so it cannot leak onto pages still
+    using the old nav_shell() horizontal bar.
+    """
+    return rx.vstack(
+        rx.box(
+            rx.text(
+                "DURGAM",
+                font_family="var(--font-serif)",
+                font_size="var(--text-xl)",
+                font_weight="var(--font-weight-semibold)",
+                color="var(--color-primary)",
+            ),
+            padding="var(--space-5) var(--space-4)",
+            border_bottom="1px solid var(--color-rule)",
+            width="100%",
+        ),
+        rx.vstack(
+            rx.foreach(BaseState.nav_groups, _sidebar_group),
+            width="100%",
+            gap="var(--space-1)",
+            padding="var(--space-3) 0",
+            overflow_y="auto",
+            flex="1",
+        ),
+        width="var(--sidebar-width)",
+        flex_shrink="0",
+        height="100vh",
+        background="var(--color-card-bg)",
+        border_right="1px solid var(--color-rule)",
+        align="start",
+        gap="0",
+    )
+
+
+def _top_bar() -> rx.Component:
+    """Slim bar spanning the content area. Left is reserved for a breadcrumb
+    or page title — left empty this phase; Phase 3 fills it in per-page."""
+    return rx.hstack(
+        rx.box(flex="1"),
+        rx.hstack(
+            rx.hstack(
+                rx.text(
+                    "Logged in as: ",
+                    font_size="var(--text-sm)",
+                    color="var(--color-muted)",
+                    font_family="var(--font-sans)",
+                ),
+                rx.text(
+                    AuthState.current_username,
+                    font_size="var(--text-sm)",
+                    font_weight="var(--font-weight-semibold)",
+                    color="var(--color-body)",
+                    font_family="var(--font-sans)",
+                ),
+                gap="var(--space-1)",
+                align="center",
+            ),
+            rx.link(
+                "Change password",
+                href="/change-password",
+                font_size="var(--text-sm)",
+                color="var(--color-primary)",
+                font_family="var(--font-sans)",
+            ),
+            rx.button(
+                "Log out",
+                on_click=AuthState.logout,
+                font_size="var(--text-sm)",
+                cursor="pointer",
+                background="transparent",
+                border="1px solid var(--color-rule)",
+                color="var(--color-body)",
+                padding="var(--space-2) var(--space-3)",
+                border_radius="var(--radius-sm)",
+                font_family="var(--font-sans)",
+            ),
+            gap="var(--space-4)",
+            align="center",
+        ),
+        justify="between",
+        align="center",
+        width="100%",
+        height="var(--topbar-height)",
+        flex_shrink="0",
+        padding="0 var(--space-6)",
+        border_bottom="1px solid var(--color-rule)",
+        background="var(--color-card-bg)",
+        position="sticky",
+        top="0",
+        z_index="10",
+    )
+
+
+def app_shell(content: rx.Component, *, container: str = "lg") -> rx.Component:
+    """Full page frame: grouped sidebar + slim top bar + centred content + footer.
+
+    Does NOT gate on auth/permissions — compose with the page's own existing
+    gate exactly as it composed with the old nav_shell()+content+page_footer()
+    shape, e.g. `admin_page(app_shell(...))` or
+    `rx.cond(AuthState.current_user_id != "", app_shell(...), rx.fragment())`.
+    This keeps each page's auth behaviour byte-for-byte unchanged (M10.5 Phase 2a
+    diagnosis: admin_page() stays an outer wrapper composed with app_shell(),
+    not absorbed into it, since gating differs across pages).
+
+    `container` selects a Phase 1 container token: "sm" (640px, forms/auth),
+    "md" (1024px), "lg" (1440px, standard — default), "xl" (1760px, dense tables).
+
+    Self-contained: the sidebar/top bar exist only inside this component tree,
+    never globally, so the ~62 pages not yet migrated (still calling the old
+    nav_shell()) are entirely unaffected.
+    """
+    max_width = _CONTAINER_TOKENS.get(container, _CONTAINER_TOKENS["lg"])
+    return rx.hstack(
+        _sidebar(),
+        rx.vstack(
+            _top_bar(),
+            rx.box(
+                content,
+                max_width=max_width,
+                margin="0 auto",
+                width="100%",
+                padding="var(--space-8)",
+            ),
+            page_footer(),
+            flex="1",
+            overflow_y="auto",
+            height="100vh",
+            width="100%",
+            align="start",
+            gap="0",
+        ),
+        width="100%",
+        gap="0",
+        align="start",
+    )
+
+
 def page_footer() -> rx.Component:
     """Footer with institutional name and academic year context."""
     return rx.box(

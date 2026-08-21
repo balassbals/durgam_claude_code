@@ -39,8 +39,19 @@ class BaseState(rx.State):
     request_id: str = ""
 
     # Nav entries visible to the current user (cached at login; re-populated on load).
-    # Each entry is {"label": str, "href": str, "icon": str, "group": str}.
+    # Each entry is {"label": str, "href": str, "icon": str, "group": str, "order": str}.
+    # "order" is stringified (registry sorts numerically first, then converts) so
+    # this stays a homogeneous dict[str, str] — a str|int union here would risk
+    # Reflex's dynamic rx.icon(entry["icon"]) tag-type inference.
+    # Already sorted by (group rank, order, label) — see nav/registry.py:get_visible_entries.
     visible_nav_entries: list[dict[str, str]] = []
+
+    # M10.5 Phase 2a — sidebar group expansion state (session-scoped, not browser
+    # storage). Lives here, not on a separate state class, per the Reflex 0.9
+    # constraint that cross-state substate delta propagation into an rx.cond is
+    # unreliable — the sidebar renders off BaseState, so its expansion state must
+    # also live on BaseState.
+    expanded_groups: list[str] = []
 
     # Carries a success message across a single redirect. Set before rx.redirect();
     # picked up by the destination page's on_load which moves it into self.flash.
@@ -288,3 +299,53 @@ class BaseState(rx.State):
             return
         with open_session() as session:
             self.visible_nav_entries = get_visible_entries(user_id, session)
+        self._auto_expand_active_group()
+
+    def _auto_expand_active_group(self) -> None:
+        """Expand the sidebar group containing the current route, if not already.
+
+        Additive only — never collapses a group the user closed manually.
+        Matches by exact href against the current route path.
+        """
+        current_path = self.router.page.path
+        for entry in self.visible_nav_entries:
+            if entry["href"] == current_path and entry["group"]:
+                if entry["group"] not in self.expanded_groups:
+                    self.expanded_groups.append(entry["group"])
+                break
+
+    def toggle_group(self, group_name: str) -> None:
+        """Expand/collapse one sidebar group. Single-arg lookup pattern (Reflex 0.9)."""
+        if group_name in self.expanded_groups:
+            self.expanded_groups = [g for g in self.expanded_groups if g != group_name]
+        else:
+            self.expanded_groups = [*self.expanded_groups, group_name]
+
+    @rx.var
+    def nav_groups(self) -> list[str]:
+        """Distinct groups present in visible_nav_entries, in registry sort order.
+
+        visible_nav_entries is already sorted by (group rank, order, label), so
+        the first-seen order of groups in that list IS the correct group sequence
+        — no re-sorting needed here.
+        """
+        seen: list[str] = []
+        for entry in self.visible_nav_entries:
+            group = str(entry["group"])
+            if group and group not in seen:
+                seen.append(group)
+        return seen
+
+    @rx.var
+    def group_entry_counts(self) -> dict[str, int]:
+        """Visible-entry count per group.
+
+        Drives the sidebar's single-entry-group (plain link, no collapsible
+        header) vs. multi-entry (collapsible section) rendering choice.
+        """
+        counts: dict[str, int] = {}
+        for entry in self.visible_nav_entries:
+            group = str(entry["group"])
+            if group:
+                counts[group] = counts.get(group, 0) + 1
+        return counts

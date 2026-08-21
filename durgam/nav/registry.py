@@ -21,6 +21,18 @@ from durgam.auth.permissions import can
 
 _entries: list[NavEntry] = []
 
+# Deliberate sidebar section order (M10.5 Phase 2a). Groups not listed here
+# sort after all listed groups, alphabetically among themselves.
+GROUP_ORDER: tuple[str, ...] = (
+    "Personal",
+    "Faculty",
+    "Approvals",
+    "Announcements",
+    "Admin",
+    "Config",
+    "About",
+)
+
 
 @dataclass(frozen=True)
 class NavEntry:
@@ -28,6 +40,10 @@ class NavEntry:
     href: str
     icon: str | None = None
     group: str | None = None
+    # Position within its group's sidebar section. Lower sorts first. Entries
+    # sharing the default (no natural sequence assigned) fall back to
+    # alphabetical-by-label ordering within the group.
+    order: int = 100
     # Single-gate: entry visible if user passes can(action, resource, scope_type).
     # None → visible to all authenticated users (no permission check needed).
     permission_action: str | None = None
@@ -42,6 +58,24 @@ class NavEntry:
     # Dynamic check: OR'd with the static permission gate. Entry is visible if EITHER
     # the static check passes OR dynamic_check(user_id, session) returns True.
     dynamic_check: Callable[[UUID, Session], bool] | None = None
+
+
+def _group_rank(group: str) -> int:
+    """Sort rank for a group name: position in GROUP_ORDER, or last if unlisted."""
+    try:
+        return GROUP_ORDER.index(group)
+    except ValueError:
+        return len(GROUP_ORDER)
+
+
+def _sort_key(entry: dict) -> tuple[int, str, int, str]:
+    """(listed-group rank, group name, order, label).
+
+    `group` as the second key is a no-op tiebreaker among listed groups (each
+    has a unique rank already) but alphabetizes unlisted groups against each
+    other, per the "unlisted groups sort last, alphabetically" rule.
+    """
+    return (_group_rank(entry["group"]), entry["group"], entry["order"], entry["label"])
 
 
 def register(entry: NavEntry) -> None:
@@ -97,5 +131,12 @@ def get_visible_entries(user_id: UUID, session: Session) -> list[dict]:
                 "href": entry.href,
                 "icon": entry.icon or "",
                 "group": entry.group or "",
+                "order": entry.order,  # int here — sort_key needs numeric comparison
             })
+    visible.sort(key=_sort_key)
+    # Stringify order only after sorting: visible_nav_entries is a homogeneous
+    # dict[str, str] on BaseState (dict[str, str | int] risks Reflex's dynamic
+    # rx.icon(entry["icon"]) tag-type inference — see M10.5 Phase 2a notes).
+    for entry_dict in visible:
+        entry_dict["order"] = str(entry_dict["order"])
     return visible

@@ -23,6 +23,7 @@ register(NavEntry(
     href="/admin/config",
     icon="settings",
     group="Config",
+    order=10,
     permission_any=(
         ("write",     "campus",                    None),
         ("write",     "school",                    None),
@@ -62,6 +63,7 @@ register(NavEntry(
     href="/admin/config/campuses",
     icon="map-pin",
     group="Config",
+    order=20,
     permission_action="write",
     permission_resource="campus",
 ))
@@ -70,6 +72,7 @@ register(NavEntry(
     href="/admin/config/schools",
     icon="graduation-cap",
     group="Config",
+    order=30,
     permission_action="write",
     permission_resource="school",
 ))
@@ -78,6 +81,7 @@ register(NavEntry(
     href="/admin/config/departments",
     icon="building",
     group="Config",
+    order=40,
     permission_action="write",
     permission_resource="department",
 ))
@@ -86,6 +90,7 @@ register(NavEntry(
     href="/admin/config/centres",
     icon="star",
     group="Config",
+    order=50,
     permission_action="write",
     permission_resource="centre",
 ))
@@ -94,6 +99,7 @@ register(NavEntry(
     href="/admin/config/programs",
     icon="book",
     group="Config",
+    order=60,
     permission_action="write",
     permission_resource="program",
 ))
@@ -102,6 +108,7 @@ register(NavEntry(
     href="/admin/config/courses",
     icon="book-open",
     group="Config",
+    order=70,
     permission_action="write",
     permission_resource="course",
 ))
@@ -112,6 +119,7 @@ register(NavEntry(
     href="/admin/config/vision-mission",
     icon="target",
     group="Config",
+    order=80,
     permission_any=(
         ("write", "university_vision_mission", None),
         ("write", "department_vision_mission",  "department"),
@@ -122,6 +130,7 @@ register(NavEntry(
     href="/admin/config/class-timings",
     icon="clock",
     group="Config",
+    order=90,
     permission_action="configure",
     permission_resource="class_timings_config",
 ))
@@ -130,6 +139,7 @@ register(NavEntry(
     href="/admin/config/working-days",
     icon="calendar",
     group="Config",
+    order=100,
     permission_action="configure",
     permission_resource="working_days_config",
 ))
@@ -139,6 +149,7 @@ register(NavEntry(
     href="/admin/config/academic-years",
     icon="calendar-range",
     group="Config",
+    order=110,
     permission_action="configure",
     permission_resource="academic_year",
 ))
@@ -147,6 +158,7 @@ register(NavEntry(
     href="/admin/config/holidays",
     icon="calendar-off",
     group="Config",
+    order=120,
     permission_action="write",
     permission_resource="holiday",
 ))
@@ -155,6 +167,7 @@ register(NavEntry(
     href="/admin/config/student-categories",
     icon="users",
     group="Config",
+    order=130,
     permission_action="write",
     permission_resource="student_category_count",
 ))
@@ -163,6 +176,7 @@ register(NavEntry(
     href="/admin/config/calendar",
     icon="calendar-days",
     group="Config",
+    order=140,
     permission_action="write",
     permission_resource="calendar_entry",
 ))
@@ -172,6 +186,7 @@ register(NavEntry(
     href="/admin/config/role-emails",
     icon="mail",
     group="Config",
+    order=150,
     permission_action="write",
     permission_resource="role_email",
 ))
@@ -180,6 +195,7 @@ register(NavEntry(
     href="/admin/config/letterheads",
     icon="image",
     group="Config",
+    order=160,
     permission_action="write",
     permission_resource="letterhead_asset",
 ))
@@ -188,6 +204,7 @@ register(NavEntry(
     href="/admin/config/templates",
     icon="file-text",
     group="Config",
+    order=170,
     permission_action="write",
     permission_resource="template_asset",
 ))
@@ -197,6 +214,7 @@ register(NavEntry(
     href="/admin/config/counsellors",
     icon="heart-pulse",
     group="Config",
+    order=180,
     permission_action="write",
     permission_resource="mental_health_counsellor",
 ))
@@ -205,6 +223,7 @@ register(NavEntry(
     href="/admin/config/faculty-mentors",
     icon="users",
     group="Config",
+    order=190,
     permission_action="write",
     permission_resource="faculty_mentor_assignment",
 ))
@@ -213,6 +232,7 @@ register(NavEntry(
     href="/admin/config/class-teachers",
     icon="user-check",
     group="Config",
+    order=200,
     permission_action="write",
     permission_resource="class_teacher_assignment",
 ))
@@ -221,6 +241,7 @@ register(NavEntry(
     href="/admin/config/non-regular-faculty",
     icon="briefcase",
     group="Config",
+    order=210,
     permission_action="write",
     permission_resource="non_regular_faculty",
 ))
@@ -230,6 +251,7 @@ register(NavEntry(
     href="/admin/config/non-owned-courses",
     icon="book-copy",
     group="Config",
+    order=220,
     permission_action="write",
     permission_resource="non_owned_course",
 ))
@@ -238,6 +260,7 @@ register(NavEntry(
     href="/admin/config/ug-timetable",
     icon="table",
     group="Config",
+    order=230,
     permission_action="write",
     permission_resource="ug_timetable",
 ))
@@ -247,6 +270,7 @@ register(NavEntry(
     href="/admin/config/designations",
     icon="badge-check",
     group="Config",
+    order=240,
     permission_action="write",
     permission_resource="designation",
 ))
@@ -255,6 +279,7 @@ register(NavEntry(
     href="/admin/config/purchase-rules",
     icon="receipt",
     group="Config",
+    order=250,
     permission_action="write",
     permission_resource="purchase_procedure_rule",
 ))
@@ -263,6 +288,7 @@ register(NavEntry(
     href="/admin/config/purchase-committees",
     icon="users-round",
     group="Config",
+    order=260,
     permission_action="write",
     permission_resource="purchase_committee_template",
 ))
@@ -271,6 +297,7 @@ register(NavEntry(
     href="/admin/config/approval-processes",
     icon="workflow",
     group="Config",
+    order=270,
     permission_action="write",
     permission_resource="approval_process",
 ))
@@ -280,6 +307,7 @@ register(NavEntry(
     href="/admin/config/leave-sanction-matrix",
     icon="table-2",
     group="Config",
+    order=280,
     permission_action="configure",
     permission_resource="leave_sanction_rule",
 ))
@@ -289,6 +317,7 @@ register(NavEntry(
     href="/admin/config/announcement-composer",
     icon="mic",
     group="Config",
+    order=290,
     permission_action="configure",
     permission_resource="announcement_composer_config",
 ))
@@ -297,6 +326,7 @@ register(NavEntry(
     href="/admin/config/announcement-categories",
     icon="tag",
     group="Config",
+    order=300,
     permission_action="configure",
     permission_resource="announcement_category",
 ))
@@ -305,6 +335,7 @@ register(NavEntry(
     href="/admin/config/audience-groups",
     icon="users",
     group="Config",
+    order=310,
     permission_action="configure",
     permission_resource="audience_group",
 ))

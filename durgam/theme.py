@@ -101,6 +101,9 @@ TOKENS: dict[str, str] = {
     "--container-md": "1024px",
     "--container-lg": "1440px",  # standard content, widescreen default
     "--container-xl": "1760px",  # dense tables
+    # --- Navigation shell (M10.5 Phase 2a) ---------------------------------------
+    "--sidebar-width": "260px",
+    "--topbar-height": "56px",
     # --- Typefaces — self-hosted, see assets/fonts/fonts.css ---------------------
     "--font-sans": "'Inter', system-ui, -apple-system, sans-serif",
     "--font-serif": "'Fraunces', Georgia, serif",

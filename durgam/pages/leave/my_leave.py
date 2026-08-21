@@ -3,9 +3,8 @@
 import reflex as rx
 
 from durgam.pages.components import (
+    app_shell,
     config_toast,
-    nav_shell,
-    page_footer,
     primary_btn,
     secondary_btn,
 )
@@ -669,9 +668,8 @@ def _apply_modal() -> rx.Component:
 # ── Page root ────────────────────────────────────────────────────────
 
 def my_leave_page() -> rx.Component:
-    content = rx.vstack(
-        nav_shell(),
-        rx.box(
+    content = rx.fragment(
+        rx.vstack(
             # Page header
             rx.hstack(
                 rx.heading(
@@ -707,21 +705,15 @@ def my_leave_page() -> rx.Component:
                     width="100%",
                 ),
             ),
-            padding="2rem",
-            max_width="1100px",
+            align="start",
             width="100%",
         ),
-        page_footer(),
         _apply_modal(),
         _withdraw_approved_modal(),
-        align="start",
-        width="100%",
-        min_height="100vh",
-        background="var(--color-background, #f5f0eb)",
     )
 
     return rx.cond(
         AuthState.current_user_id != "",
-        content,
+        app_shell(content, container="lg"),
         rx.fragment(),
     )

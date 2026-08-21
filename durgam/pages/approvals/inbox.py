@@ -2,7 +2,7 @@
 
 import reflex as rx
 
-from durgam.pages.components import admin_page, nav_shell, page_footer
+from durgam.pages.components import admin_page, app_shell
 from durgam.pages.shared.data_table import TableColumn, data_table
 from durgam.states.approval_requests import ApproverInboxState
 
@@ -28,65 +28,56 @@ def _actions(row: rx.Var) -> rx.Component:
 
 def inbox_page() -> rx.Component:
     content = rx.vstack(
-        nav_shell(),
-        rx.box(
-            rx.hstack(
-                rx.heading(
-                    "Approval Inbox",
-                    size="5",
-                    font_family="var(--font-sans)",
-                ),
-                rx.spacer(),
-                rx.segmented_control.root(
-                    rx.segmented_control.item("Pending", value="pending"),
-                    rx.segmented_control.item("Past Actions", value="past"),
-                    value=ApproverInboxState.view_mode,
-                    on_change=ApproverInboxState.set_view_mode,
-                ),
-                align="center",
-                width="100%",
-                margin_bottom="1rem",
-            ),
-            rx.text(
-                rx.cond(
-                    ApproverInboxState.view_mode == "past",
-                    "Requests you have acted on as an approver.",
-                    rx.cond(
-                        ApproverInboxState.rows.length() > 0,  # type: ignore[attr-defined]
-                        rx.cond(
-                            ApproverInboxState.rows.length() == 1,  # type: ignore[attr-defined]
-                            "You have 1 request awaiting your decision.",
-                            f"You have {ApproverInboxState.rows.length()} requests awaiting your decision.",  # type: ignore[attr-defined]
-                        ),
-                        "",
-                    ),
-                ),
-                font_size="0.85rem",
-                color="var(--color-muted)",
-                margin_bottom="0.75rem",
+        rx.hstack(
+            rx.heading(
+                "Approval Inbox",
+                size="5",
                 font_family="var(--font-sans)",
             ),
+            rx.spacer(),
+            rx.segmented_control.root(
+                rx.segmented_control.item("Pending", value="pending"),
+                rx.segmented_control.item("Past Actions", value="past"),
+                value=ApproverInboxState.view_mode,
+                on_change=ApproverInboxState.set_view_mode,
+            ),
+            align="center",
+            width="100%",
+            margin_bottom="1rem",
+        ),
+        rx.text(
             rx.cond(
-                ApproverInboxState.loading,
-                rx.center(rx.spinner(), padding="2rem"),
-                data_table(
-                    rows=ApproverInboxState.rows,
-                    columns=_INBOX_COLUMNS,
-                    card_primary_key="title",
-                    is_mobile=False,
-                    actions=_actions,
-                    empty_message="No items found.",
+                ApproverInboxState.view_mode == "past",
+                "Requests you have acted on as an approver.",
+                rx.cond(
+                    ApproverInboxState.rows.length() > 0,  # type: ignore[attr-defined]
+                    rx.cond(
+                        ApproverInboxState.rows.length() == 1,  # type: ignore[attr-defined]
+                        "You have 1 request awaiting your decision.",
+                        f"You have {ApproverInboxState.rows.length()} requests awaiting your decision.",  # type: ignore[attr-defined]
+                    ),
+                    "",
                 ),
             ),
-            padding="2rem",
-            max_width="1100px",
-            width="100%",
+            font_size="0.85rem",
+            color="var(--color-muted)",
+            margin_bottom="0.75rem",
+            font_family="var(--font-sans)",
         ),
-        page_footer(),
+        rx.cond(
+            ApproverInboxState.loading,
+            rx.center(rx.spinner(), padding="2rem"),
+            data_table(
+                rows=ApproverInboxState.rows,
+                columns=_INBOX_COLUMNS,
+                card_primary_key="title",
+                is_mobile=False,
+                actions=_actions,
+                empty_message="No items found.",
+            ),
+        ),
         align="start",
         width="100%",
-        min_height="100vh",
-        background="var(--color-background, #f5f0eb)",
     )
 
-    return admin_page(content)
+    return admin_page(app_shell(content, container="lg"))

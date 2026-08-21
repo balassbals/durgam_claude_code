@@ -10,8 +10,7 @@ import reflex as rx
 
 from durgam.pages.components import (
     admin_page,
-    nav_shell,
-    page_footer,
+    app_shell,
     secondary_btn,
 )
 from durgam.states.faculty_directory import FacultyDirectoryState
@@ -223,46 +222,34 @@ def _pagination() -> rx.Component:
 
 def _content() -> rx.Component:
     return rx.vstack(
-        nav_shell(),
-        rx.box(
-            rx.vstack(
-                rx.heading("Faculty Directory", size="6", margin_bottom="0.25rem"),
-                _search_and_filters(),
-                rx.cond(
-                    FacultyDirectoryState.loading,
-                    rx.center(rx.spinner(), padding="3rem"),
-                    rx.cond(
-                        FacultyDirectoryState.rows.length() == 0,
-                        rx.box(
-                            rx.text(
-                                "No faculty match the current filters.",
-                                color="var(--color-muted)",
-                                font_size="0.9rem",
-                            ),
-                            background="white",
-                            border="1px solid var(--color-rule)",
-                            border_radius="8px",
-                            padding="2rem",
-                            width="100%",
-                        ),
-                        _grid(),
+        rx.heading("Faculty Directory", size="6", margin_bottom="0.25rem"),
+        _search_and_filters(),
+        rx.cond(
+            FacultyDirectoryState.loading,
+            rx.center(rx.spinner(), padding="3rem"),
+            rx.cond(
+                FacultyDirectoryState.rows.length() == 0,
+                rx.box(
+                    rx.text(
+                        "No faculty match the current filters.",
+                        color="var(--color-muted)",
+                        font_size="0.9rem",
                     ),
+                    background="white",
+                    border="1px solid var(--color-rule)",
+                    border_radius="8px",
+                    padding="2rem",
+                    width="100%",
                 ),
-                _pagination(),
-                spacing="4",
-                width="100%",
-                align="start",
+                _grid(),
             ),
-            padding="2rem",
-            max_width="1200px",
-            margin="0 auto",
-            width="100%",
         ),
-        page_footer(),
-        align="start",
+        _pagination(),
+        spacing="4",
         width="100%",
+        align="start",
     )
 
 
 def faculty_directory_page() -> rx.Component:
-    return admin_page(_content())
+    return admin_page(app_shell(_content(), container="lg"))

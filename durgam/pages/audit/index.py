@@ -16,7 +16,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from durgam.audit.labels import bulk_resolve_labels
 from durgam.db import open_session
 from durgam.pages.components import (
-    admin_page, config_toast, nav_shell, page_footer, primary_btn, secondary_btn,
+    admin_page, app_shell, config_toast, primary_btn, secondary_btn,
 )
 from durgam.pages.shared.data_table import TableColumn, data_table
 from durgam.scopes.registry import load_scope_objects
@@ -1065,60 +1065,56 @@ _AUDIT_COLUMNS = [
 
 def audit_log() -> rx.Component:
     return admin_page(
-        rx.vstack(
-            nav_shell(),
-            rx.box(
-                rx.hstack(
-                    rx.link(
-                        "← Admin", href="/admin",
-                        color="var(--color-primary)", font_size="0.875rem",
-                    ),
-                    rx.vstack(
-                        rx.heading(
-                            "Audit Log", size="5",
-                            font_family="var(--font-sans)",
+        app_shell(
+            rx.fragment(
+                rx.vstack(
+                    rx.hstack(
+                        rx.link(
+                            "← Admin", href="/admin",
+                            color="var(--color-primary)", font_size="0.875rem",
                         ),
-                        rx.text(
-                            "System-wide activity log",
-                            font_size="0.85rem",
-                            color="var(--color-muted)",
-                            font_family="var(--font-sans)",
+                        rx.vstack(
+                            rx.heading(
+                                "Audit Log", size="5",
+                                font_family="var(--font-sans)",
+                            ),
+                            rx.text(
+                                "System-wide activity log",
+                                font_size="0.85rem",
+                                color="var(--color-muted)",
+                                font_family="var(--font-sans)",
+                            ),
+                            gap="0.125rem",
                         ),
-                        gap="0.125rem",
+                        gap="1rem",
+                        align="center",
+                        margin_bottom="1.5rem",
                     ),
-                    gap="1rem",
-                    align="center",
-                    margin_bottom="1.5rem",
-                ),
-                _filter_strip(),
-                _result_summary(),
-                rx.cond(
-                    AuditLogState.loading,
-                    rx.center(rx.spinner(), padding="2rem"),
-                    data_table(
-                        rows=AuditLogState.rows,
-                        columns=_AUDIT_COLUMNS,
-                        card_primary_key="occurred_at_display",
-                        is_mobile=False,
-                        actions=_row_actions,
-                        empty_message="No audit entries found.",
+                    _filter_strip(),
+                    _result_summary(),
+                    rx.cond(
+                        AuditLogState.loading,
+                        rx.center(rx.spinner(), padding="2rem"),
+                        data_table(
+                            rows=AuditLogState.rows,
+                            columns=_AUDIT_COLUMNS,
+                            card_primary_key="occurred_at_display",
+                            is_mobile=False,
+                            actions=_row_actions,
+                            empty_message="No audit entries found.",
+                        ),
                     ),
+                    _pagination(),
+                    config_toast(
+                        AuditLogState.flash,
+                        AuditLogState.flash_type,
+                        AuditLogState.dismiss_flash,
+                    ),
+                    align="start",
+                    width="100%",
                 ),
-                _pagination(),
-                config_toast(
-                    AuditLogState.flash,
-                    AuditLogState.flash_type,
-                    AuditLogState.dismiss_flash,
-                ),
-                padding="2rem",
-                max_width="1200px",
-                width="100%",
+                _detail_drawer(),
             ),
-            _detail_drawer(),
-            page_footer(),
-            align="start",
-            width="100%",
-            min_height="100vh",
-            background="var(--color-background, #f5f0eb)",
+            container="xl",
         )
     )

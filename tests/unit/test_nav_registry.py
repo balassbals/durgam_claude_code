@@ -317,3 +317,113 @@ class TestAdminFacultyNavGate:
         assert entry.permission_action == "read"
         assert entry.permission_resource == "faculty"
         assert entry.group == "Admin"
+
+
+class TestGroupOrderingPhase2a:
+    """M10.5 Phase 2a — NavEntry.order + GROUP_ORDER sorting in get_visible_entries()."""
+
+    def test_order_defaults_to_100(self):
+        entry = NavEntry(label="Def Order Entry", href="/def-order-2a")
+        assert entry.order == 100
+
+    def test_group_order_constant_matches_spec(self):
+        from durgam.nav.registry import GROUP_ORDER
+
+        assert GROUP_ORDER == (
+            "Personal", "Faculty", "Approvals", "Announcements", "Admin", "Config", "About",
+        )
+
+    def test_entries_sorted_within_group_by_order_ascending(self):
+        register(NavEntry(label="ZZZ Second 2a", href="/zzz-second-2a",
+                           group="TestGroupA2a", order=20))
+        register(NavEntry(label="AAA First 2a", href="/aaa-first-2a",
+                           group="TestGroupA2a", order=10))
+        user_id = uuid4()
+        session = MagicMock()
+        with patch("durgam.nav.registry.can", return_value=True):
+            visible = get_visible_entries(user_id, session)
+        group_labels = [r["label"] for r in visible if r["group"] == "TestGroupA2a"]
+        assert group_labels == ["AAA First 2a", "ZZZ Second 2a"]
+
+    def test_entries_with_tied_order_sort_by_label(self):
+        register(NavEntry(label="Zeta Tie 2a", href="/zeta-tie-2a", group="TestGroupB2a"))
+        register(NavEntry(label="Alpha Tie 2a", href="/alpha-tie-2a", group="TestGroupB2a"))
+        user_id = uuid4()
+        session = MagicMock()
+        with patch("durgam.nav.registry.can", return_value=True):
+            visible = get_visible_entries(user_id, session)
+        group_labels = [r["label"] for r in visible if r["group"] == "TestGroupB2a"]
+        assert group_labels == ["Alpha Tie 2a", "Zeta Tie 2a"]
+
+    def test_group_order_sequence_respected(self):
+        """Admin sorts before Config per GROUP_ORDER, regardless of registration order."""
+        register(NavEntry(label="Test Config Entry 2a", href="/test-config-2a", group="Config"))
+        register(NavEntry(label="Test Admin Entry 2a", href="/test-admin-2a", group="Admin"))
+        user_id = uuid4()
+        session = MagicMock()
+        with patch("durgam.nav.registry.can", return_value=True):
+            visible = get_visible_entries(user_id, session)
+        labels_in_order = [r["label"] for r in visible]
+        assert (
+            labels_in_order.index("Test Admin Entry 2a")
+            < labels_in_order.index("Test Config Entry 2a")
+        )
+
+    def test_unlisted_groups_sort_after_listed_groups(self):
+        register(NavEntry(label="Unlisted Group Entry 2a", href="/unlisted-entry-2a",
+                           group="ZzzUnlistedGroup2a"))
+        register(NavEntry(label="Listed About Entry 2a", href="/listed-about-2a", group="About"))
+        user_id = uuid4()
+        session = MagicMock()
+        with patch("durgam.nav.registry.can", return_value=True):
+            visible = get_visible_entries(user_id, session)
+        labels_in_order = [r["label"] for r in visible]
+        assert (
+            labels_in_order.index("Listed About Entry 2a")
+            < labels_in_order.index("Unlisted Group Entry 2a")
+        )
+
+    def test_unlisted_groups_sort_alphabetically_among_themselves(self):
+        register(NavEntry(label="Unlisted B Entry 2a", href="/unlisted-b-2a", group="ZUnlisted2a"))
+        register(NavEntry(label="Unlisted A Entry 2a", href="/unlisted-a-2a",
+                           group="AUnlistedGroupZ2a"))
+        user_id = uuid4()
+        session = MagicMock()
+        with patch("durgam.nav.registry.can", return_value=True):
+            visible = get_visible_entries(user_id, session)
+        labels_in_order = [r["label"] for r in visible]
+        assert (
+            labels_in_order.index("Unlisted A Entry 2a")
+            < labels_in_order.index("Unlisted B Entry 2a")
+        )
+
+    def test_visible_entry_includes_order_field(self):
+        register(NavEntry(label="Order Field Entry 2a", href="/order-field-2a",
+                           group="TestGroupC2a", order=42))
+        user_id = uuid4()
+        session = MagicMock()
+        with patch("durgam.nav.registry.can", return_value=True):
+            visible = get_visible_entries(user_id, session)
+        entry = next(r for r in visible if r["label"] == "Order Field Entry 2a")
+        assert entry["order"] == "42"
+
+    def test_single_entry_group_returns_correctly(self):
+        register(NavEntry(label="Solo Entry 2a", href="/solo-entry-2a", group="SoloTestGroup2a"))
+        user_id = uuid4()
+        session = MagicMock()
+        with patch("durgam.nav.registry.can", return_value=True):
+            visible = get_visible_entries(user_id, session)
+        solo_entries = [r for r in visible if r["group"] == "SoloTestGroup2a"]
+        assert len(solo_entries) == 1
+        assert solo_entries[0]["label"] == "Solo Entry 2a"
+
+    def test_permission_filtering_unaffected_by_ordering(self):
+        register(NavEntry(
+            label="Gated Order Entry 2a", href="/gated-order-2a", group="TestGroupD2a",
+            permission_action="write", permission_resource="some_resource_xyz_2a",
+        ))
+        user_id = uuid4()
+        session = MagicMock()
+        with patch("durgam.nav.registry.can", return_value=False):
+            visible = get_visible_entries(user_id, session)
+        assert not any(r["label"] == "Gated Order Entry 2a" for r in visible)

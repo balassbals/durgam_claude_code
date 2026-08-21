@@ -6,7 +6,7 @@ registrar sees 3 (Vision & Mission, Class Timings, Working Days), students see n
 
 import reflex as rx
 
-from durgam.pages.components import admin_page, nav_shell, page_footer
+from durgam.pages.components import admin_page, app_shell
 from durgam.states.config_landing import ConfigLandingState
 
 
@@ -43,9 +43,8 @@ def _config_tile(tile: dict) -> rx.Component:
 
 def admin_config_index() -> rx.Component:
     return admin_page(
-        rx.vstack(
-            nav_shell(),
-            rx.box(
+        app_shell(
+            rx.vstack(
                 rx.heading(
                     "Configuration",
                     size="5",
@@ -64,14 +63,9 @@ def admin_config_index() -> rx.Component:
                     columns="repeat(auto-fill, minmax(220px, 1fr))",
                     gap="1rem",
                 ),
-                padding="2rem",
-                max_width="1200px",
+                align="start",
                 width="100%",
             ),
-            page_footer(),
-            align="start",
-            width="100%",
-            min_height="100vh",
-            background="var(--color-background, #f5f0eb)",
+            container="lg",
         )
     )
