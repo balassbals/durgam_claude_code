@@ -31,7 +31,7 @@ from durgam.theme import apply_theme
 
 configure_logging(debug=settings.debug)
 
-app = rx.App(style=apply_theme())
+app = rx.App(style=apply_theme(), stylesheets=["fonts/fonts.css"])
 app.add_page(
     index,
     route="/",
@@ -411,5 +411,17 @@ app.add_page(
     route="/faculty/[fid]",
     on_load=FacultyDetailState.load_detail,
     title="Faculty — DURGAM",
+)
+
+# ── M10.5 Phase 1 — design system verification artefact ──────────────────────
+# Remove this route (and the import above it) at M10.5 close; see
+# durgam/pages/dev_design_system.py docstring.
+from durgam.pages.dev_design_system import DesignSystemState, dev_design_system_page
+
+app.add_page(
+    dev_design_system_page,
+    route="/dev/design-system",
+    on_load=DesignSystemState.load_design_system,
+    title="Design System — DURGAM",
 )
 
