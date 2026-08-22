@@ -5,10 +5,9 @@ import reflex as rx
 from durgam.api import DOWNLOAD_PREFIX
 from durgam.pages.components import (
     admin_page,
+    app_shell,
     config_toast,
     form_modal,
-    nav_shell,
-    page_footer,
     primary_btn,
     secondary_btn,
 )
@@ -156,7 +155,9 @@ def _inline_form() -> rx.Component:
                             placeholder="Counsellor name",
                             width="100%",
                         ),
-                        align="start", gap="0.25rem", width="100%",
+                        align="start",
+                        gap="0.25rem",
+                        width="100%",
                     ),
                     rx.vstack(
                         rx.text("Qualification *", font_size="0.85rem", color="var(--color-muted)"),
@@ -167,10 +168,14 @@ def _inline_form() -> rx.Component:
                             placeholder="e.g. PhD Clinical Psychology",
                             width="100%",
                         ),
-                        align="start", gap="0.25rem", width="100%",
+                        align="start",
+                        gap="0.25rem",
+                        width="100%",
                     ),
                     rx.vstack(
-                        rx.text("Specialisation *", font_size="0.85rem", color="var(--color-muted)"),
+                        rx.text(
+                            "Specialisation *", font_size="0.85rem", color="var(--color-muted)"
+                        ),
                         rx.input(
                             name="form_specialisation",
                             value=CounsellorConfigState.form_specialisation,
@@ -178,10 +183,14 @@ def _inline_form() -> rx.Component:
                             placeholder="e.g. Clinical Psychology",
                             width="100%",
                         ),
-                        align="start", gap="0.25rem", width="100%",
+                        align="start",
+                        gap="0.25rem",
+                        width="100%",
                     ),
                     rx.vstack(
-                        rx.text("Mode of Appointment *", font_size="0.85rem", color="var(--color-muted)"),
+                        rx.text(
+                            "Mode of Appointment *", font_size="0.85rem", color="var(--color-muted)"
+                        ),
                         rx.select.root(
                             rx.select.trigger(placeholder="Select mode"),
                             rx.select.content(
@@ -193,11 +202,15 @@ def _inline_form() -> rx.Component:
                             on_change=CounsellorConfigState.set_form_mode,
                             width="100%",
                         ),
-                        align="start", gap="0.25rem", width="100%",
+                        align="start",
+                        gap="0.25rem",
+                        width="100%",
                     ),
                     rx.hstack(
                         rx.vstack(
-                            rx.text("Start Date *", font_size="0.85rem", color="var(--color-muted)"),
+                            rx.text(
+                                "Start Date *", font_size="0.85rem", color="var(--color-muted)"
+                            ),
                             rx.input(
                                 type="date",
                                 name="form_start",
@@ -205,7 +218,9 @@ def _inline_form() -> rx.Component:
                                 on_change=CounsellorConfigState.set_form_start,
                                 width="100%",
                             ),
-                            align="start", gap="0.25rem", width="50%",
+                            align="start",
+                            gap="0.25rem",
+                            width="50%",
                         ),
                         rx.vstack(
                             rx.text("End Date *", font_size="0.85rem", color="var(--color-muted)"),
@@ -216,9 +231,12 @@ def _inline_form() -> rx.Component:
                                 on_change=CounsellorConfigState.set_form_end,
                                 width="100%",
                             ),
-                            align="start", gap="0.25rem", width="50%",
+                            align="start",
+                            gap="0.25rem",
+                            width="50%",
                         ),
-                        width="100%", gap="1rem",
+                        width="100%",
+                        gap="1rem",
                     ),
                     rx.hstack(
                         rx.vstack(
@@ -230,7 +248,9 @@ def _inline_form() -> rx.Component:
                                 placeholder="+91-9876543210",
                                 width="100%",
                             ),
-                            align="start", gap="0.25rem", width="50%",
+                            align="start",
+                            gap="0.25rem",
+                            width="50%",
                         ),
                         rx.vstack(
                             rx.text("Email", font_size="0.85rem", color="var(--color-muted)"),
@@ -241,9 +261,12 @@ def _inline_form() -> rx.Component:
                                 placeholder="email@example.com",
                                 width="100%",
                             ),
-                            align="start", gap="0.25rem", width="50%",
+                            align="start",
+                            gap="0.25rem",
+                            width="50%",
                         ),
-                        width="100%", gap="1rem",
+                        width="100%",
+                        gap="1rem",
                     ),
                     rx.vstack(
                         rx.text("Display Order", font_size="0.85rem", color="var(--color-muted)"),
@@ -254,8 +277,14 @@ def _inline_form() -> rx.Component:
                             on_change=CounsellorConfigState.set_form_display_order,
                             width="100px",
                         ),
-                        rx.text("Lower numbers appear first", font_size="0.75rem", color="var(--color-muted)"),
-                        align="start", gap="0.25rem", width="100%",
+                        rx.text(
+                            "Lower numbers appear first",
+                            font_size="0.75rem",
+                            color="var(--color-muted)",
+                        ),
+                        align="start",
+                        gap="0.25rem",
+                        width="100%",
                     ),
                     rx.vstack(
                         rx.text(
@@ -297,7 +326,9 @@ def _inline_form() -> rx.Component:
                             ),
                             rx.fragment(),
                         ),
-                        align="start", gap="0.25rem", width="100%",
+                        align="start",
+                        gap="0.25rem",
+                        width="100%",
                     ),
                     rx.hstack(
                         primary_btn("Save", type="submit"),
@@ -326,9 +357,8 @@ def _inline_form() -> rx.Component:
 
 def admin_config_counsellors() -> rx.Component:
     return admin_page(
-        rx.vstack(
-            nav_shell(),
-            rx.box(
+        app_shell(
+            rx.vstack(
                 rx.hstack(
                     rx.heading(
                         "Mental Health Counsellors",
@@ -394,14 +424,9 @@ def admin_config_counsellors() -> rx.Component:
                     on_cancel=CounsellorConfigState.cancel_confirm,
                     confirm_label="Deactivate",
                 ),
-                padding="2rem",
-                max_width="1200px",
+                align="start",
                 width="100%",
             ),
-            page_footer(),
-            align="start",
-            width="100%",
-            min_height="100vh",
-            background="var(--color-background, #f5f0eb)",
+            container="lg",
         )
     )

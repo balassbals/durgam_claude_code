@@ -4,10 +4,9 @@ import reflex as rx
 
 from durgam.pages.components import (
     admin_page,
+    app_shell,
     config_toast,
     form_modal,
-    nav_shell,
-    page_footer,
     primary_btn,
     role_multi_select,
     role_multi_select_ordered,
@@ -18,15 +17,15 @@ from durgam.pages.shared.data_table import TableColumn, data_table
 from durgam.states.config_approval_process import ApprovalProcessConfigState
 
 _COMMON_MIMES: list[tuple[str, str]] = [
-    ("PDF",          "application/pdf"),
-    ("JPEG image",   "image/jpeg"),
-    ("PNG image",    "image/png"),
-    ("Word (DOCX)",  "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
-    ("Word (DOC)",   "application/msword"),
+    ("PDF", "application/pdf"),
+    ("JPEG image", "image/jpeg"),
+    ("PNG image", "image/png"),
+    ("Word (DOCX)", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+    ("Word (DOC)", "application/msword"),
     ("Excel (XLSX)", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
-    ("Excel (XLS)",  "application/vnd.ms-excel"),
-    ("Plain text",   "text/plain"),
-    ("CSV",          "text/csv"),
+    ("Excel (XLS)", "application/vnd.ms-excel"),
+    ("Plain text", "text/plain"),
+    ("CSV", "text/csv"),
 ]
 
 
@@ -82,25 +81,36 @@ def _inline_form() -> rx.Component:
             ),
             rx.form(
                 rx.vstack(
-                    rx.input(type="hidden", name="editing_id",
-                             value=ApprovalProcessConfigState.editing_id),
+                    rx.input(
+                        type="hidden",
+                        name="editing_id",
+                        value=ApprovalProcessConfigState.editing_id,
+                    ),
                     rx.vstack(
                         rx.text("Code *", font_size="0.85rem", color="var(--color-muted)"),
-                        rx.input(name="form_code",
-                                 value=ApprovalProcessConfigState.form_code,
-                                 on_change=ApprovalProcessConfigState.set_form_code,
-                                 placeholder="e.g. CPC_FUND_RELEASE",
-                                 width="100%"),
-                        align="start", gap="0.25rem", width="100%",
+                        rx.input(
+                            name="form_code",
+                            value=ApprovalProcessConfigState.form_code,
+                            on_change=ApprovalProcessConfigState.set_form_code,
+                            placeholder="e.g. CPC_FUND_RELEASE",
+                            width="100%",
+                        ),
+                        align="start",
+                        gap="0.25rem",
+                        width="100%",
                     ),
                     rx.vstack(
                         rx.text("Title *", font_size="0.85rem", color="var(--color-muted)"),
-                        rx.input(name="form_title",
-                                 value=ApprovalProcessConfigState.form_title,
-                                 on_change=ApprovalProcessConfigState.set_form_title,
-                                 placeholder="e.g. Central Purchase Committee Fund Release",
-                                 width="100%"),
-                        align="start", gap="0.25rem", width="100%",
+                        rx.input(
+                            name="form_title",
+                            value=ApprovalProcessConfigState.form_title,
+                            on_change=ApprovalProcessConfigState.set_form_title,
+                            placeholder="e.g. Central Purchase Committee Fund Release",
+                            width="100%",
+                        ),
+                        align="start",
+                        gap="0.25rem",
+                        width="100%",
                     ),
                     rx.vstack(
                         rx.text("Requestor Roles", font_size="0.85rem", color="var(--color-muted)"),
@@ -109,10 +119,16 @@ def _inline_form() -> rx.Component:
                             selected_codes=ApprovalProcessConfigState.form_requestors_selected,
                             toggle_handler=ApprovalProcessConfigState.toggle_requestor,
                         ),
-                        align="start", gap="0.25rem", width="100%",
+                        align="start",
+                        gap="0.25rem",
+                        width="100%",
                     ),
                     rx.vstack(
-                        rx.text("Channel Roles (approval stages)", font_size="0.85rem", color="var(--color-muted)"),
+                        rx.text(
+                            "Channel Roles (approval stages)",
+                            font_size="0.85rem",
+                            color="var(--color-muted)",
+                        ),
                         role_multi_select_ordered(
                             options=ApprovalProcessConfigState.role_options,
                             selected_codes=ApprovalProcessConfigState.form_channel_selected,
@@ -120,20 +136,33 @@ def _inline_form() -> rx.Component:
                             move_up_handler=ApprovalProcessConfigState.move_channel_up,
                             move_down_handler=ApprovalProcessConfigState.move_channel_down,
                         ),
-                        align="start", gap="0.25rem", width="100%",
+                        align="start",
+                        gap="0.25rem",
+                        width="100%",
                     ),
                     rx.vstack(
-                        rx.text("Informational CC Roles", font_size="0.85rem", color="var(--color-muted)"),
+                        rx.text(
+                            "Informational CC Roles",
+                            font_size="0.85rem",
+                            color="var(--color-muted)",
+                        ),
                         role_multi_select(
                             options=ApprovalProcessConfigState.role_options,
                             selected_codes=ApprovalProcessConfigState.form_cc_selected,
                             toggle_handler=ApprovalProcessConfigState.toggle_cc,
                         ),
-                        align="start", gap="0.25rem", width="100%",
+                        align="start",
+                        gap="0.25rem",
+                        width="100%",
                     ),
                     rx.vstack(
-                        rx.text("Attachments", font_weight="600", font_size="0.9rem",
-                                color="var(--color-primary)", margin_top="0.5rem"),
+                        rx.text(
+                            "Attachments",
+                            font_weight="600",
+                            font_size="0.9rem",
+                            color="var(--color-primary)",
+                            margin_top="0.5rem",
+                        ),
                         rx.hstack(
                             rx.checkbox(
                                 "Require requestor attachments",
@@ -143,18 +172,27 @@ def _inline_form() -> rx.Component:
                             align="center",
                         ),
                         rx.vstack(
-                            rx.text("Maximum requestor attachments",
-                                    font_size="0.8rem", color="var(--color-muted)"),
+                            rx.text(
+                                "Maximum requestor attachments",
+                                font_size="0.8rem",
+                                color="var(--color-muted)",
+                            ),
                             rx.input(
                                 type="number",
-                                min="0", max="20",
+                                min="0",
+                                max="20",
                                 value=ApprovalProcessConfigState.form_max_upward.to(str),
                                 on_change=ApprovalProcessConfigState.set_form_max_upward,
                                 width="100px",
                             ),
-                            rx.text("0 = no maximum", font_size="0.7rem",
-                                    color="var(--color-muted)", font_style="italic"),
-                            align="start", gap="0.15rem",
+                            rx.text(
+                                "0 = no maximum",
+                                font_size="0.7rem",
+                                color="var(--color-muted)",
+                                font_style="italic",
+                            ),
+                            align="start",
+                            gap="0.15rem",
                         ),
                         rx.hstack(
                             rx.checkbox(
@@ -165,36 +203,53 @@ def _inline_form() -> rx.Component:
                             align="center",
                         ),
                         rx.vstack(
-                            rx.text("Maximum approver attachments per decision",
-                                    font_size="0.8rem", color="var(--color-muted)"),
+                            rx.text(
+                                "Maximum approver attachments per decision",
+                                font_size="0.8rem",
+                                color="var(--color-muted)",
+                            ),
                             rx.input(
                                 type="number",
-                                min="0", max="20",
+                                min="0",
+                                max="20",
                                 value=ApprovalProcessConfigState.form_max_downward.to(str),
                                 on_change=ApprovalProcessConfigState.set_form_max_downward,
                                 width="100px",
                             ),
-                            align="start", gap="0.15rem",
+                            align="start",
+                            gap="0.15rem",
                         ),
                         rx.vstack(
-                            rx.text("Max file size per attachment (MB)",
-                                    font_size="0.8rem", color="var(--color-muted)"),
+                            rx.text(
+                                "Max file size per attachment (MB)",
+                                font_size="0.8rem",
+                                color="var(--color-muted)",
+                            ),
                             rx.input(
                                 type="number",
-                                min="1", max="100",
+                                min="1",
+                                max="100",
                                 value=ApprovalProcessConfigState.form_max_attachment_mb.to(str),
                                 on_change=ApprovalProcessConfigState.set_form_max_attachment_mb,
                                 width="100px",
                             ),
-                            align="start", gap="0.15rem",
+                            align="start",
+                            gap="0.15rem",
                         ),
                         rx.vstack(
-                            rx.text("Allowed file types (leave all unchecked = any type)",
-                                    font_size="0.8rem", color="var(--color-muted)"),
+                            rx.text(
+                                "Allowed file types (leave all unchecked = any type)",
+                                font_size="0.8rem",
+                                color="var(--color-muted)",
+                            ),
                             *[_mime_checkbox(label, value) for label, value in _COMMON_MIMES],
-                            align="start", gap="0.2rem", width="100%",
+                            align="start",
+                            gap="0.2rem",
+                            width="100%",
                         ),
-                        align="start", gap="0.5rem", width="100%",
+                        align="start",
+                        gap="0.5rem",
+                        width="100%",
                     ),
                     rx.checkbox(
                         "Finance process",
@@ -203,17 +258,21 @@ def _inline_form() -> rx.Component:
                     ),
                     rx.hstack(
                         primary_btn("Save", type="submit"),
-                        secondary_btn("Cancel",
-                                      on_click=ApprovalProcessConfigState.cancel_form,
-                                      type="button"),
+                        secondary_btn(
+                            "Cancel", on_click=ApprovalProcessConfigState.cancel_form, type="button"
+                        ),
                         gap="0.75rem",
                     ),
-                    gap="1rem", align="start", width="100%",
+                    gap="1rem",
+                    align="start",
+                    width="100%",
                 ),
                 on_submit=ApprovalProcessConfigState.save_process,
                 reset_on_submit=False,
             ),
-            gap="0", align="start", width="100%",
+            gap="0",
+            align="start",
+            width="100%",
         ),
         is_open=ApprovalProcessConfigState.show_form,
     )
@@ -221,16 +280,15 @@ def _inline_form() -> rx.Component:
 
 def admin_config_approval_processes() -> rx.Component:
     return admin_page(
-        rx.vstack(
-            nav_shell(),
-            rx.box(
+        app_shell(
+            rx.vstack(
                 rx.hstack(
-                    rx.heading("Approval Processes", size="5",
-                               font_family="var(--font-sans)"),
+                    rx.heading("Approval Processes", size="5", font_family="var(--font-sans)"),
                     rx.spacer(),
-                    primary_btn("+ Add Process",
-                                on_click=ApprovalProcessConfigState.open_create),
-                    align="center", width="100%", margin_bottom="1rem",
+                    primary_btn("+ Add Process", on_click=ApprovalProcessConfigState.open_create),
+                    align="center",
+                    width="100%",
+                    margin_bottom="1rem",
                 ),
                 config_toast(
                     ApprovalProcessConfigState.flash,
@@ -267,10 +325,9 @@ def admin_config_approval_processes() -> rx.Component:
                     on_cancel=ApprovalProcessConfigState.cancel_confirm,
                     confirm_label="Deactivate",
                 ),
-                padding="2rem", max_width="1200px", width="100%",
+                align="start",
+                width="100%",
             ),
-            page_footer(),
-            align="start", width="100%", min_height="100vh",
-            background="var(--color-background, #f5f0eb)",
+            container="lg",
         )
     )

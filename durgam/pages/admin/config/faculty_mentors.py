@@ -4,10 +4,9 @@ import reflex as rx
 
 from durgam.pages.components import (
     admin_page,
+    app_shell,
     config_toast,
     form_modal,
-    nav_shell,
-    page_footer,
     primary_btn,
     secondary_btn,
 )
@@ -134,7 +133,9 @@ def _inline_form() -> rx.Component:
                             placeholder="Student identifier",
                             width="100%",
                         ),
-                        align="start", gap="0.25rem", width="100%",
+                        align="start",
+                        gap="0.25rem",
+                        width="100%",
                     ),
                     rx.vstack(
                         rx.text("Notes", font_size="0.85rem", color="var(--color-muted)"),
@@ -146,7 +147,9 @@ def _inline_form() -> rx.Component:
                             width="100%",
                             rows="3",
                         ),
-                        align="start", gap="0.25rem", width="100%",
+                        align="start",
+                        gap="0.25rem",
+                        width="100%",
                     ),
                     rx.hstack(
                         primary_btn("Save", type="submit"),
@@ -174,9 +177,8 @@ def _inline_form() -> rx.Component:
 
 def admin_config_faculty_mentors() -> rx.Component:
     return admin_page(
-        rx.vstack(
-            nav_shell(),
-            rx.box(
+        app_shell(
+            rx.vstack(
                 rx.hstack(
                     rx.heading(
                         "Faculty Mentor Assignments",
@@ -296,14 +298,9 @@ def admin_config_faculty_mentors() -> rx.Component:
                     on_cancel=FacultyMentorConfigState.cancel_confirm,
                     confirm_label="Deactivate",
                 ),
-                padding="2rem",
-                max_width="1200px",
+                align="start",
                 width="100%",
             ),
-            page_footer(),
-            align="start",
-            width="100%",
-            min_height="100vh",
-            background="var(--color-background, #f5f0eb)",
+            container="lg",
         )
     )

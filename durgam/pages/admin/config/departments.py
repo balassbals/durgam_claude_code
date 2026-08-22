@@ -4,10 +4,9 @@ import reflex as rx
 
 from durgam.pages.components import (
     admin_page,
+    app_shell,
     config_toast,
     form_modal,
-    nav_shell,
-    page_footer,
     primary_btn,
     secondary_btn,
 )
@@ -39,8 +38,11 @@ def _kebab(row: dict) -> rx.Component:
             rx.menu.item(
                 "Edit",
                 on_click=AdminDepartmentsState.open_edit(  # type: ignore[call-arg, func-returns-value]
-                    row["id"], row["code"], row["name"],
-                    row["school_id"], row["main_campus_id"],
+                    row["id"],
+                    row["code"],
+                    row["name"],
+                    row["school_id"],
+                    row["main_campus_id"],
                 ),
             ),
             rx.menu.item(
@@ -144,7 +146,9 @@ def _inline_form() -> rx.Component:
                     ),
                     rx.hstack(
                         primary_btn("Save", type="submit"),
-                        secondary_btn("Cancel", on_click=AdminDepartmentsState.cancel_form, type="button"),
+                        secondary_btn(
+                            "Cancel", on_click=AdminDepartmentsState.cancel_form, type="button"
+                        ),
                         gap="0.75rem",
                     ),
                     gap="1rem",
@@ -233,112 +237,112 @@ def _detail_panel() -> rx.Component:
     """Modal detail panel showing campus links and sub-departments."""
     return form_modal(
         content=rx.vstack(
-        rx.hstack(
-            rx.heading(
-                AdminDepartmentsState.detail_dept_name,
-                size="4",
-                font_family="var(--font-sans)",
-            ),
-            rx.spacer(),
-            rx.button(
-                "Close",
-                on_click=AdminDepartmentsState.close_detail,
-                background="transparent",
-                border="1px solid var(--color-rule)",
-                color="var(--color-body)",
-                padding="0.25rem 0.75rem",
-                border_radius="4px",
-                cursor="pointer",
-                font_family="var(--font-sans)",
-                font_size="0.85rem",
-            ),
-            align="center",
-            width="100%",
-            margin_bottom="1.25rem",
-        ),
-        # ── Campuses section ──────────────────────────────────────────────────
-        rx.text(
-            "Campuses",
-            font_weight="600",
-            font_size="0.9rem",
-            font_family="var(--font-sans)",
-            color="var(--color-muted)",
-            margin_bottom="0.5rem",
-        ),
-        rx.cond(
-            AdminDepartmentsState.detail_campus_links.length() == 0,  # type: ignore[attr-defined]
-            rx.text(
-                "No campuses linked.",
-                font_size="0.85rem",
-                color="var(--color-muted)",
-                font_family="var(--font-sans)",
-            ),
             rx.hstack(
-                rx.foreach(
-                    AdminDepartmentsState.detail_campus_links,
-                    _campus_chip,
+                rx.heading(
+                    AdminDepartmentsState.detail_dept_name,
+                    size="4",
+                    font_family="var(--font-sans)",
                 ),
-                flex_wrap="wrap",
-                gap="0.5rem",
-            ),
-        ),
-        # Add campus row
-        rx.hstack(
-            rx.select.root(
-                rx.select.trigger(placeholder="Add campus…"),
-                rx.select.content(
-                    rx.foreach(
-                        AdminDepartmentsState.available_campuses,
-                        lambda c: rx.select.item(c["label"], value=c["id"]),
-                    ),
+                rx.spacer(),
+                rx.button(
+                    "Close",
+                    on_click=AdminDepartmentsState.close_detail,
+                    background="transparent",
+                    border="1px solid var(--color-rule)",
+                    color="var(--color-body)",
+                    padding="0.25rem 0.75rem",
+                    border_radius="4px",
+                    cursor="pointer",
+                    font_family="var(--font-sans)",
+                    font_size="0.85rem",
                 ),
-                value=AdminDepartmentsState.add_campus_id,
-                on_change=AdminDepartmentsState.set_add_campus_id,
-                width="12rem",
+                align="center",
+                width="100%",
+                margin_bottom="1.25rem",
             ),
-            primary_btn(
-                "Add",
-                on_click=AdminDepartmentsState.add_campus_link,
-            ),
-            align="center",
-            gap="0.5rem",
-            margin_top="0.75rem",
-            margin_bottom="1.25rem",
-        ),
-        rx.divider(margin_y="0.75rem"),
-        # ── Sub-departments section ───────────────────────────────────────────
-        rx.hstack(
+            # ── Campuses section ──────────────────────────────────────────────────
             rx.text(
-                "Sub-Departments",
+                "Campuses",
                 font_weight="600",
                 font_size="0.9rem",
                 font_family="var(--font-sans)",
                 color="var(--color-muted)",
+                margin_bottom="0.5rem",
             ),
-            rx.text(
-                "(read-only at M3 — management deferred to a future milestone)",
-                font_size="0.78rem",
-                color="var(--color-muted)",
-                font_family="var(--font-sans)",
+            rx.cond(
+                AdminDepartmentsState.detail_campus_links.length() == 0,  # type: ignore[attr-defined]
+                rx.text(
+                    "No campuses linked.",
+                    font_size="0.85rem",
+                    color="var(--color-muted)",
+                    font_family="var(--font-sans)",
+                ),
+                rx.hstack(
+                    rx.foreach(
+                        AdminDepartmentsState.detail_campus_links,
+                        _campus_chip,
+                    ),
+                    flex_wrap="wrap",
+                    gap="0.5rem",
+                ),
             ),
-            align="center",
-            gap="0.5rem",
-            margin_bottom="0.5rem",
-        ),
-        rx.cond(
-            AdminDepartmentsState.detail_sub_depts.length() == 0,  # type: ignore[attr-defined]
-            rx.text(
-                "No sub-departments.",
-                font_size="0.85rem",
-                color="var(--color-muted)",
-                font_family="var(--font-sans)",
+            # Add campus row
+            rx.hstack(
+                rx.select.root(
+                    rx.select.trigger(placeholder="Add campus…"),
+                    rx.select.content(
+                        rx.foreach(
+                            AdminDepartmentsState.available_campuses,
+                            lambda c: rx.select.item(c["label"], value=c["id"]),
+                        ),
+                    ),
+                    value=AdminDepartmentsState.add_campus_id,
+                    on_change=AdminDepartmentsState.set_add_campus_id,
+                    width="12rem",
+                ),
+                primary_btn(
+                    "Add",
+                    on_click=AdminDepartmentsState.add_campus_link,
+                ),
+                align="center",
+                gap="0.5rem",
+                margin_top="0.75rem",
+                margin_bottom="1.25rem",
             ),
-            rx.vstack(
-                rx.foreach(AdminDepartmentsState.detail_sub_depts, _subdept_row),
-                align="start",
-                gap="0",
+            rx.divider(margin_y="0.75rem"),
+            # ── Sub-departments section ───────────────────────────────────────────
+            rx.hstack(
+                rx.text(
+                    "Sub-Departments",
+                    font_weight="600",
+                    font_size="0.9rem",
+                    font_family="var(--font-sans)",
+                    color="var(--color-muted)",
+                ),
+                rx.text(
+                    "(read-only at M3 — management deferred to a future milestone)",
+                    font_size="0.78rem",
+                    color="var(--color-muted)",
+                    font_family="var(--font-sans)",
+                ),
+                align="center",
+                gap="0.5rem",
+                margin_bottom="0.5rem",
             ),
-        ),
+            rx.cond(
+                AdminDepartmentsState.detail_sub_depts.length() == 0,  # type: ignore[attr-defined]
+                rx.text(
+                    "No sub-departments.",
+                    font_size="0.85rem",
+                    color="var(--color-muted)",
+                    font_family="var(--font-sans)",
+                ),
+                rx.vstack(
+                    rx.foreach(AdminDepartmentsState.detail_sub_depts, _subdept_row),
+                    align="start",
+                    gap="0",
+                ),
+            ),
             align="start",
             gap="0.5rem",
             width="100%",
@@ -415,9 +419,8 @@ def _promote_remove_modal() -> rx.Component:
 
 def admin_config_departments() -> rx.Component:
     return admin_page(
-        rx.vstack(
-            nav_shell(),
-            rx.box(
+        app_shell(
+            rx.vstack(
                 rx.hstack(
                     rx.heading(
                         "Departments",
@@ -481,15 +484,10 @@ def admin_config_departments() -> rx.Component:
                     on_cancel=AdminDepartmentsState.cancel_remove_campus,
                     confirm_label="Remove",
                 ),
-                padding="2rem",
-                max_width="1200px",
+                align="start",
                 width="100%",
                 id="dept-page-top",
             ),
-            page_footer(),
-            align="start",
-            width="100%",
-            min_height="100vh",
-            background="var(--color-background, #f5f0eb)",
+            container="lg",
         )
     )

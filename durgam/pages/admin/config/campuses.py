@@ -4,10 +4,9 @@ import reflex as rx
 
 from durgam.pages.components import (
     admin_page,
+    app_shell,
     config_toast,
     form_modal,
-    nav_shell,
-    page_footer,
     primary_btn,
     secondary_btn,
 )
@@ -110,7 +109,9 @@ def _inline_form() -> rx.Component:
                     ),
                     rx.hstack(
                         primary_btn("Save", type="submit"),
-                        secondary_btn("Cancel", on_click=CampusConfigState.cancel_form, type="button"),
+                        secondary_btn(
+                            "Cancel", on_click=CampusConfigState.cancel_form, type="button"
+                        ),
                         gap="0.75rem",
                     ),
                     gap="1rem",
@@ -130,9 +131,8 @@ def _inline_form() -> rx.Component:
 
 def admin_config_campuses() -> rx.Component:
     return admin_page(
-        rx.vstack(
-            nav_shell(),
-            rx.box(
+        app_shell(
+            rx.vstack(
                 rx.hstack(
                     rx.heading(
                         "Campuses",
@@ -145,7 +145,11 @@ def admin_config_campuses() -> rx.Component:
                     width="100%",
                     margin_bottom="1.5rem",
                 ),
-                config_toast(CampusConfigState.flash, CampusConfigState.flash_type, CampusConfigState.dismiss_flash),
+                config_toast(
+                    CampusConfigState.flash,
+                    CampusConfigState.flash_type,
+                    CampusConfigState.dismiss_flash,
+                ),
                 _inline_form(),
                 rx.cond(
                     CampusConfigState.loading,
@@ -171,15 +175,10 @@ def admin_config_campuses() -> rx.Component:
                     on_cancel=CampusConfigState.cancel_confirm,
                     confirm_label="Deactivate",
                 ),
-                padding="2rem",
-                max_width="1200px",
+                align="start",
                 width="100%",
                 id="campus-page-top",
             ),
-            page_footer(),
-            align="start",
-            width="100%",
-            min_height="100vh",
-            background="var(--color-background, #f5f0eb)",
+            container="lg",
         )
     )

@@ -4,11 +4,10 @@ import reflex as rx
 
 from durgam.pages.components import (
     admin_page,
+    app_shell,
     config_toast,
     destructive_btn,
     form_modal,
-    nav_shell,
-    page_footer,
     primary_btn,
     secondary_btn,
 )
@@ -40,14 +39,19 @@ def _kebab(row: dict) -> rx.Component:
                     rx.menu.item(
                         "Edit",
                         on_click=CalendarEntryConfigState.open_edit(  # type: ignore[call-arg, func-returns-value]
-                            row["id"], row["title"], row["type_raw"],
-                            row["starts_at"], row["ends_at"], row["notes"],
+                            row["id"],
+                            row["title"],
+                            row["type_raw"],
+                            row["starts_at"],
+                            row["ends_at"],
+                            row["notes"],
                         ),
                     ),
                     rx.menu.item(
                         "Delete",
                         on_click=CalendarEntryConfigState.open_delete_confirm(  # type: ignore[call-arg, func-returns-value]
-                            row["id"], row["title"],
+                            row["id"],
+                            row["title"],
                         ),
                         color="var(--color-danger, #c0392b)",
                     ),
@@ -332,7 +336,9 @@ def _inline_form() -> rx.Component:
                         width="100%",
                     ),
                     rx.vstack(
-                        rx.text("Notes (optional)", font_size="0.85rem", color="var(--color-muted)"),
+                        rx.text(
+                            "Notes (optional)", font_size="0.85rem", color="var(--color-muted)"
+                        ),
                         rx.text_area(
                             name="form_notes",
                             value=CalendarEntryConfigState.form_notes,
@@ -372,9 +378,8 @@ def _inline_form() -> rx.Component:
 
 def admin_config_calendar() -> rx.Component:
     return admin_page(
-        rx.vstack(
-            nav_shell(),
-            rx.box(
+        app_shell(
+            rx.vstack(
                 rx.hstack(
                     rx.heading(
                         "Academic Calendar",
@@ -459,15 +464,10 @@ def admin_config_calendar() -> rx.Component:
                     on_cancel=CalendarEntryConfigState.cancel_iqac_confirm,
                     confirm_label="Confirm",
                 ),
-                padding="2rem",
-                max_width="1200px",
+                align="start",
                 width="100%",
                 id="calendar-page-top",
             ),
-            page_footer(),
-            align="start",
-            width="100%",
-            min_height="100vh",
-            background="var(--color-background, #f5f0eb)",
+            container="lg",
         )
     )

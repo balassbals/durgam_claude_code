@@ -4,10 +4,9 @@ import reflex as rx
 
 from durgam.pages.components import (
     admin_page,
+    app_shell,
     config_toast,
     form_modal,
-    nav_shell,
-    page_footer,
     primary_btn,
     secondary_btn,
 )
@@ -33,14 +32,18 @@ def _kebab(row: dict) -> rx.Component:
             rx.menu.item(
                 "Edit",
                 on_click=DesignationConfigState.open_edit(  # type: ignore[call-arg, func-returns-value]
-                    row["id"], row["code"], row["name"],
-                    row["rank"], row["notes"],
+                    row["id"],
+                    row["code"],
+                    row["name"],
+                    row["rank"],
+                    row["notes"],
                 ),
             ),
             rx.menu.item(
                 "Deactivate",
                 on_click=DesignationConfigState.open_deactivate_confirm(  # type: ignore[call-arg, func-returns-value]
-                    row["id"], row["code"],
+                    row["id"],
+                    row["code"],
                 ),
                 color="var(--color-danger, #c0392b)",
             ),
@@ -63,57 +66,80 @@ def _inline_form() -> rx.Component:
             ),
             rx.form(
                 rx.vstack(
-                    rx.input(type="hidden", name="editing_id",
-                             value=DesignationConfigState.editing_id),
+                    rx.input(
+                        type="hidden", name="editing_id", value=DesignationConfigState.editing_id
+                    ),
                     rx.vstack(
                         rx.text("Code *", font_size="0.85rem", color="var(--color-muted)"),
-                        rx.input(name="form_code",
-                                 value=DesignationConfigState.form_code,
-                                 on_change=DesignationConfigState.set_form_code,
-                                 placeholder="e.g. senior_professor",
-                                 width="100%"),
-                        align="start", gap="0.25rem", width="100%",
+                        rx.input(
+                            name="form_code",
+                            value=DesignationConfigState.form_code,
+                            on_change=DesignationConfigState.set_form_code,
+                            placeholder="e.g. senior_professor",
+                            width="100%",
+                        ),
+                        align="start",
+                        gap="0.25rem",
+                        width="100%",
                     ),
                     rx.vstack(
                         rx.text("Name *", font_size="0.85rem", color="var(--color-muted)"),
-                        rx.input(name="form_name",
-                                 value=DesignationConfigState.form_name,
-                                 on_change=DesignationConfigState.set_form_name,
-                                 placeholder="e.g. Senior Professor",
-                                 width="100%"),
-                        align="start", gap="0.25rem", width="100%",
+                        rx.input(
+                            name="form_name",
+                            value=DesignationConfigState.form_name,
+                            on_change=DesignationConfigState.set_form_name,
+                            placeholder="e.g. Senior Professor",
+                            width="100%",
+                        ),
+                        align="start",
+                        gap="0.25rem",
+                        width="100%",
                     ),
                     rx.vstack(
                         rx.text("Rank *", font_size="0.85rem", color="var(--color-muted)"),
-                        rx.input(name="form_rank", type="number",
-                                 value=DesignationConfigState.form_rank,
-                                 on_change=DesignationConfigState.set_form_rank,
-                                 placeholder="1 = highest",
-                                 width="100%"),
-                        align="start", gap="0.25rem", width="100%",
+                        rx.input(
+                            name="form_rank",
+                            type="number",
+                            value=DesignationConfigState.form_rank,
+                            on_change=DesignationConfigState.set_form_rank,
+                            placeholder="1 = highest",
+                            width="100%",
+                        ),
+                        align="start",
+                        gap="0.25rem",
+                        width="100%",
                     ),
                     rx.vstack(
                         rx.text("Notes", font_size="0.85rem", color="var(--color-muted)"),
-                        rx.text_area(name="form_notes",
-                                     value=DesignationConfigState.form_notes,
-                                     on_change=DesignationConfigState.set_form_notes,
-                                     placeholder="Optional notes",
-                                     width="100%", rows="2"),
-                        align="start", gap="0.25rem", width="100%",
+                        rx.text_area(
+                            name="form_notes",
+                            value=DesignationConfigState.form_notes,
+                            on_change=DesignationConfigState.set_form_notes,
+                            placeholder="Optional notes",
+                            width="100%",
+                            rows="2",
+                        ),
+                        align="start",
+                        gap="0.25rem",
+                        width="100%",
                     ),
                     rx.hstack(
                         primary_btn("Save", type="submit"),
-                        secondary_btn("Cancel",
-                                      on_click=DesignationConfigState.cancel_form,
-                                      type="button"),
+                        secondary_btn(
+                            "Cancel", on_click=DesignationConfigState.cancel_form, type="button"
+                        ),
                         gap="0.75rem",
                     ),
-                    gap="1rem", align="start", width="100%",
+                    gap="1rem",
+                    align="start",
+                    width="100%",
                 ),
                 on_submit=DesignationConfigState.save_designation,
                 reset_on_submit=False,
             ),
-            gap="0", align="start", width="100%",
+            gap="0",
+            align="start",
+            width="100%",
         ),
         is_open=DesignationConfigState.show_form,
     )
@@ -121,16 +147,15 @@ def _inline_form() -> rx.Component:
 
 def admin_config_designations() -> rx.Component:
     return admin_page(
-        rx.vstack(
-            nav_shell(),
-            rx.box(
+        app_shell(
+            rx.vstack(
                 rx.hstack(
-                    rx.heading("Designations", size="5",
-                               font_family="var(--font-sans)"),
+                    rx.heading("Designations", size="5", font_family="var(--font-sans)"),
                     rx.spacer(),
-                    primary_btn("+ Add Designation",
-                                on_click=DesignationConfigState.open_create),
-                    align="center", width="100%", margin_bottom="1rem",
+                    primary_btn("+ Add Designation", on_click=DesignationConfigState.open_create),
+                    align="center",
+                    width="100%",
+                    margin_bottom="1rem",
                 ),
                 config_toast(
                     DesignationConfigState.flash,
@@ -163,10 +188,9 @@ def admin_config_designations() -> rx.Component:
                     on_cancel=DesignationConfigState.cancel_confirm,
                     confirm_label="Deactivate",
                 ),
-                padding="2rem", max_width="1200px", width="100%",
+                align="start",
+                width="100%",
             ),
-            page_footer(),
-            align="start", width="100%", min_height="100vh",
-            background="var(--color-background, #f5f0eb)",
+            container="lg",
         )
     )

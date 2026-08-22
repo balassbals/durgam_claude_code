@@ -4,10 +4,9 @@ import reflex as rx
 
 from durgam.pages.components import (
     admin_page,
+    app_shell,
     config_toast,
     form_modal,
-    nav_shell,
-    page_footer,
     primary_btn,
     role_multi_select,
     secondary_btn,
@@ -17,12 +16,12 @@ from durgam.pages.shared.data_table import TableColumn, data_table
 from durgam.states.config_audience_group import AudienceGroupConfigState
 
 _SCOPE_TYPE_OPTIONS = [
-    ("none",       "No scope restriction"),
-    ("school",     "School"),
+    ("none", "No scope restriction"),
+    ("school", "School"),
     ("department", "Department"),
-    ("campus",     "Campus"),
-    ("program",    "Program"),
-    ("centre",     "Centre"),
+    ("campus", "Campus"),
+    ("program", "Program"),
+    ("centre", "Centre"),
 ]
 
 
@@ -70,7 +69,9 @@ def _scope_codes_picker() -> rx.Component:
                 font_size="0.72rem",
                 color="var(--color-muted)",
             ),
-            align="start", gap="0.25rem", width="100%",
+            align="start",
+            gap="0.25rem",
+            width="100%",
         ),
         rx.box(),
     )
@@ -104,7 +105,8 @@ def _kebab(row: dict) -> rx.Component:
             rx.menu.item(
                 "Remove",
                 on_click=AudienceGroupConfigState.open_deactivate_confirm(  # type: ignore[call-arg, func-returns-value]
-                    row["id"], row["code"],
+                    row["id"],
+                    row["code"],
                 ),
                 color="var(--color-danger, #c0392b)",
             ),
@@ -150,7 +152,9 @@ def _inline_form() -> rx.Component:
                             color="var(--color-muted)",
                             font_style="italic",
                         ),
-                        align="start", gap="0.2rem", width="100%",
+                        align="start",
+                        gap="0.2rem",
+                        width="100%",
                     ),
                     # ── Name ───────────────────────────────────────────────
                     rx.vstack(
@@ -162,7 +166,9 @@ def _inline_form() -> rx.Component:
                             placeholder="e.g. Science Faculty",
                             width="100%",
                         ),
-                        align="start", gap="0.2rem", width="100%",
+                        align="start",
+                        gap="0.2rem",
+                        width="100%",
                     ),
                     # ── Description ────────────────────────────────────────
                     rx.vstack(
@@ -174,7 +180,9 @@ def _inline_form() -> rx.Component:
                             width="100%",
                             rows="2",
                         ),
-                        align="start", gap="0.2rem", width="100%",
+                        align="start",
+                        gap="0.2rem",
+                        width="100%",
                     ),
                     # ── Role codes multi-select ─────────────────────────────
                     rx.vstack(
@@ -189,7 +197,9 @@ def _inline_form() -> rx.Component:
                             font_size="0.72rem",
                             color="var(--color-muted)",
                         ),
-                        align="start", gap="0.25rem", width="100%",
+                        align="start",
+                        gap="0.25rem",
+                        width="100%",
                     ),
                     # ── Scope type ─────────────────────────────────────────
                     rx.vstack(
@@ -206,14 +216,17 @@ def _inline_form() -> rx.Component:
                             on_change=AudienceGroupConfigState.set_scope_type,
                             width="100%",
                         ),
-                        align="start", gap="0.25rem", width="100%",
+                        align="start",
+                        gap="0.25rem",
+                        width="100%",
                     ),
                     # ── Scope codes (conditional) ───────────────────────────
                     _scope_codes_picker(),
                     # ── Program degree types ────────────────────────────────
                     rx.vstack(
-                        rx.text("Program Degree Types", font_size="0.85rem",
-                                color="var(--color-muted)"),
+                        rx.text(
+                            "Program Degree Types", font_size="0.85rem", color="var(--color-muted)"
+                        ),
                         rx.input(
                             value=AudienceGroupConfigState.form_program_degree_types_text,
                             on_change=AudienceGroupConfigState.set_form_program_degree_types_text,
@@ -225,7 +238,9 @@ def _inline_form() -> rx.Component:
                             font_size="0.72rem",
                             color="var(--color-muted)",
                         ),
-                        align="start", gap="0.25rem", width="100%",
+                        align="start",
+                        gap="0.25rem",
+                        width="100%",
                     ),
                     # ── Is active ──────────────────────────────────────────
                     rx.vstack(
@@ -235,14 +250,18 @@ def _inline_form() -> rx.Component:
                                 on_change=AudienceGroupConfigState.set_form_is_active,
                             ),
                             rx.text("Active", font_size="0.9rem"),
-                            align="center", gap="0.5rem",
+                            align="center",
+                            gap="0.5rem",
                         ),
                         rx.text(
                             "Inactive groups are excluded from the audience picker.",
                             font_size="0.72rem",
                             color="var(--color-muted)",
                         ),
-                        align="start", gap="0.25rem", margin_y="0.25rem", width="100%",
+                        align="start",
+                        gap="0.25rem",
+                        margin_y="0.25rem",
+                        width="100%",
                     ),
                     rx.hstack(
                         primary_btn("Save", type="submit"),
@@ -253,12 +272,16 @@ def _inline_form() -> rx.Component:
                         ),
                         gap="0.75rem",
                     ),
-                    gap="1rem", align="start", width="100%",
+                    gap="1rem",
+                    align="start",
+                    width="100%",
                 ),
                 on_submit=AudienceGroupConfigState.save,
                 reset_on_submit=False,
             ),
-            gap="0", align="start", width="100%",
+            gap="0",
+            align="start",
+            width="100%",
         ),
         is_open=AudienceGroupConfigState.show_form,
         max_width="600px",
@@ -267,16 +290,17 @@ def _inline_form() -> rx.Component:
 
 def admin_config_audience_groups() -> rx.Component:
     return admin_page(
-        rx.vstack(
-            nav_shell(),
-            rx.box(
+        app_shell(
+            rx.vstack(
                 rx.hstack(
-                    rx.heading("Audience Groups", size="5",
-                               font_family="var(--font-sans)"),
+                    rx.heading("Audience Groups", size="5", font_family="var(--font-sans)"),
                     rx.spacer(),
-                    primary_btn("+ Add Audience Group",
-                                on_click=AudienceGroupConfigState.open_create),
-                    align="center", width="100%", margin_bottom="1rem",
+                    primary_btn(
+                        "+ Add Audience Group", on_click=AudienceGroupConfigState.open_create
+                    ),
+                    align="center",
+                    width="100%",
+                    margin_bottom="1rem",
                 ),
                 config_toast(
                     AudienceGroupConfigState.flash,
@@ -309,10 +333,9 @@ def admin_config_audience_groups() -> rx.Component:
                     on_cancel=AudienceGroupConfigState.cancel_confirm,
                     confirm_label="Remove",
                 ),
-                padding="2rem", max_width="1200px", width="100%",
+                align="start",
+                width="100%",
             ),
-            page_footer(),
-            align="start", width="100%", min_height="100vh",
-            background="var(--color-background, #f5f0eb)",
+            container="lg",
         )
     )

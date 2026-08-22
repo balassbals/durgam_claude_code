@@ -4,9 +4,8 @@ import reflex as rx
 
 from durgam.pages.components import (
     admin_page,
+    app_shell,
     config_toast,
-    nav_shell,
-    page_footer,
     primary_btn,
 )
 from durgam.states.config_timings import ClassTimingsConfigState
@@ -14,11 +13,18 @@ from durgam.states.config_timings import ClassTimingsConfigState
 
 def _field(label: str, child: rx.Component, hint: str = "") -> rx.Component:
     return rx.vstack(
-        rx.text(label, font_size="0.85rem", color="var(--color-muted)", font_family="var(--font-sans)"),
+        rx.text(
+            label, font_size="0.85rem", color="var(--color-muted)", font_family="var(--font-sans)"
+        ),
         child,
         rx.cond(
             hint != "",
-            rx.text(hint, font_size="0.75rem", color="var(--color-muted)", font_family="var(--font-sans)"),
+            rx.text(
+                hint,
+                font_size="0.75rem",
+                color="var(--color-muted)",
+                font_family="var(--font-sans)",
+            ),
             rx.fragment(),
         ),
         align="start",
@@ -29,9 +35,8 @@ def _field(label: str, child: rx.Component, hint: str = "") -> rx.Component:
 
 def admin_config_class_timings() -> rx.Component:
     return admin_page(
-        rx.vstack(
-            nav_shell(),
-            rx.box(
+        app_shell(
+            rx.vstack(
                 rx.link(
                     "← Configuration",
                     href="/admin/config",
@@ -157,14 +162,9 @@ def admin_config_class_timings() -> rx.Component:
                         max_width="520px",
                     ),
                 ),
-                padding="2rem",
-                max_width="1200px",
+                align="start",
                 width="100%",
             ),
-            page_footer(),
-            align="start",
-            width="100%",
-            min_height="100vh",
-            background="var(--color-background, #f5f0eb)",
+            container="sm",
         )
     )

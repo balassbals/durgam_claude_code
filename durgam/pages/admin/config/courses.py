@@ -4,12 +4,11 @@ import reflex as rx
 
 from durgam.pages.components import (
     admin_page,
-    nav_shell,
-    page_footer,
-    primary_btn,
-    secondary_btn,
+    app_shell,
     config_toast,
     form_modal,
+    primary_btn,
+    secondary_btn,
 )
 from durgam.pages.shared.confirmation_dialog import confirmation_dialog
 from durgam.pages.shared.data_table import TableColumn, data_table
@@ -123,9 +122,7 @@ def _inline_form() -> rx.Component:
                         width="100%",
                     ),
                     rx.vstack(
-                        rx.text(
-                            "Department", font_size="0.85rem", color="var(--color-muted)"
-                        ),
+                        rx.text("Department", font_size="0.85rem", color="var(--color-muted)"),
                         rx.select.root(
                             rx.select.trigger(placeholder="Select department"),
                             rx.select.content(
@@ -170,9 +167,7 @@ def _inline_form() -> rx.Component:
                             gap="0.2rem",
                         ),
                         rx.vstack(
-                            rx.text(
-                                "Lecture", font_size="0.85rem", color="var(--color-muted)"
-                            ),
+                            rx.text("Lecture", font_size="0.85rem", color="var(--color-muted)"),
                             rx.input(
                                 name="form_lecture",
                                 value=AdminCoursesState.form_lecture,
@@ -187,9 +182,7 @@ def _inline_form() -> rx.Component:
                             width="100%",
                         ),
                         rx.vstack(
-                            rx.text(
-                                "Tutorial", font_size="0.85rem", color="var(--color-muted)"
-                            ),
+                            rx.text("Tutorial", font_size="0.85rem", color="var(--color-muted)"),
                             rx.input(
                                 name="form_tutorial",
                                 value=AdminCoursesState.form_tutorial,
@@ -226,9 +219,7 @@ def _inline_form() -> rx.Component:
                         width="100%",
                     ),
                     rx.vstack(
-                        rx.text(
-                            "Evaluation", font_size="0.85rem", color="var(--color-muted)"
-                        ),
+                        rx.text("Evaluation", font_size="0.85rem", color="var(--color-muted)"),
                         rx.select.root(
                             rx.select.trigger(placeholder="Select evaluation"),
                             rx.select.content(
@@ -246,7 +237,9 @@ def _inline_form() -> rx.Component:
                     ),
                     rx.hstack(
                         primary_btn("Save", type="submit"),
-                        secondary_btn("Cancel", on_click=AdminCoursesState.cancel_form, type="button"),
+                        secondary_btn(
+                            "Cancel", on_click=AdminCoursesState.cancel_form, type="button"
+                        ),
                         gap="0.75rem",
                     ),
                     gap="1rem",
@@ -267,9 +260,8 @@ def _inline_form() -> rx.Component:
 
 def admin_config_courses() -> rx.Component:
     return admin_page(
-        rx.vstack(
-            nav_shell(),
-            rx.box(
+        app_shell(
+            rx.vstack(
                 rx.hstack(
                     rx.heading(
                         "Courses",
@@ -282,7 +274,11 @@ def admin_config_courses() -> rx.Component:
                     width="100%",
                     margin_bottom="1.5rem",
                 ),
-                config_toast(AdminCoursesState.flash, AdminCoursesState.flash_type, AdminCoursesState.dismiss_flash),
+                config_toast(
+                    AdminCoursesState.flash,
+                    AdminCoursesState.flash_type,
+                    AdminCoursesState.dismiss_flash,
+                ),
                 _inline_form(),
                 rx.cond(
                     AdminCoursesState.loading,
@@ -317,15 +313,10 @@ def admin_config_courses() -> rx.Component:
                     on_cancel=AdminCoursesState.cancel_confirm,
                     confirm_label="Deactivate",
                 ),
-                padding="2rem",
-                max_width="1200px",
+                align="start",
                 width="100%",
                 id="course-page-top",
             ),
-            page_footer(),
-            align="start",
-            width="100%",
-            min_height="100vh",
-            background="var(--color-background, #f5f0eb)",
+            container="lg",
         )
     )

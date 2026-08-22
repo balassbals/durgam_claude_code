@@ -4,10 +4,9 @@ import reflex as rx
 
 from durgam.pages.components import (
     admin_page,
+    app_shell,
     config_toast,
     form_modal,
-    nav_shell,
-    page_footer,
     primary_btn,
     secondary_btn,
 )
@@ -82,8 +81,9 @@ def _dept_selector() -> rx.Component:
         rx.text("Department:", font_size="0.85rem", color="var(--color-muted)"),
         rx.cond(
             ClassTeacherConfigState.dept_locked,
-            rx.text(ClassTeacherConfigState.dept_name_display,
-                    font_weight="600", font_size="0.9rem"),
+            rx.text(
+                ClassTeacherConfigState.dept_name_display, font_weight="600", font_size="0.9rem"
+            ),
             rx.select.root(
                 rx.select.trigger(placeholder="Select department"),
                 rx.select.content(
@@ -139,7 +139,9 @@ def _inline_form() -> rx.Component:
                             placeholder="e.g. BSc-I-A",
                             width="100%",
                         ),
-                        align="start", gap="0.25rem", width="100%",
+                        align="start",
+                        gap="0.25rem",
+                        width="100%",
                     ),
                     rx.vstack(
                         rx.text("Notes", font_size="0.85rem", color="var(--color-muted)"),
@@ -151,7 +153,9 @@ def _inline_form() -> rx.Component:
                             width="100%",
                             rows="3",
                         ),
-                        align="start", gap="0.25rem", width="100%",
+                        align="start",
+                        gap="0.25rem",
+                        width="100%",
                     ),
                     rx.hstack(
                         primary_btn("Save", type="submit"),
@@ -179,9 +183,8 @@ def _inline_form() -> rx.Component:
 
 def admin_config_class_teachers() -> rx.Component:
     return admin_page(
-        rx.vstack(
-            nav_shell(),
-            rx.box(
+        app_shell(
+            rx.vstack(
                 rx.hstack(
                     rx.heading(
                         "Class Teacher Assignments",
@@ -238,14 +241,9 @@ def admin_config_class_teachers() -> rx.Component:
                     on_cancel=ClassTeacherConfigState.cancel_confirm,
                     confirm_label="Deactivate",
                 ),
-                padding="2rem",
-                max_width="1200px",
+                align="start",
                 width="100%",
             ),
-            page_footer(),
-            align="start",
-            width="100%",
-            min_height="100vh",
-            background="var(--color-background, #f5f0eb)",
+            container="lg",
         )
     )
