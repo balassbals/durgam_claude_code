@@ -2,7 +2,7 @@
 
 import reflex as rx
 
-from durgam.pages.components import nav_shell, page_footer, primary_btn, secondary_btn
+from durgam.pages.components import app_shell, primary_btn, secondary_btn
 from durgam.pages.shared.data_table import TableColumn, data_table
 from durgam.states.approval_requests import MyRequestsState, _STATE_OPTIONS
 from durgam.states.auth import AuthState
@@ -47,9 +47,8 @@ def _actions(row: rx.Var) -> rx.Component:
 
 
 def my_requests_page() -> rx.Component:
-    content = rx.vstack(
-        nav_shell(),
-        rx.box(
+    content = app_shell(
+        rx.vstack(
             rx.hstack(
                 rx.heading(
                     "My Approval Requests",
@@ -112,15 +111,10 @@ def my_requests_page() -> rx.Component:
                     empty_message=MyRequestsState.empty_message,
                 ),
             ),
-            padding="2rem",
-            max_width="1100px",
+            align="start",
             width="100%",
         ),
-        page_footer(),
-        align="start",
-        width="100%",
-        min_height="100vh",
-        background="var(--color-background, #f5f0eb)",
+        container="lg",
     )
 
     return rx.cond(

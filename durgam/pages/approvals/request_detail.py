@@ -3,10 +3,9 @@
 import reflex as rx
 
 from durgam.pages.components import (
+    app_shell,
     destructive_btn,
     flash_error,
-    nav_shell,
-    page_footer,
     primary_btn,
     secondary_btn,
 )
@@ -204,14 +203,14 @@ def _description_section() -> rx.Component:
 def _leave_type_badge(code: rx.Var) -> rx.Component:
     return rx.match(
         code,
-        ("CL",  rx.badge("Casual Leave",         color_scheme="blue",   size="2")),
-        ("SCL", rx.badge("Special Casual Leave",  color_scheme="violet", size="2")),
-        ("EL",  rx.badge("Earned Leave",          color_scheme="green",  size="2")),
-        ("HPL", rx.badge("Half Pay Leave",        color_scheme="orange", size="2")),
-        ("CML", rx.badge("Commuted Leave",        color_scheme="amber",  size="2")),
-        ("EOL", rx.badge("Extraordinary Leave",   color_scheme="red",    size="2")),
-        ("ML",  rx.badge("Maternity Leave",       color_scheme="pink",   size="2")),
-        ("SL",  rx.badge("Study Leave",           color_scheme="indigo", size="2")),
+        ("CL", rx.badge("Casual Leave", color_scheme="blue", size="2")),
+        ("SCL", rx.badge("Special Casual Leave", color_scheme="violet", size="2")),
+        ("EL", rx.badge("Earned Leave", color_scheme="green", size="2")),
+        ("HPL", rx.badge("Half Pay Leave", color_scheme="orange", size="2")),
+        ("CML", rx.badge("Commuted Leave", color_scheme="amber", size="2")),
+        ("EOL", rx.badge("Extraordinary Leave", color_scheme="red", size="2")),
+        ("ML", rx.badge("Maternity Leave", color_scheme="pink", size="2")),
+        ("SL", rx.badge("Study Leave", color_scheme="indigo", size="2")),
         rx.badge(code, size="2"),
     )
 
@@ -228,7 +227,7 @@ def _leave_details_section() -> rx.Component:
         rx.box(
             _kv_row("Leave Type", _leave_type_badge(RequestDetailState.leave_type)),
             _kv_row("From", RequestDetailState.leave_starts_on),
-            _kv_row("To",   RequestDetailState.leave_ends_on),
+            _kv_row("To", RequestDetailState.leave_ends_on),
             _kv_row("Chargeable Days", RequestDetailState.leave_chargeable_days),
             rx.cond(
                 RequestDetailState.leave_sanctioned_days_current > 0,
@@ -252,17 +251,24 @@ def _leave_details_section() -> rx.Component:
                 rx.hstack(
                     rx.vstack(
                         rx.text("Closing", font_size="0.75rem", color="var(--color-muted)"),
-                        rx.text(RequestDetailState.leave_requestor_balance["closing"], font_weight="600"),
+                        rx.text(
+                            RequestDetailState.leave_requestor_balance["closing"], font_weight="600"
+                        ),
                         align="center",
                     ),
                     rx.vstack(
                         rx.text("Availed", font_size="0.75rem", color="var(--color-muted)"),
-                        rx.text(RequestDetailState.leave_requestor_balance["availed"], font_weight="600"),
+                        rx.text(
+                            RequestDetailState.leave_requestor_balance["availed"], font_weight="600"
+                        ),
                         align="center",
                     ),
                     rx.vstack(
                         rx.text("Credited", font_size="0.75rem", color="var(--color-muted)"),
-                        rx.text(RequestDetailState.leave_requestor_balance["credited"], font_weight="600"),
+                        rx.text(
+                            RequestDetailState.leave_requestor_balance["credited"],
+                            font_weight="600",
+                        ),
                         align="center",
                     ),
                     gap="2rem",
@@ -475,7 +481,9 @@ def _confidentiality_controls() -> rx.Component:
                     RequestDetailState.prior_action_actors,
                     lambda actor: rx.hstack(
                         rx.checkbox(
-                            checked=RequestDetailState.decision_share_with_user_ids.contains(actor["id"]),  # type: ignore[attr-defined]
+                            checked=RequestDetailState.decision_share_with_user_ids.contains(
+                                actor["id"]
+                            ),  # type: ignore[attr-defined]
                             on_change=RequestDetailState.toggle_decision_share_with(actor["id"]),
                         ),
                         rx.text(actor["display"], font_size="0.85rem"),
@@ -526,8 +534,13 @@ def _attachments_section(title: str, items: rx.Var, *, item_renderer=None) -> rx
 
 def _steps_section() -> rx.Component:
     header_cells = [
-        rx.table.column_header_cell(h, font_weight="600", font_size="0.8rem",
-                                     color="var(--color-muted)", text_transform="uppercase")
+        rx.table.column_header_cell(
+            h,
+            font_weight="600",
+            font_size="0.8rem",
+            color="var(--color-muted)",
+            text_transform="uppercase",
+        )
         for h in ["Stage", "Approver", "Role", "Decision", "Comment", "Date"]
     ]
 
@@ -584,7 +597,8 @@ def _decision_file_item(file_id: rx.Var) -> rx.Component:
 
 def _downward_upload_section() -> rx.Component:
     return rx.cond(
-        (RequestDetailState.process_max_downward > 0) | RequestDetailState.process_requires_downward,
+        (RequestDetailState.process_max_downward > 0)
+        | RequestDetailState.process_requires_downward,
         rx.vstack(
             rx.text(
                 "Attachments",
@@ -906,9 +920,8 @@ def _action_row() -> rx.Component:
 
 
 def request_detail_page() -> rx.Component:
-    detail_content = rx.vstack(
-        nav_shell(),
-        rx.box(
+    detail_content = app_shell(
+        rx.vstack(
             rx.hstack(
                 rx.link(
                     secondary_btn(
@@ -993,15 +1006,10 @@ def request_detail_page() -> rx.Component:
                 on_cancel=RequestDetailState.cancel_withdraw,
                 confirm_label="Withdraw",
             ),
-            padding="2rem",
-            max_width="900px",
+            align="start",
             width="100%",
         ),
-        page_footer(),
-        align="start",
-        width="100%",
-        min_height="100vh",
-        background="var(--color-background, #f5f0eb)",
+        container="md",
     )
 
     return rx.cond(

@@ -3,9 +3,8 @@
 import reflex as rx
 
 from durgam.pages.components import (
+    app_shell,
     flash_error,
-    nav_shell,
-    page_footer,
     primary_btn,
     secondary_btn,
 )
@@ -130,7 +129,9 @@ def _nrf_fields_section() -> rx.Component:
                     on_change=SubmitRequestState.set_nrf_name,
                     width="100%",
                 ),
-                align="start", gap="0.25rem", width="100%",
+                align="start",
+                gap="0.25rem",
+                width="100%",
             ),
             rx.vstack(
                 rx.text("Designation *", font_size="0.85rem", color="var(--color-muted)"),
@@ -140,7 +141,9 @@ def _nrf_fields_section() -> rx.Component:
                     on_change=SubmitRequestState.set_nrf_designation,
                     width="100%",
                 ),
-                align="start", gap="0.25rem", width="100%",
+                align="start",
+                gap="0.25rem",
+                width="100%",
             ),
             rx.vstack(
                 rx.text("Organization *", font_size="0.85rem", color="var(--color-muted)"),
@@ -150,7 +153,9 @@ def _nrf_fields_section() -> rx.Component:
                     on_change=SubmitRequestState.set_nrf_organization,
                     width="100%",
                 ),
-                align="start", gap="0.25rem", width="100%",
+                align="start",
+                gap="0.25rem",
+                width="100%",
             ),
             rx.vstack(
                 rx.text("Expertise *", font_size="0.85rem", color="var(--color-muted)"),
@@ -160,7 +165,9 @@ def _nrf_fields_section() -> rx.Component:
                     on_change=SubmitRequestState.set_nrf_expertise,
                     width="100%",
                 ),
-                align="start", gap="0.25rem", width="100%",
+                align="start",
+                gap="0.25rem",
+                width="100%",
             ),
             rx.hstack(
                 rx.vstack(
@@ -171,7 +178,9 @@ def _nrf_fields_section() -> rx.Component:
                         on_change=SubmitRequestState.set_nrf_available_from,
                         width="100%",
                     ),
-                    align="start", gap="0.25rem", flex="1",
+                    align="start",
+                    gap="0.25rem",
+                    flex="1",
                 ),
                 rx.vstack(
                     rx.text("Available To *", font_size="0.85rem", color="var(--color-muted)"),
@@ -181,9 +190,12 @@ def _nrf_fields_section() -> rx.Component:
                         on_change=SubmitRequestState.set_nrf_available_to,
                         width="100%",
                     ),
-                    align="start", gap="0.25rem", flex="1",
+                    align="start",
+                    gap="0.25rem",
+                    flex="1",
                 ),
-                gap="1rem", width="100%",
+                gap="1rem",
+                width="100%",
             ),
             rx.cond(
                 SubmitRequestState.nrf_date_range_error != "",
@@ -208,7 +220,9 @@ def _nrf_fields_section() -> rx.Component:
                     on_change=SubmitRequestState.set_nrf_type,
                     width="100%",
                 ),
-                align="start", gap="0.25rem", width="100%",
+                align="start",
+                gap="0.25rem",
+                width="100%",
             ),
             align="start",
             gap="0.75rem",
@@ -241,7 +255,9 @@ def _noc_fields_section() -> rx.Component:
                     width="100%",
                     rows="3",
                 ),
-                align="start", gap="0.25rem", width="100%",
+                align="start",
+                gap="0.25rem",
+                width="100%",
             ),
             rx.vstack(
                 rx.text("To Whom *", font_size="0.85rem", color="var(--color-muted)"),
@@ -251,7 +267,9 @@ def _noc_fields_section() -> rx.Component:
                     on_change=SubmitRequestState.set_noc_to_whom,
                     width="100%",
                 ),
-                align="start", gap="0.25rem", width="100%",
+                align="start",
+                gap="0.25rem",
+                width="100%",
             ),
             rx.vstack(
                 rx.text("Date Required By", font_size="0.85rem", color="var(--color-muted)"),
@@ -261,7 +279,9 @@ def _noc_fields_section() -> rx.Component:
                     on_change=SubmitRequestState.set_noc_date_required_by,
                     width="100%",
                 ),
-                align="start", gap="0.25rem", width="100%",
+                align="start",
+                gap="0.25rem",
+                width="100%",
             ),
             rx.vstack(
                 rx.text("Additional Notes", font_size="0.85rem", color="var(--color-muted)"),
@@ -272,7 +292,9 @@ def _noc_fields_section() -> rx.Component:
                     width="100%",
                     rows="2",
                 ),
-                align="start", gap="0.25rem", width="100%",
+                align="start",
+                gap="0.25rem",
+                width="100%",
             ),
             align="start",
             gap="0.75rem",
@@ -287,9 +309,8 @@ def _noc_fields_section() -> rx.Component:
 
 
 def submit_page() -> rx.Component:
-    content = rx.vstack(
-        nav_shell(),
-        rx.box(
+    content = app_shell(
+        rx.vstack(
             rx.heading(
                 "New Approval Request",
                 size="5",
@@ -410,15 +431,10 @@ def submit_page() -> rx.Component:
                 border="1px solid var(--color-rule)",
                 border_radius="6px",
             ),
-            padding="2rem",
-            max_width="680px",
+            align="start",
             width="100%",
         ),
-        page_footer(),
-        align="start",
-        width="100%",
-        min_height="100vh",
-        background="var(--color-background, #f5f0eb)",
+        container="md",
     )
 
     return rx.cond(

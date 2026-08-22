@@ -4,11 +4,10 @@ import reflex as rx
 
 from durgam.api import DOWNLOAD_PREFIX
 from durgam.pages.components import (
+    app_shell,
     config_toast,
     destructive_btn,
     form_modal,
-    nav_shell,
-    page_footer,
     primary_btn,
     secondary_btn,
 )
@@ -121,10 +120,7 @@ def _filter_strip() -> rx.Component:
         rx.select.root(
             rx.select.trigger(placeholder="Tab"),
             rx.select.content(
-                *[
-                    rx.select.item(opt["label"], value=opt["value"])
-                    for opt in _TAB_OPTIONS
-                ],
+                *[rx.select.item(opt["label"], value=opt["value"]) for opt in _TAB_OPTIONS],
             ),
             value=AnnouncementBrowseState.tab,
             on_change=AnnouncementBrowseState.switch_tab,
@@ -134,10 +130,7 @@ def _filter_strip() -> rx.Component:
         rx.select.root(
             rx.select.trigger(placeholder="Importance"),
             rx.select.content(
-                *[
-                    rx.select.item(opt["label"], value=opt["value"])
-                    for opt in _IMPORTANCE_OPTIONS
-                ],
+                *[rx.select.item(opt["label"], value=opt["value"]) for opt in _IMPORTANCE_OPTIONS],
             ),
             value=AnnouncementBrowseState.importance_filter,
             on_change=AnnouncementBrowseState.set_importance_filter,
@@ -478,9 +471,7 @@ def _detail_panel() -> rx.Component:
                 destructive_btn(
                     rx.icon("trash-2", size=13),
                     " Withdraw",
-                    on_click=AnnouncementDetailState.withdraw(
-                        AnnouncementDetailState.detail["id"]
-                    ),
+                    on_click=AnnouncementDetailState.withdraw(AnnouncementDetailState.detail["id"]),
                     type="button",
                     margin_top="0.5rem",
                 ),
@@ -506,9 +497,8 @@ def _detail_panel() -> rx.Component:
 
 
 def announcements_page() -> rx.Component:
-    content = rx.vstack(
-        nav_shell(),
-        rx.box(
+    content = app_shell(
+        rx.vstack(
             # Page header
             rx.hstack(
                 rx.heading(
@@ -583,15 +573,10 @@ def announcements_page() -> rx.Component:
                     ),
                 ),
             ),
-            padding="2rem",
-            max_width="900px",
+            align="start",
             width="100%",
         ),
-        page_footer(),
-        align="start",
-        width="100%",
-        min_height="100vh",
-        background="var(--color-background, #f5f0eb)",
+        container="md",
     )
 
     return rx.cond(
