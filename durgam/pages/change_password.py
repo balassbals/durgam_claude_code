@@ -2,7 +2,7 @@
 
 import reflex as rx
 
-from durgam.pages.components import nav_shell, typed_flash
+from durgam.pages.components import app_shell, typed_flash
 from durgam.services.password import PASSWORD_RULES
 from durgam.states.auth import AuthState
 from durgam.states.base import BaseState
@@ -30,8 +30,7 @@ def _password_rules_hint() -> rx.Component:
 
 
 def change_password() -> rx.Component:
-    return rx.box(
-        nav_shell(),
+    return app_shell(
         rx.box(
             rx.vstack(
                 rx.heading(
@@ -166,13 +165,7 @@ def change_password() -> rx.Component:
             border_radius="8px",
             padding="2rem",
             width="100%",
-            max_width="420px",
             box_shadow="0 2px 12px rgba(0,0,0,0.08)",
         ),
-        display="flex",
-        justify_content="center",
-        align_items="center",
-        min_height="100vh",
-        background="var(--color-surface)",
-        padding="1rem",
+        container="sm",
     )

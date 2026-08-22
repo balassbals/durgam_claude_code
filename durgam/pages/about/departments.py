@@ -2,7 +2,7 @@
 
 import reflex as rx
 
-from durgam.pages.components import nav_shell, page_footer
+from durgam.pages.components import app_shell
 from durgam.states.about import AboutDeptListState
 from durgam.states.auth import AuthState
 
@@ -60,9 +60,8 @@ def _dept_row(row: dict) -> rx.Component:
 def about_departments() -> rx.Component:
     return rx.cond(
         AuthState.current_user_id != "",
-        rx.vstack(
-            nav_shell(),
-            rx.box(
+        app_shell(
+            rx.vstack(
                 rx.heading(
                     "Department Vision & Mission",
                     size="5",
@@ -95,15 +94,10 @@ def about_departments() -> rx.Component:
                         ),
                     ),
                 ),
-                padding="2rem",
-                max_width="800px",
+                align="start",
                 width="100%",
             ),
-            page_footer(),
-            align="start",
-            width="100%",
-            min_height="100vh",
-            background="var(--color-background, #f5f0eb)",
+            container="md",
         ),
         rx.fragment(),
     )
