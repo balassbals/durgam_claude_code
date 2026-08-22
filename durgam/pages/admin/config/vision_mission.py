@@ -4,10 +4,9 @@ import reflex as rx
 
 from durgam.pages.components import (
     admin_page,
+    app_shell,
     config_toast,
     form_modal,
-    nav_shell,
-    page_footer,
     primary_btn,
     secondary_btn,
 )
@@ -339,9 +338,8 @@ def _dept_picker_section() -> rx.Component:
 
 def admin_config_vision_mission() -> rx.Component:
     return admin_page(
-        rx.vstack(
-            nav_shell(),
-            rx.box(
+        app_shell(
+            rx.vstack(
                 rx.link(
                     "← Configuration",
                     href="/admin/config",
@@ -388,14 +386,9 @@ def admin_config_vision_mission() -> rx.Component:
                         width="100%",
                     ),
                 ),
-                padding="2rem",
-                max_width="1000px",
+                align="start",
                 width="100%",
             ),
-            page_footer(),
-            align="start",
-            width="100%",
-            min_height="100vh",
-            background="var(--color-background, #f5f0eb)",
+            container="md",
         )
     )

@@ -4,9 +4,8 @@ import reflex as rx
 
 from durgam.pages.components import (
     admin_page,
+    app_shell,
     config_toast,
-    nav_shell,
-    page_footer,
     primary_btn,
 )
 from durgam.states.config_timings import WorkingDaysConfigState
@@ -17,9 +16,8 @@ _DAY_LABELS_6 = "Monday · Tuesday · Wednesday · Thursday · Friday · Saturda
 
 def admin_config_working_days() -> rx.Component:
     return admin_page(
-        rx.vstack(
-            nav_shell(),
-            rx.box(
+        app_shell(
+            rx.vstack(
                 rx.link(
                     "← Configuration",
                     href="/admin/config",
@@ -97,14 +95,9 @@ def admin_config_working_days() -> rx.Component:
                         max_width="480px",
                     ),
                 ),
-                padding="2rem",
-                max_width="1200px",
+                align="start",
                 width="100%",
             ),
-            page_footer(),
-            align="start",
-            width="100%",
-            min_height="100vh",
-            background="var(--color-background, #f5f0eb)",
+            container="sm",
         )
     )

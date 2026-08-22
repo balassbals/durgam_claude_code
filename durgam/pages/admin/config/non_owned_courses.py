@@ -4,10 +4,9 @@ import reflex as rx
 
 from durgam.pages.components import (
     admin_page,
+    app_shell,
     config_toast,
     form_modal,
-    nav_shell,
-    page_footer,
     primary_btn,
     secondary_btn,
 )
@@ -106,7 +105,9 @@ def _inline_form() -> rx.Component:
                             placeholder="e.g. MDC101",
                             width="100%",
                         ),
-                        align="start", gap="0.25rem", width="100%",
+                        align="start",
+                        gap="0.25rem",
+                        width="100%",
                     ),
                     rx.vstack(
                         rx.text("Course Name *", font_size="0.85rem", color="var(--color-muted)"),
@@ -117,7 +118,9 @@ def _inline_form() -> rx.Component:
                             placeholder="e.g. Moral and Divine Culture",
                             width="100%",
                         ),
-                        align="start", gap="0.25rem", width="100%",
+                        align="start",
+                        gap="0.25rem",
+                        width="100%",
                     ),
                     rx.vstack(
                         rx.text("Credits", font_size="0.85rem", color="var(--color-muted)"),
@@ -129,7 +132,9 @@ def _inline_form() -> rx.Component:
                             placeholder="0",
                             width="100%",
                         ),
-                        align="start", gap="0.25rem", width="100%",
+                        align="start",
+                        gap="0.25rem",
+                        width="100%",
                     ),
                     rx.vstack(
                         rx.text("Semester *", font_size="0.85rem", color="var(--color-muted)"),
@@ -144,7 +149,9 @@ def _inline_form() -> rx.Component:
                             on_change=NonOwnedCourseConfigState.set_form_semester,
                             width="100%",
                         ),
-                        align="start", gap="0.25rem", width="100%",
+                        align="start",
+                        gap="0.25rem",
+                        width="100%",
                     ),
                     faculty_picker(
                         selected_label=NonOwnedCourseConfigState.form_faculty_label,
@@ -164,7 +171,9 @@ def _inline_form() -> rx.Component:
                             width="100%",
                             rows="3",
                         ),
-                        align="start", gap="0.25rem", width="100%",
+                        align="start",
+                        gap="0.25rem",
+                        width="100%",
                     ),
                     rx.hstack(
                         primary_btn("Save", type="submit"),
@@ -192,9 +201,8 @@ def _inline_form() -> rx.Component:
 
 def admin_config_non_owned_courses() -> rx.Component:
     return admin_page(
-        rx.vstack(
-            nav_shell(),
-            rx.box(
+        app_shell(
+            rx.vstack(
                 rx.hstack(
                     rx.heading(
                         "Non-Owned Courses",
@@ -253,14 +261,9 @@ def admin_config_non_owned_courses() -> rx.Component:
                     on_cancel=NonOwnedCourseConfigState.cancel_confirm,
                     confirm_label="Deactivate",
                 ),
-                padding="2rem",
-                max_width="1200px",
+                align="start",
                 width="100%",
             ),
-            page_footer(),
-            align="start",
-            width="100%",
-            min_height="100vh",
-            background="var(--color-background, #f5f0eb)",
+            container="lg",
         )
     )

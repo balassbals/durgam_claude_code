@@ -3,11 +3,10 @@
 import reflex as rx
 
 from durgam.pages.components import (
+    app_shell,
     config_toast,
     destructive_btn,
     form_modal,
-    nav_shell,
-    page_footer,
     primary_btn,
     secondary_btn,
 )
@@ -213,65 +212,61 @@ def _inline_form() -> rx.Component:
 
 
 def admin_leave_sanction_matrix() -> rx.Component:
-    page_content = rx.vstack(
-        nav_shell(),
-        rx.box(
-            rx.hstack(
-                rx.heading(
-                    "Leave Sanction Matrix",
-                    size="5",
-                    font_family="var(--font-sans)",
+    page_content = app_shell(
+        rx.fragment(
+            rx.vstack(
+                rx.hstack(
+                    rx.heading(
+                        "Leave Sanction Matrix",
+                        size="5",
+                        font_family="var(--font-sans)",
+                    ),
+                    rx.spacer(),
+                    primary_btn(
+                        rx.icon("plus", size=14),
+                        " Create Rule",
+                        on_click=LeaveMatrixState.open_create,
+                    ),
+                    align="center",
+                    width="100%",
+                    margin_bottom="1.5rem",
                 ),
-                rx.spacer(),
-                primary_btn(
-                    rx.icon("plus", size=14),
-                    " Create Rule",
-                    on_click=LeaveMatrixState.open_create,
+                config_toast(
+                    LeaveMatrixState.flash,
+                    LeaveMatrixState.flash_type,
+                    LeaveMatrixState.dismiss_flash,
                 ),
-                align="center",
+                rx.cond(
+                    LeaveMatrixState.loading,
+                    rx.center(rx.spinner(), padding="2rem"),
+                    data_table(
+                        rows=LeaveMatrixState.rules,
+                        columns=_COLUMNS,
+                        card_primary_key="leave_type",
+                        is_mobile=False,
+                        actions=_kebab,
+                        empty_message="No rules configured. Create the first rule above.",
+                    ),
+                ),
+                align="start",
                 width="100%",
-                margin_bottom="1.5rem",
             ),
-            config_toast(
-                LeaveMatrixState.flash,
-                LeaveMatrixState.flash_type,
-                LeaveMatrixState.dismiss_flash,
-            ),
-            rx.cond(
-                LeaveMatrixState.loading,
-                rx.center(rx.spinner(), padding="2rem"),
-                data_table(
-                    rows=LeaveMatrixState.rules,
-                    columns=_COLUMNS,
-                    card_primary_key="leave_type",
-                    is_mobile=False,
-                    actions=_kebab,
-                    empty_message="No rules configured. Create the first rule above.",
+            _inline_form(),
+            # Delete confirmation
+            confirmation_dialog(
+                is_open=LeaveMatrixState.confirm_open,
+                title="Delete this rule?",
+                body=rx.text(
+                    "This will soft-delete: ",
+                    rx.text(LeaveMatrixState.deleting_rule_label, font_weight="600", as_="span"),
+                    ". Leave requests already submitted are unaffected.",
                 ),
+                on_confirm=LeaveMatrixState.soft_delete,
+                on_cancel=LeaveMatrixState.cancel_delete,
+                confirm_label="Delete",
             ),
-            padding="2rem",
-            max_width="1200px",
-            width="100%",
         ),
-        page_footer(),
-        _inline_form(),
-        # Delete confirmation
-        confirmation_dialog(
-            is_open=LeaveMatrixState.confirm_open,
-            title="Delete this rule?",
-            body=rx.text(
-                "This will soft-delete: ",
-                rx.text(LeaveMatrixState.deleting_rule_label, font_weight="600", as_="span"),
-                ". Leave requests already submitted are unaffected.",
-            ),
-            on_confirm=LeaveMatrixState.soft_delete,
-            on_cancel=LeaveMatrixState.cancel_delete,
-            confirm_label="Delete",
-        ),
-        align="start",
-        width="100%",
-        min_height="100vh",
-        background="var(--color-background, #f5f0eb)",
+        container="lg",
     )
 
     return rx.cond(

@@ -4,10 +4,9 @@ import reflex as rx
 
 from durgam.pages.components import (
     admin_page,
+    app_shell,
     config_toast,
     form_modal,
-    nav_shell,
-    page_footer,
     primary_btn,
     secondary_btn,
 )
@@ -148,9 +147,8 @@ def _inline_form() -> rx.Component:
 
 def admin_config_holidays() -> rx.Component:
     return admin_page(
-        rx.vstack(
-            nav_shell(),
-            rx.box(
+        app_shell(
+            rx.vstack(
                 rx.hstack(
                     rx.heading(
                         "Holidays",
@@ -201,15 +199,10 @@ def admin_config_holidays() -> rx.Component:
                     on_cancel=HolidayConfigState.cancel_confirm,
                     confirm_label="Delete",
                 ),
-                padding="2rem",
-                max_width="1200px",
+                align="start",
                 width="100%",
                 id="holiday-page-top",
             ),
-            page_footer(),
-            align="start",
-            width="100%",
-            min_height="100vh",
-            background="var(--color-background, #f5f0eb)",
+            container="lg",
         )
     )

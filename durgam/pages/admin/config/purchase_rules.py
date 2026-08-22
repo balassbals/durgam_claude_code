@@ -4,10 +4,9 @@ import reflex as rx
 
 from durgam.pages.components import (
     admin_page,
+    app_shell,
     config_toast,
     form_modal,
-    nav_shell,
-    page_footer,
     primary_btn,
     role_multi_select,
     secondary_btn,
@@ -34,18 +33,25 @@ def _kebab(row: dict) -> rx.Component:
             rx.menu.item(
                 "Edit",
                 on_click=PurchaseRuleConfigState.open_edit(  # type: ignore[call-arg, func-returns-value]
-                    row["id"], row["fund_source"], row["tier"],
-                    row["raw_floor"], row["raw_ceiling"],
-                    row["raw_min_quotes"], row["raw_quote_count"],
-                    row["raw_discretion"], row["raw_comparative"],
-                    row["raw_approvers"], row["raw_committee"],
+                    row["id"],
+                    row["fund_source"],
+                    row["tier"],
+                    row["raw_floor"],
+                    row["raw_ceiling"],
+                    row["raw_min_quotes"],
+                    row["raw_quote_count"],
+                    row["raw_discretion"],
+                    row["raw_comparative"],
+                    row["raw_approvers"],
+                    row["raw_committee"],
                     row["notes"],
                 ),
             ),
             rx.menu.item(
                 "Deactivate",
                 on_click=PurchaseRuleConfigState.open_deactivate_confirm(  # type: ignore[call-arg, func-returns-value]
-                    row["id"], row["tier"],
+                    row["id"],
+                    row["tier"],
                 ),
                 color="var(--color-danger, #c0392b)",
             ),
@@ -68,8 +74,9 @@ def _inline_form() -> rx.Component:
             ),
             rx.form(
                 rx.vstack(
-                    rx.input(type="hidden", name="editing_id",
-                             value=PurchaseRuleConfigState.editing_id),
+                    rx.input(
+                        type="hidden", name="editing_id", value=PurchaseRuleConfigState.editing_id
+                    ),
                     rx.vstack(
                         rx.text("Fund Source *", font_size="0.85rem", color="var(--color-muted)"),
                         rx.select.root(
@@ -83,46 +90,73 @@ def _inline_form() -> rx.Component:
                             on_change=PurchaseRuleConfigState.set_form_fund_source,
                             width="100%",
                         ),
-                        align="start", gap="0.25rem", width="100%",
+                        align="start",
+                        gap="0.25rem",
+                        width="100%",
                     ),
                     rx.hstack(
                         rx.vstack(
                             rx.text("Tier *", font_size="0.85rem", color="var(--color-muted)"),
-                            rx.input(name="form_tier", type="number",
-                                     value=PurchaseRuleConfigState.form_tier,
-                                     on_change=PurchaseRuleConfigState.set_form_tier,
-                                     width="100%"),
-                            align="start", gap="0.25rem", width="50%",
+                            rx.input(
+                                name="form_tier",
+                                type="number",
+                                value=PurchaseRuleConfigState.form_tier,
+                                on_change=PurchaseRuleConfigState.set_form_tier,
+                                width="100%",
+                            ),
+                            align="start",
+                            gap="0.25rem",
+                            width="50%",
                         ),
                         rx.vstack(
                             rx.text("Quote Count", font_size="0.85rem", color="var(--color-muted)"),
-                            rx.input(name="form_quote_count", type="number",
-                                     value=PurchaseRuleConfigState.form_quote_count,
-                                     on_change=PurchaseRuleConfigState.set_form_quote_count,
-                                     width="100%"),
-                            align="start", gap="0.25rem", width="50%",
+                            rx.input(
+                                name="form_quote_count",
+                                type="number",
+                                value=PurchaseRuleConfigState.form_quote_count,
+                                on_change=PurchaseRuleConfigState.set_form_quote_count,
+                                width="100%",
+                            ),
+                            align="start",
+                            gap="0.25rem",
+                            width="50%",
                         ),
-                        width="100%", gap="1rem",
+                        width="100%",
+                        gap="1rem",
                     ),
                     rx.hstack(
                         rx.vstack(
-                            rx.text("Floor (INR) *", font_size="0.85rem", color="var(--color-muted)"),
-                            rx.input(name="form_floor", type="number",
-                                     value=PurchaseRuleConfigState.form_floor,
-                                     on_change=PurchaseRuleConfigState.set_form_floor,
-                                     width="100%"),
-                            align="start", gap="0.25rem", width="50%",
+                            rx.text(
+                                "Floor (INR) *", font_size="0.85rem", color="var(--color-muted)"
+                            ),
+                            rx.input(
+                                name="form_floor",
+                                type="number",
+                                value=PurchaseRuleConfigState.form_floor,
+                                on_change=PurchaseRuleConfigState.set_form_floor,
+                                width="100%",
+                            ),
+                            align="start",
+                            gap="0.25rem",
+                            width="50%",
                         ),
                         rx.vstack(
-                            rx.text("Ceiling (INR)", font_size="0.85rem", color="var(--color-muted)"),
-                            rx.input(name="form_ceiling",
-                                     value=PurchaseRuleConfigState.form_ceiling,
-                                     on_change=PurchaseRuleConfigState.set_form_ceiling,
-                                     placeholder="Leave blank for no limit",
-                                     width="100%"),
-                            align="start", gap="0.25rem", width="50%",
+                            rx.text(
+                                "Ceiling (INR)", font_size="0.85rem", color="var(--color-muted)"
+                            ),
+                            rx.input(
+                                name="form_ceiling",
+                                value=PurchaseRuleConfigState.form_ceiling,
+                                on_change=PurchaseRuleConfigState.set_form_ceiling,
+                                placeholder="Leave blank for no limit",
+                                width="100%",
+                            ),
+                            align="start",
+                            gap="0.25rem",
+                            width="50%",
                         ),
-                        width="100%", gap="1rem",
+                        width="100%",
+                        gap="1rem",
                     ),
                     rx.hstack(
                         rx.checkbox(
@@ -140,16 +174,23 @@ def _inline_form() -> rx.Component:
                             checked=PurchaseRuleConfigState.form_comparative,
                             on_change=PurchaseRuleConfigState.set_form_comparative,
                         ),
-                        gap="1rem", flex_wrap="wrap",
+                        gap="1rem",
+                        flex_wrap="wrap",
                     ),
                     rx.vstack(
-                        rx.text("Approving Authorities *", font_size="0.85rem", color="var(--color-muted)"),
+                        rx.text(
+                            "Approving Authorities *",
+                            font_size="0.85rem",
+                            color="var(--color-muted)",
+                        ),
                         role_multi_select(
                             options=PurchaseRuleConfigState.role_options,
                             selected_codes=PurchaseRuleConfigState.form_approvers_selected,
                             toggle_handler=PurchaseRuleConfigState.toggle_approver,
                         ),
-                        align="start", gap="0.25rem", width="100%",
+                        align="start",
+                        gap="0.25rem",
+                        width="100%",
                     ),
                     rx.vstack(
                         rx.text("Committee Level", font_size="0.85rem", color="var(--color-muted)"),
@@ -157,38 +198,53 @@ def _inline_form() -> rx.Component:
                             rx.select.trigger(placeholder="None"),
                             rx.select.content(
                                 rx.select.item("None", value="__none__"),
-                                rx.select.item("Campus Purchase Committee", value="campus_purchase_committee"),
-                                rx.select.item("Central Purchase Committee", value="central_purchase_committee"),
+                                rx.select.item(
+                                    "Campus Purchase Committee", value="campus_purchase_committee"
+                                ),
+                                rx.select.item(
+                                    "Central Purchase Committee", value="central_purchase_committee"
+                                ),
                             ),
                             name="form_committee",
                             value=PurchaseRuleConfigState.form_committee,
                             on_change=PurchaseRuleConfigState.set_form_committee,
                             width="100%",
                         ),
-                        align="start", gap="0.25rem", width="100%",
+                        align="start",
+                        gap="0.25rem",
+                        width="100%",
                     ),
                     rx.vstack(
                         rx.text("Notes", font_size="0.85rem", color="var(--color-muted)"),
-                        rx.text_area(name="form_notes",
-                                     value=PurchaseRuleConfigState.form_notes,
-                                     on_change=PurchaseRuleConfigState.set_form_notes,
-                                     placeholder="Optional notes",
-                                     width="100%", rows="2"),
-                        align="start", gap="0.25rem", width="100%",
+                        rx.text_area(
+                            name="form_notes",
+                            value=PurchaseRuleConfigState.form_notes,
+                            on_change=PurchaseRuleConfigState.set_form_notes,
+                            placeholder="Optional notes",
+                            width="100%",
+                            rows="2",
+                        ),
+                        align="start",
+                        gap="0.25rem",
+                        width="100%",
                     ),
                     rx.hstack(
                         primary_btn("Save", type="submit"),
-                        secondary_btn("Cancel",
-                                      on_click=PurchaseRuleConfigState.cancel_form,
-                                      type="button"),
+                        secondary_btn(
+                            "Cancel", on_click=PurchaseRuleConfigState.cancel_form, type="button"
+                        ),
                         gap="0.75rem",
                     ),
-                    gap="1rem", align="start", width="100%",
+                    gap="1rem",
+                    align="start",
+                    width="100%",
                 ),
                 on_submit=PurchaseRuleConfigState.save_rule,
                 reset_on_submit=False,
             ),
-            gap="0", align="start", width="100%",
+            gap="0",
+            align="start",
+            width="100%",
         ),
         is_open=PurchaseRuleConfigState.show_form,
         max_width="600px",
@@ -197,16 +253,17 @@ def _inline_form() -> rx.Component:
 
 def admin_config_purchase_rules() -> rx.Component:
     return admin_page(
-        rx.vstack(
-            nav_shell(),
-            rx.box(
+        app_shell(
+            rx.vstack(
                 rx.hstack(
-                    rx.heading("Purchase Procedure Rules", size="5",
-                               font_family="var(--font-sans)"),
+                    rx.heading(
+                        "Purchase Procedure Rules", size="5", font_family="var(--font-sans)"
+                    ),
                     rx.spacer(),
-                    primary_btn("+ Add Rule",
-                                on_click=PurchaseRuleConfigState.open_create),
-                    align="center", width="100%", margin_bottom="1rem",
+                    primary_btn("+ Add Rule", on_click=PurchaseRuleConfigState.open_create),
+                    align="center",
+                    width="100%",
+                    margin_bottom="1rem",
                 ),
                 config_toast(
                     PurchaseRuleConfigState.flash,
@@ -243,10 +300,9 @@ def admin_config_purchase_rules() -> rx.Component:
                     on_cancel=PurchaseRuleConfigState.cancel_confirm,
                     confirm_label="Deactivate",
                 ),
-                padding="2rem", max_width="1200px", width="100%",
+                align="start",
+                width="100%",
             ),
-            page_footer(),
-            align="start", width="100%", min_height="100vh",
-            background="var(--color-background, #f5f0eb)",
+            container="lg",
         )
     )

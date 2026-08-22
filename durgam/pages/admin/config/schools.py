@@ -4,12 +4,11 @@ import reflex as rx
 
 from durgam.pages.components import (
     admin_page,
-    nav_shell,
-    page_footer,
-    primary_btn,
-    secondary_btn,
+    app_shell,
     config_toast,
     form_modal,
+    primary_btn,
+    secondary_btn,
 )
 from durgam.pages.shared.confirmation_dialog import confirmation_dialog
 from durgam.pages.shared.data_table import TableColumn, data_table
@@ -93,7 +92,9 @@ def _inline_form() -> rx.Component:
                     ),
                     rx.hstack(
                         primary_btn("Save", type="submit"),
-                        secondary_btn("Cancel", on_click=SchoolConfigState.cancel_form, type="button"),
+                        secondary_btn(
+                            "Cancel", on_click=SchoolConfigState.cancel_form, type="button"
+                        ),
                         gap="0.75rem",
                     ),
                     gap="1rem",
@@ -113,9 +114,8 @@ def _inline_form() -> rx.Component:
 
 def admin_config_schools() -> rx.Component:
     return admin_page(
-        rx.vstack(
-            nav_shell(),
-            rx.box(
+        app_shell(
+            rx.vstack(
                 rx.hstack(
                     rx.heading("Schools", size="5", font_family="var(--font-sans)"),
                     rx.spacer(),
@@ -124,7 +124,11 @@ def admin_config_schools() -> rx.Component:
                     width="100%",
                     margin_bottom="1.5rem",
                 ),
-                config_toast(SchoolConfigState.flash, SchoolConfigState.flash_type, SchoolConfigState.dismiss_flash),
+                config_toast(
+                    SchoolConfigState.flash,
+                    SchoolConfigState.flash_type,
+                    SchoolConfigState.dismiss_flash,
+                ),
                 _inline_form(),
                 rx.cond(
                     SchoolConfigState.loading,
@@ -149,15 +153,10 @@ def admin_config_schools() -> rx.Component:
                     on_cancel=SchoolConfigState.cancel_confirm,
                     confirm_label="Deactivate",
                 ),
-                padding="2rem",
-                max_width="1200px",
+                align="start",
                 width="100%",
                 id="school-page-top",
             ),
-            page_footer(),
-            align="start",
-            width="100%",
-            min_height="100vh",
-            background="var(--color-background, #f5f0eb)",
+            container="lg",
         )
     )

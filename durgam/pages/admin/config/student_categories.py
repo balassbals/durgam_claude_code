@@ -4,9 +4,8 @@ import reflex as rx
 
 from durgam.pages.components import (
     admin_page,
+    app_shell,
     config_toast,
-    nav_shell,
-    page_footer,
     primary_btn,
 )
 from durgam.states.config_student_category import StudentCategoryConfigState
@@ -61,19 +60,22 @@ def _form() -> rx.Component:
         rx.vstack(
             rx.hstack(
                 _count_field(
-                    "SC Count", "sc_count",
+                    "SC Count",
+                    "sc_count",
                     StudentCategoryConfigState.sc_count,
                     StudentCategoryConfigState.set_sc_count,
                     disabled,
                 ),
                 _count_field(
-                    "ST Count", "st_count",
+                    "ST Count",
+                    "st_count",
                     StudentCategoryConfigState.st_count,
                     StudentCategoryConfigState.set_st_count,
                     disabled,
                 ),
                 _count_field(
-                    "OBC Count", "obc_count",
+                    "OBC Count",
+                    "obc_count",
                     StudentCategoryConfigState.obc_count,
                     StudentCategoryConfigState.set_obc_count,
                     disabled,
@@ -84,13 +86,15 @@ def _form() -> rx.Component:
             ),
             rx.hstack(
                 _count_field(
-                    "EWS Count", "ews_count",
+                    "EWS Count",
+                    "ews_count",
                     StudentCategoryConfigState.ews_count,
                     StudentCategoryConfigState.set_ews_count,
                     disabled,
                 ),
                 _count_field(
-                    "General Count", "general_count",
+                    "General Count",
+                    "general_count",
                     StudentCategoryConfigState.general_count,
                     StudentCategoryConfigState.set_general_count,
                     disabled,
@@ -134,9 +138,8 @@ def _form() -> rx.Component:
 
 def admin_config_student_categories() -> rx.Component:
     return admin_page(
-        rx.vstack(
-            nav_shell(),
-            rx.box(
+        app_shell(
+            rx.vstack(
                 rx.heading(
                     "Student Category Counts",
                     size="5",
@@ -155,15 +158,10 @@ def admin_config_student_categories() -> rx.Component:
                     rx.center(rx.spinner(), padding="2rem"),
                     _form(),
                 ),
-                padding="2rem",
-                max_width="800px",
+                align="start",
                 width="100%",
                 id="scc-page-top",
             ),
-            page_footer(),
-            align="start",
-            width="100%",
-            min_height="100vh",
-            background="var(--color-background, #f5f0eb)",
+            container="md",
         )
     )

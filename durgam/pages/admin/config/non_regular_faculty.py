@@ -4,18 +4,17 @@ import reflex as rx
 
 from durgam.pages.components import (
     admin_page,
+    app_shell,
     config_toast,
     form_modal,
-    nav_shell,
-    page_footer,
     primary_btn,
     secondary_btn,
 )
 from durgam.pages.shared.confirmation_dialog import confirmation_dialog
 from durgam.pages.shared.data_table import TableColumn, data_table
 from durgam.states.config_non_regular_faculty import (
-    NonRegularFacultyConfigState,
     _TYPE_OPTIONS,
+    NonRegularFacultyConfigState,
 )
 
 
@@ -78,9 +77,13 @@ def _kebab(row: dict) -> rx.Component:
                 rx.menu.item(
                     "Edit",
                     on_click=NonRegularFacultyConfigState.open_edit(  # type: ignore[call-arg, func-returns-value]
-                        row["id"], row["name"], row["designation"],
-                        row["organization"], row["expertise"],
-                        row["available_from"], row["available_to"],
+                        row["id"],
+                        row["name"],
+                        row["designation"],
+                        row["organization"],
+                        row["expertise"],
+                        row["available_from"],
+                        row["available_to"],
                         row["non_regular_type"],
                     ),
                 ),
@@ -127,8 +130,7 @@ def _renew_modal() -> rx.Component:
                         width="100%",
                     ),
                     rx.text(
-                        "Renewing increments the renewal count and extends the "
-                        "contract end date.",
+                        "Renewing increments the renewal count and extends the contract end date.",
                         font_size="0.75rem",
                         color="var(--color-muted)",
                     ),
@@ -161,8 +163,11 @@ def _dept_selector() -> rx.Component:
         rx.text("Department:", font_size="0.85rem", color="var(--color-muted)"),
         rx.cond(
             NonRegularFacultyConfigState.dept_locked,
-            rx.text(NonRegularFacultyConfigState.dept_name_display,
-                    font_weight="600", font_size="0.9rem"),
+            rx.text(
+                NonRegularFacultyConfigState.dept_name_display,
+                font_weight="600",
+                font_size="0.9rem",
+            ),
             rx.select.root(
                 rx.select.trigger(placeholder="Select department"),
                 rx.select.content(
@@ -215,7 +220,9 @@ def _inline_form() -> rx.Component:
                             on_change=NonRegularFacultyConfigState.set_form_type,
                             width="100%",
                         ),
-                        align="start", gap="0.25rem", width="100%",
+                        align="start",
+                        gap="0.25rem",
+                        width="100%",
                     ),
                     rx.vstack(
                         rx.text("Name *", font_size="0.85rem", color="var(--color-muted)"),
@@ -226,7 +233,9 @@ def _inline_form() -> rx.Component:
                             placeholder="Full name",
                             width="100%",
                         ),
-                        align="start", gap="0.25rem", width="100%",
+                        align="start",
+                        gap="0.25rem",
+                        width="100%",
                     ),
                     rx.vstack(
                         rx.text("Designation *", font_size="0.85rem", color="var(--color-muted)"),
@@ -237,7 +246,9 @@ def _inline_form() -> rx.Component:
                             placeholder="e.g. Professor",
                             width="100%",
                         ),
-                        align="start", gap="0.25rem", width="100%",
+                        align="start",
+                        gap="0.25rem",
+                        width="100%",
                     ),
                     rx.vstack(
                         rx.text("Organization *", font_size="0.85rem", color="var(--color-muted)"),
@@ -248,7 +259,9 @@ def _inline_form() -> rx.Component:
                             placeholder="e.g. IISc Bangalore",
                             width="100%",
                         ),
-                        align="start", gap="0.25rem", width="100%",
+                        align="start",
+                        gap="0.25rem",
+                        width="100%",
                     ),
                     rx.vstack(
                         rx.text("Expertise *", font_size="0.85rem", color="var(--color-muted)"),
@@ -259,10 +272,14 @@ def _inline_form() -> rx.Component:
                             placeholder="e.g. Quantum Physics",
                             width="100%",
                         ),
-                        align="start", gap="0.25rem", width="100%",
+                        align="start",
+                        gap="0.25rem",
+                        width="100%",
                     ),
                     rx.vstack(
-                        rx.text("Available From *", font_size="0.85rem", color="var(--color-muted)"),
+                        rx.text(
+                            "Available From *", font_size="0.85rem", color="var(--color-muted)"
+                        ),
                         rx.input(
                             name="form_available_from",
                             type="date",
@@ -270,7 +287,9 @@ def _inline_form() -> rx.Component:
                             on_change=NonRegularFacultyConfigState.set_form_available_from,
                             width="100%",
                         ),
-                        align="start", gap="0.25rem", width="100%",
+                        align="start",
+                        gap="0.25rem",
+                        width="100%",
                     ),
                     rx.vstack(
                         rx.text("Available To *", font_size="0.85rem", color="var(--color-muted)"),
@@ -281,7 +300,9 @@ def _inline_form() -> rx.Component:
                             on_change=NonRegularFacultyConfigState.set_form_available_to,
                             width="100%",
                         ),
-                        align="start", gap="0.25rem", width="100%",
+                        align="start",
+                        gap="0.25rem",
+                        width="100%",
                     ),
                     rx.hstack(
                         primary_btn("Save", type="submit"),
@@ -362,9 +383,8 @@ def _pending_approvals_section() -> rx.Component:
 
 def admin_config_non_regular_faculty() -> rx.Component:
     return admin_page(
-        rx.vstack(
-            nav_shell(),
-            rx.box(
+        app_shell(
+            rx.vstack(
                 rx.hstack(
                     rx.heading(
                         "Non-Regular Faculty",
@@ -423,14 +443,9 @@ def admin_config_non_regular_faculty() -> rx.Component:
                     on_cancel=NonRegularFacultyConfigState.cancel_confirm,
                     confirm_label="Deactivate",
                 ),
-                padding="2rem",
-                max_width="1200px",
+                align="start",
                 width="100%",
             ),
-            page_footer(),
-            align="start",
-            width="100%",
-            min_height="100vh",
-            background="var(--color-background, #f5f0eb)",
+            container="lg",
         )
     )

@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import reflex as rx
 
-from durgam.pages.components import admin_page, config_toast, nav_shell, page_footer
+from durgam.pages.components import admin_page, app_shell, config_toast
 from durgam.pages.shared.data_table import TableColumn, data_table
 from durgam.states.config_program import AdminProgramsState
-
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -39,6 +38,7 @@ def _outcome_section(
     rows: rx.Var,
 ) -> rx.Component:
     """Render one outcome section (PEOs / POs / PSOs)."""
+
     def make_row(item: rx.Var) -> rx.Component:
         return rx.hstack(
             rx.text(
@@ -149,7 +149,9 @@ def _field_row(label: str, value: rx.Var) -> rx.Component:
 
 def _tab_overview() -> rx.Component:
     return rx.vstack(
-        rx.heading("Program Details", size="4", font_family="var(--font-sans)", margin_bottom="1rem"),
+        rx.heading(
+            "Program Details", size="4", font_family="var(--font-sans)", margin_bottom="1rem"
+        ),
         _field_row("Code", AdminProgramsState.detail_code),
         _field_row("Name", AdminProgramsState.detail_name),
         _field_row("Degree Type", AdminProgramsState.detail_degree_type),
@@ -163,7 +165,9 @@ def _tab_overview() -> rx.Component:
 
 def _tab_outcomes() -> rx.Component:
     return rx.vstack(
-        rx.heading("Program Outcomes", size="4", font_family="var(--font-sans)", margin_bottom="1rem"),
+        rx.heading(
+            "Program Outcomes", size="4", font_family="var(--font-sans)", margin_bottom="1rem"
+        ),
         _outcome_section("Program Educational Objectives (PEOs)", AdminProgramsState.detail_peos),
         _outcome_section("Program Outcomes (POs)", AdminProgramsState.detail_pos),
         _outcome_section("Program Specific Outcomes (PSOs)", AdminProgramsState.detail_psos),
@@ -182,6 +186,7 @@ def _simple_table_two_col(
     col2_label: str,
 ) -> rx.Component:
     """Minimal two-column table for read-only sub-entity lists."""
+
     def make_row(item: rx.Var) -> rx.Component:
         return rx.table.row(
             rx.table.cell(rx.text(item[col1_key], font_size="0.875rem")),  # type: ignore[index]
@@ -224,6 +229,7 @@ def _simple_table_three_col(
     col3_label: str,
 ) -> rx.Component:
     """Minimal three-column table for read-only sub-entity lists."""
+
     def make_row(item: rx.Var) -> rx.Component:
         return rx.table.row(
             rx.table.cell(rx.text(item[col1_key], font_size="0.875rem")),  # type: ignore[index]
@@ -271,11 +277,19 @@ def _tab_regulations() -> rx.Component:
             AdminProgramsState.detail_regulations,
             _simple_table_three_col(
                 AdminProgramsState.detail_regulations,
-                "code", "Code",
-                "effective_from_year", "Effective From",
-                "description", "Description",
+                "code",
+                "Code",
+                "effective_from_year",
+                "Effective From",
+                "description",
+                "Description",
             ),
-            rx.text("No regulations recorded.", color="var(--color-muted)", font_size="0.875rem", font_style="italic"),
+            rx.text(
+                "No regulations recorded.",
+                color="var(--color-muted)",
+                font_size="0.875rem",
+                font_style="italic",
+            ),
         ),
         _m13_note("Rich management UI for Regulations ships at M13."),
         align="start",
@@ -309,7 +323,9 @@ def _tab_scheme() -> rx.Component:
         )
 
     return rx.vstack(
-        rx.heading("Scheme of Instruction", size="4", font_family="var(--font-sans)", margin_bottom="1rem"),
+        rx.heading(
+            "Scheme of Instruction", size="4", font_family="var(--font-sans)", margin_bottom="1rem"
+        ),
         rx.cond(
             AdminProgramsState.detail_schemes,
             rx.table.root(
@@ -323,7 +339,12 @@ def _tab_scheme() -> rx.Component:
                 rx.table.body(rx.foreach(AdminProgramsState.detail_schemes, make_row)),
                 width="100%",
             ),
-            rx.text("No scheme entries recorded.", color="var(--color-muted)", font_size="0.875rem", font_style="italic"),
+            rx.text(
+                "No scheme entries recorded.",
+                color="var(--color-muted)",
+                font_size="0.875rem",
+                font_style="italic",
+            ),
         ),
         _m13_note("Rich Scheme management UI ships at M13."),
         align="start",
@@ -334,15 +355,24 @@ def _tab_scheme() -> rx.Component:
 
 def _tab_specialisations() -> rx.Component:
     return rx.vstack(
-        rx.heading("Specialisations", size="4", font_family="var(--font-sans)", margin_bottom="1rem"),
+        rx.heading(
+            "Specialisations", size="4", font_family="var(--font-sans)", margin_bottom="1rem"
+        ),
         rx.cond(
             AdminProgramsState.detail_specialisations,
             _simple_table_two_col(
                 AdminProgramsState.detail_specialisations,
-                "code", "Code",
-                "name", "Name",
+                "code",
+                "Code",
+                "name",
+                "Name",
             ),
-            rx.text("No specialisations recorded.", color="var(--color-muted)", font_size="0.875rem", font_style="italic"),
+            rx.text(
+                "No specialisations recorded.",
+                color="var(--color-muted)",
+                font_size="0.875rem",
+                font_style="italic",
+            ),
         ),
         _m13_note("Rich management UI ships at M13."),
         align="start",
@@ -358,10 +388,17 @@ def _tab_exit_levels() -> rx.Component:
             AdminProgramsState.detail_exit_levels,
             _simple_table_two_col(
                 AdminProgramsState.detail_exit_levels,
-                "level_name", "Level",
-                "required_credits", "Required Credits",
+                "level_name",
+                "Level",
+                "required_credits",
+                "Required Credits",
             ),
-            rx.text("No exit levels recorded.", color="var(--color-muted)", font_size="0.875rem", font_style="italic"),
+            rx.text(
+                "No exit levels recorded.",
+                color="var(--color-muted)",
+                font_size="0.875rem",
+                font_style="italic",
+            ),
         ),
         _m13_note("Rich management UI ships at M13."),
         align="start",
@@ -391,7 +428,10 @@ def _detail_view() -> rx.Component:
                 font_family="var(--font-sans)",
             ),
             rx.text(
-                AdminProgramsState.detail_degree_type + " · " + AdminProgramsState.detail_duration_years + " years",
+                AdminProgramsState.detail_degree_type
+                + " · "
+                + AdminProgramsState.detail_duration_years
+                + " years",
                 color="var(--color-muted)",
                 font_size="0.9rem",
             ),
@@ -465,7 +505,11 @@ def _list_view() -> rx.Component:
             margin_bottom="1.5rem",
             font_family="var(--font-sans)",
         ),
-        config_toast(AdminProgramsState.flash, AdminProgramsState.flash_type, AdminProgramsState.dismiss_flash),
+        config_toast(
+            AdminProgramsState.flash,
+            AdminProgramsState.flash_type,
+            AdminProgramsState.dismiss_flash,
+        ),
         rx.cond(
             AdminProgramsState.loading,
             rx.center(rx.spinner(), padding="2rem"),
@@ -491,9 +535,8 @@ def _list_view() -> rx.Component:
 
 def admin_config_programs() -> rx.Component:
     return admin_page(
-        rx.vstack(
-            nav_shell(),
-            rx.box(
+        app_shell(
+            rx.vstack(
                 rx.link(
                     "← Configuration",
                     href="/admin/config",
@@ -509,14 +552,9 @@ def admin_config_programs() -> rx.Component:
                     _detail_view(),
                     _list_view(),
                 ),
-                padding="2rem",
-                max_width="1200px",
+                align="start",
                 width="100%",
             ),
-            page_footer(),
-            align="start",
-            width="100%",
-            min_height="100vh",
-            background="var(--color-background, #f5f0eb)",
+            container="lg",
         )
     )
