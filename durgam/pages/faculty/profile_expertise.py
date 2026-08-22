@@ -8,8 +8,8 @@ from __future__ import annotations
 import reflex as rx
 
 from durgam.pages.components import (
+    app_shell,
     form_modal,
-    nav_shell,
     primary_btn,
     secondary_btn,
 )
@@ -155,9 +155,7 @@ def _delete_confirm_dialog() -> rx.Component:
         is_open=FacultyExpertiseState.show_delete_confirm,
         title="Delete expertise record?",
         body=rx.vstack(
-            rx.text(
-                "This will remove the following expertise record. You can add it again later."
-            ),
+            rx.text("This will remove the following expertise record. You can add it again later."),
             rx.text(
                 FacultyExpertiseState.deleting_area,
                 font_weight="600",
@@ -193,10 +191,9 @@ def _no_faculty_record_message() -> rx.Component:
 def faculty_expertise_page() -> rx.Component:
     return rx.cond(
         AuthState.current_user_id != "",
-        rx.vstack(
-            rx.toast.provider(),
-            nav_shell(),
-            rx.box(
+        app_shell(
+            rx.fragment(
+                rx.toast.provider(),
                 rx.vstack(
                     rx.hstack(
                         rx.heading("My Expertise", size="6"),
@@ -238,13 +235,8 @@ def faculty_expertise_page() -> rx.Component:
                     spacing="4",
                     width="100%",
                 ),
-                padding="2rem",
-                max_width="1100px",
-                margin="0 auto",
-                width="100%",
             ),
-            align="start",
-            width="100%",
+            container="lg",
         ),
         rx.fragment(),
     )

@@ -8,8 +8,8 @@ from __future__ import annotations
 import reflex as rx
 
 from durgam.pages.components import (
+    app_shell,
     form_modal,
-    nav_shell,
     primary_btn,
     secondary_btn,
 )
@@ -248,10 +248,9 @@ def _no_faculty_record_message() -> rx.Component:
 def faculty_experience_page() -> rx.Component:
     return rx.cond(
         AuthState.current_user_id != "",
-        rx.vstack(
-            rx.toast.provider(),
-            nav_shell(),
-            rx.box(
+        app_shell(
+            rx.fragment(
+                rx.toast.provider(),
                 rx.vstack(
                     rx.hstack(
                         rx.heading("My Experience", size="6"),
@@ -293,13 +292,8 @@ def faculty_experience_page() -> rx.Component:
                     spacing="4",
                     width="100%",
                 ),
-                padding="2rem",
-                max_width="1100px",
-                margin="0 auto",
-                width="100%",
             ),
-            align="start",
-            width="100%",
+            container="lg",
         ),
         rx.fragment(),
     )

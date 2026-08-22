@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import reflex as rx
 
-from durgam.pages.components import admin_page, nav_shell, page_footer
+from durgam.pages.components import admin_page, app_shell
 from durgam.states.faculty_detail import FacultyDetailState
 
 
@@ -211,54 +211,45 @@ def _detail_body() -> rx.Component:
 
 
 def _content() -> rx.Component:
-    return rx.vstack(
-        nav_shell(),
-        rx.box(
-            rx.vstack(
-                rx.link(
-                    rx.hstack(
-                        rx.icon("arrow-left", size=16),
-                        rx.text("Back to Directory"),
-                        align="center",
-                        gap="0.4rem",
-                    ),
-                    href="/faculty",
-                    color="var(--color-primary)",
-                    font_size="0.85rem",
+    return app_shell(
+        rx.vstack(
+            rx.link(
+                rx.hstack(
+                    rx.icon("arrow-left", size=16),
+                    rx.text("Back to Directory"),
+                    align="center",
+                    gap="0.4rem",
                 ),
-                rx.cond(
-                    FacultyDetailState.loading,
-                    rx.center(rx.spinner(), padding="3rem"),
-                    rx.cond(
-                        FacultyDetailState.not_found,
-                        rx.box(
-                            rx.heading("Faculty not found", size="5"),
-                            rx.text(
-                                "No faculty record exists for this link.",
-                                color="var(--color-muted)",
-                                font_size="0.9rem",
-                            ),
-                            background="white",
-                            border="1px solid var(--color-rule)",
-                            border_radius="8px",
-                            padding="2rem",
-                            width="100%",
-                        ),
-                        _detail_body(),
-                    ),
-                ),
-                spacing="4",
-                width="100%",
-                align="start",
+                href="/faculty",
+                color="var(--color-primary)",
+                font_size="0.85rem",
             ),
-            padding="2rem",
-            max_width="900px",
-            margin="0 auto",
+            rx.cond(
+                FacultyDetailState.loading,
+                rx.center(rx.spinner(), padding="3rem"),
+                rx.cond(
+                    FacultyDetailState.not_found,
+                    rx.box(
+                        rx.heading("Faculty not found", size="5"),
+                        rx.text(
+                            "No faculty record exists for this link.",
+                            color="var(--color-muted)",
+                            font_size="0.9rem",
+                        ),
+                        background="white",
+                        border="1px solid var(--color-rule)",
+                        border_radius="8px",
+                        padding="2rem",
+                        width="100%",
+                    ),
+                    _detail_body(),
+                ),
+            ),
+            spacing="4",
             width="100%",
+            align="start",
         ),
-        page_footer(),
-        align="start",
-        width="100%",
+        container="md",
     )
 
 

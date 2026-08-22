@@ -55,7 +55,10 @@ def index() -> rx.Component:
             rx.fragment(
                 rx.cond(
                     BaseState.flash != "",
-                    rx.box(typed_flash(BaseState.flash, BaseState.flash_type), padding="0.5rem 1.5rem 0"),
+                    rx.box(
+                        typed_flash(BaseState.flash, BaseState.flash_type),
+                        padding="0.5rem 1.5rem 0",
+                    ),
                     rx.fragment(),
                 ),
                 rx.vstack(

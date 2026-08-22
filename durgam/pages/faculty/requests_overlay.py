@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import reflex as rx
 
-from durgam.pages.components import nav_shell, page_footer
+from durgam.pages.components import app_shell
 from durgam.states.auth import AuthState
 
 
@@ -40,47 +40,38 @@ def _tab_link(icon: str, label: str, sub: str, href: str) -> rx.Component:
 
 
 def _content() -> rx.Component:
-    return rx.vstack(
-        nav_shell(),
-        rx.box(
-            rx.vstack(
-                rx.heading("Faculty Requests", size="6", margin_bottom="0.25rem"),
-                rx.text(
-                    "Choose a view. Both open the standard approvals screens "
-                    "filtered to your faculty requests.",
-                    font_size="0.9rem",
-                    color="var(--color-muted)",
-                    margin_bottom="1rem",
-                ),
-                rx.hstack(
-                    _tab_link(
-                        "inbox",
-                        "My Requests",
-                        "Requests you have submitted",
-                        "/approvals/my-requests?type=faculty",
-                    ),
-                    _tab_link(
-                        "clipboard-check",
-                        "For my decision",
-                        "Requests awaiting your approval",
-                        "/approvals/inbox?type=faculty",
-                    ),
-                    gap="1.25rem",
-                    wrap="wrap",
-                    align="stretch",
-                ),
-                spacing="3",
-                width="100%",
-                align="start",
+    return app_shell(
+        rx.vstack(
+            rx.heading("Faculty Requests", size="6", margin_bottom="0.25rem"),
+            rx.text(
+                "Choose a view. Both open the standard approvals screens "
+                "filtered to your faculty requests.",
+                font_size="0.9rem",
+                color="var(--color-muted)",
+                margin_bottom="1rem",
             ),
-            padding="2rem",
-            max_width="900px",
-            margin="0 auto",
+            rx.hstack(
+                _tab_link(
+                    "inbox",
+                    "My Requests",
+                    "Requests you have submitted",
+                    "/approvals/my-requests?type=faculty",
+                ),
+                _tab_link(
+                    "clipboard-check",
+                    "For my decision",
+                    "Requests awaiting your approval",
+                    "/approvals/inbox?type=faculty",
+                ),
+                gap="1.25rem",
+                wrap="wrap",
+                align="stretch",
+            ),
+            spacing="3",
             width="100%",
+            align="start",
         ),
-        page_footer(),
-        align="start",
-        width="100%",
+        container="md",
     )
 
 

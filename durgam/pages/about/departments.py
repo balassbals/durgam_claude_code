@@ -31,7 +31,9 @@ def _dept_row(row: dict) -> rx.Component:
             rx.text(
                 rx.cond(row["has_vision"] == "Yes", "Vision configured", "Not yet configured"),
                 font_size="0.8rem",
-                color=rx.cond(row["has_vision"] == "Yes", "var(--color-success-border)", "var(--color-muted)"),
+                color=rx.cond(
+                    row["has_vision"] == "Yes", "var(--color-success-border)", "var(--color-muted)"
+                ),
                 font_family="var(--font-sans)",
             ),
             rx.link(

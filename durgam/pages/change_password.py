@@ -11,8 +11,13 @@ from durgam.states.base import BaseState
 def _password_rules_hint() -> rx.Component:
     """Password rules displayed below the new password field (Bug 2)."""
     return rx.box(
-        rx.text("New password must:", font_size="0.8rem", color="var(--color-muted)",
-                font_weight="500", margin_bottom="0.25rem"),
+        rx.text(
+            "New password must:",
+            font_size="0.8rem",
+            color="var(--color-muted)",
+            font_weight="500",
+            margin_bottom="0.25rem",
+        ),
         rx.vstack(
             *[
                 rx.hstack(

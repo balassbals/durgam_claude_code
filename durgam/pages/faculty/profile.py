@@ -12,8 +12,8 @@ from __future__ import annotations
 import reflex as rx
 
 from durgam.pages.components import (
+    app_shell,
     destructive_btn,
-    nav_shell,
     primary_btn,
 )
 from durgam.pages.shared.confirmation_dialog import confirmation_dialog
@@ -88,7 +88,11 @@ def _input_row(
     return rx.vstack(
         rx.hstack(
             rx.text(label, font_size="0.85rem", font_weight="600", color="var(--color-body)"),
-            rx.cond(required, rx.text("*", color="var(--color-destructive)", font_size="0.85rem"), rx.fragment()),
+            rx.cond(
+                required,
+                rx.text("*", color="var(--color-destructive)", font_size="0.85rem"),
+                rx.fragment(),
+            ),
             gap="0.25rem",
             align="center",
         ),
@@ -393,10 +397,9 @@ def _clear_phd_confirm_dialog() -> rx.Component:
 def faculty_profile_page() -> rx.Component:
     return rx.cond(
         AuthState.current_user_id != "",
-        rx.vstack(
-            rx.toast.provider(),
-            nav_shell(),
-            rx.box(
+        app_shell(
+            rx.fragment(
+                rx.toast.provider(),
                 rx.vstack(
                     rx.heading("My Profile", size="6", margin_bottom="0.5rem"),
                     rx.cond(
@@ -419,16 +422,9 @@ def faculty_profile_page() -> rx.Component:
                     ),
                     align="start",
                     width="100%",
-                    max_width="720px",
-                    margin="0 auto",
-                    padding="1.5rem 1rem",
                 ),
-                width="100%",
-                min_height="calc(100vh - 56px)",
-                background="var(--color-surface)",
             ),
-            spacing="0",
-            width="100%",
+            container="md",
         ),
         rx.fragment(),
     )
