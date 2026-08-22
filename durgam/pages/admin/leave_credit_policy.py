@@ -3,10 +3,9 @@
 import reflex as rx
 
 from durgam.pages.components import (
+    app_shell,
     config_toast,
     form_modal,
-    nav_shell,
-    page_footer,
     primary_btn,
     secondary_btn,
 )
@@ -15,10 +14,10 @@ from durgam.states.leave_credit_policy import LeaveCreditPolicyState
 
 
 _COLUMNS: list[TableColumn] = [
-    TableColumn(key="leave_type",               label="Leave Type"),
-    TableColumn(key="vacation_entitlement",     label="Vacation Entitlement (days)"),
+    TableColumn(key="leave_type", label="Leave Type"),
+    TableColumn(key="vacation_entitlement", label="Vacation Entitlement (days)"),
     TableColumn(key="non_vacation_entitlement", label="Non-Vacation Entitlement (days)"),
-    TableColumn(key="enabled_label",            label="Enabled"),
+    TableColumn(key="enabled_label", label="Enabled"),
 ]
 
 
@@ -34,8 +33,9 @@ def _edit_form() -> rx.Component:
                         value=LeaveCreditPolicyState.editing_id,
                     ),
                     rx.vstack(
-                        rx.text("Vacation Entitlement (days) *",
-                                font_size="0.85rem", font_weight="500"),
+                        rx.text(
+                            "Vacation Entitlement (days) *", font_size="0.85rem", font_weight="500"
+                        ),
                         rx.input(
                             name="form_vacation_entitlement",
                             placeholder="e.g. 10.0",
@@ -44,11 +44,16 @@ def _edit_form() -> rx.Component:
                             size="2",
                             width="100%",
                         ),
-                        gap="0.25rem", align="start", width="100%",
+                        gap="0.25rem",
+                        align="start",
+                        width="100%",
                     ),
                     rx.vstack(
-                        rx.text("Non-Vacation Entitlement (days) *",
-                                font_size="0.85rem", font_weight="500"),
+                        rx.text(
+                            "Non-Vacation Entitlement (days) *",
+                            font_size="0.85rem",
+                            font_weight="500",
+                        ),
                         rx.input(
                             name="form_non_vacation_entitlement",
                             placeholder="e.g. 12.0",
@@ -57,7 +62,9 @@ def _edit_form() -> rx.Component:
                             size="2",
                             width="100%",
                         ),
-                        gap="0.25rem", align="start", width="100%",
+                        gap="0.25rem",
+                        align="start",
+                        width="100%",
                     ),
                     rx.vstack(
                         rx.hstack(
@@ -94,13 +101,17 @@ def _edit_form() -> rx.Component:
                         justify="end",
                         width="100%",
                     ),
-                    gap="1rem", align="start", width="100%",
+                    gap="1rem",
+                    align="start",
+                    width="100%",
                 ),
                 on_submit=LeaveCreditPolicyState.save_policy,
                 reset_on_submit=False,
                 width="100%",
             ),
-            gap="1rem", align="start", width="100%",
+            gap="1rem",
+            align="start",
+            width="100%",
         ),
         is_open=LeaveCreditPolicyState.show_form,
     )
@@ -123,16 +134,37 @@ def _policies_table() -> rx.Component:
         rx.vstack(
             # Column header row
             rx.hstack(
-                rx.text("Leave Type", font_weight="600", font_size="0.8rem",
-                        color="var(--color-muted)", min_width="6rem"),
-                rx.text("Vacation Entitlement (days)", font_weight="600",
-                        font_size="0.8rem", color="var(--color-muted)", min_width="10rem"),
-                rx.text("Non-Vacation Entitlement (days)", font_weight="600",
-                        font_size="0.8rem", color="var(--color-muted)", min_width="12rem"),
-                rx.text("Enabled", font_weight="600", font_size="0.8rem",
-                        color="var(--color-muted)", min_width="5rem"),
-                rx.text("Actions", font_weight="600", font_size="0.8rem",
-                        color="var(--color-muted)"),
+                rx.text(
+                    "Leave Type",
+                    font_weight="600",
+                    font_size="0.8rem",
+                    color="var(--color-muted)",
+                    min_width="6rem",
+                ),
+                rx.text(
+                    "Vacation Entitlement (days)",
+                    font_weight="600",
+                    font_size="0.8rem",
+                    color="var(--color-muted)",
+                    min_width="10rem",
+                ),
+                rx.text(
+                    "Non-Vacation Entitlement (days)",
+                    font_weight="600",
+                    font_size="0.8rem",
+                    color="var(--color-muted)",
+                    min_width="12rem",
+                ),
+                rx.text(
+                    "Enabled",
+                    font_weight="600",
+                    font_size="0.8rem",
+                    color="var(--color-muted)",
+                    min_width="5rem",
+                ),
+                rx.text(
+                    "Actions", font_weight="600", font_size="0.8rem", color="var(--color-muted)"
+                ),
                 gap="1.5rem",
                 align="center",
                 padding="0.4rem 0.75rem",
@@ -142,10 +174,8 @@ def _policies_table() -> rx.Component:
                 LeaveCreditPolicyState.policies,
                 lambda item: rx.hstack(
                     rx.text(item["leave_type"], font_weight="600", min_width="6rem"),
-                    rx.text(item["vacation_entitlement"].to_string(),
-                            min_width="10rem"),
-                    rx.text(item["non_vacation_entitlement"].to_string(),
-                            min_width="12rem"),
+                    rx.text(item["vacation_entitlement"].to_string(), min_width="10rem"),
+                    rx.text(item["non_vacation_entitlement"].to_string(), min_width="12rem"),
                     rx.cond(
                         item["enabled"],
                         rx.badge("Yes", color_scheme="green"),
@@ -183,46 +213,38 @@ def _policies_table() -> rx.Component:
 def admin_leave_credit_policy() -> rx.Component:
     return rx.cond(
         LeaveCreditPolicyState.admin_authorized,
-        rx.vstack(
-            nav_shell(),
-            rx.box(
-                rx.vstack(
-                    rx.heading(
-                        "CL Credit Policy",
-                        size="6",
-                        font_family="var(--font-sans)",
-                        font_weight="700",
-                        color="var(--color-primary)",
-                    ),
-                    rx.text(
-                        "Credit policies control how the annual Casual Leave (CL) credit job runs."
-                        " Each row defines the entitlement (in days) credited on January 1 each year"
-                        " for a given leave type. Vacation entitlement applies to faculty during"
-                        " vacation periods; non-vacation entitlement applies during regular working"
-                        " terms. Disabled policies are skipped by the credit run.",
-                        font_size="0.9rem",
-                        color="var(--color-muted)",
-                        margin_y="0.5rem",
-                        max_width="800px",
-                    ),
-                    _policies_table(),
-                    _edit_form(),
-                    config_toast(
-                        LeaveCreditPolicyState.flash,
-                        LeaveCreditPolicyState.flash_type,
-                        LeaveCreditPolicyState.dismiss_flash,
-                    ),
-                    gap="1.5rem",
-                    align="start",
-                    width="100%",
-                    max_width="900px",
+        app_shell(
+            rx.vstack(
+                rx.heading(
+                    "CL Credit Policy",
+                    size="6",
+                    font_family="var(--font-sans)",
+                    font_weight="700",
+                    color="var(--color-primary)",
                 ),
-                padding="2rem",
+                rx.text(
+                    "Credit policies control how the annual Casual Leave (CL) credit job runs."
+                    " Each row defines the entitlement (in days) credited on January 1 each year"
+                    " for a given leave type. Vacation entitlement applies to faculty during"
+                    " vacation periods; non-vacation entitlement applies during regular working"
+                    " terms. Disabled policies are skipped by the credit run.",
+                    font_size="0.9rem",
+                    color="var(--color-muted)",
+                    margin_y="0.5rem",
+                    max_width="800px",
+                ),
+                _policies_table(),
+                _edit_form(),
+                config_toast(
+                    LeaveCreditPolicyState.flash,
+                    LeaveCreditPolicyState.flash_type,
+                    LeaveCreditPolicyState.dismiss_flash,
+                ),
+                gap="1.5rem",
+                align="start",
                 width="100%",
             ),
-            align="start",
-            width="100%",
-            min_height="100vh",
+            container="md",
         ),
         rx.fragment(),
     )

@@ -3,9 +3,9 @@
 import reflex as rx
 
 from durgam.pages.components import (
+    app_shell,
     config_toast,
     form_modal,
-    nav_shell,
     primary_btn,
     secondary_btn,
 )
@@ -33,6 +33,7 @@ _TD_STYLE = {
 
 
 # ── Filter bar ───────────────────────────────────────────────────────
+
 
 def _filter_bar() -> rx.Component:
     return rx.hstack(
@@ -83,6 +84,7 @@ def _filter_bar() -> rx.Component:
 
 
 # ── Results table ────────────────────────────────────────────────────
+
 
 def _results_table() -> rx.Component:
     return rx.cond(
@@ -159,7 +161,9 @@ def _balance_row(row: rx.Var) -> rx.Component:
         rx.table.cell(rx.text(row["availed"].to_string(), font_size="0.82rem"), **_TD_STYLE),  # type: ignore[attr-defined]
         rx.table.cell(rx.text(row["forfeited"].to_string(), font_size="0.82rem"), **_TD_STYLE),  # type: ignore[attr-defined]
         rx.table.cell(rx.text(row["encashed"].to_string(), font_size="0.82rem"), **_TD_STYLE),  # type: ignore[attr-defined]
-        rx.table.cell(rx.text(row["closing"].to_string(), font_size="0.82rem", font_weight="600"), **_TD_STYLE),  # type: ignore[attr-defined]
+        rx.table.cell(
+            rx.text(row["closing"].to_string(), font_size="0.82rem", font_weight="600"), **_TD_STYLE
+        ),  # type: ignore[attr-defined]
         rx.table.cell(
             rx.button(
                 "Edit",
@@ -185,6 +189,7 @@ def _balance_row(row: rx.Var) -> rx.Component:
 
 
 # ── Edit modal ───────────────────────────────────────────────────────
+
 
 def _num_field(label: str, name: str, value: rx.Var, on_change) -> rx.Component:
     return rx.vstack(
@@ -226,11 +231,36 @@ def _edit_modal() -> rx.Component:
         ),
         rx.form(
             rx.grid(
-                _num_field("Opening Balance", "f_opening", LeaveBalanceAdminState.edit_opening, LeaveBalanceAdminState.set_edit_opening),
-                _num_field("Credited", "f_credited", LeaveBalanceAdminState.edit_credited, LeaveBalanceAdminState.set_edit_credited),
-                _num_field("Availed", "f_availed", LeaveBalanceAdminState.edit_availed, LeaveBalanceAdminState.set_edit_availed),
-                _num_field("Forfeited", "f_forfeited", LeaveBalanceAdminState.edit_forfeited, LeaveBalanceAdminState.set_edit_forfeited),
-                _num_field("Encashed", "f_encashed", LeaveBalanceAdminState.edit_encashed, LeaveBalanceAdminState.set_edit_encashed),
+                _num_field(
+                    "Opening Balance",
+                    "f_opening",
+                    LeaveBalanceAdminState.edit_opening,
+                    LeaveBalanceAdminState.set_edit_opening,
+                ),
+                _num_field(
+                    "Credited",
+                    "f_credited",
+                    LeaveBalanceAdminState.edit_credited,
+                    LeaveBalanceAdminState.set_edit_credited,
+                ),
+                _num_field(
+                    "Availed",
+                    "f_availed",
+                    LeaveBalanceAdminState.edit_availed,
+                    LeaveBalanceAdminState.set_edit_availed,
+                ),
+                _num_field(
+                    "Forfeited",
+                    "f_forfeited",
+                    LeaveBalanceAdminState.edit_forfeited,
+                    LeaveBalanceAdminState.set_edit_forfeited,
+                ),
+                _num_field(
+                    "Encashed",
+                    "f_encashed",
+                    LeaveBalanceAdminState.edit_encashed,
+                    LeaveBalanceAdminState.set_edit_encashed,
+                ),
                 columns="2",
                 gap="0.75rem",
                 width="100%",
@@ -253,7 +283,9 @@ def _edit_modal() -> rx.Component:
                 margin_bottom="1rem",
             ),
             rx.hstack(
-                secondary_btn("Cancel", on_click=LeaveBalanceAdminState.close_edit_modal, type="button"),
+                secondary_btn(
+                    "Cancel", on_click=LeaveBalanceAdminState.close_edit_modal, type="button"
+                ),
                 primary_btn(
                     "Save Changes",
                     type="submit",
@@ -281,10 +313,10 @@ def _edit_modal() -> rx.Component:
 
 # ── Page root ────────────────────────────────────────────────────────
 
+
 def admin_leave_balance_edit() -> rx.Component:
-    content = rx.vstack(
-        nav_shell(),
-        rx.box(
+    content = app_shell(
+        rx.vstack(
             rx.hstack(
                 rx.heading(
                     "Leave Balance Admin",
@@ -304,14 +336,10 @@ def admin_leave_balance_edit() -> rx.Component:
             _filter_bar(),
             _results_table(),
             _edit_modal(),
-            padding="2rem",
-            max_width="1200px",
+            align="start",
             width="100%",
         ),
-        align="start",
-        width="100%",
-        min_height="100vh",
-        background="var(--color-background, #f5f0eb)",
+        container="lg",
     )
 
     return rx.cond(

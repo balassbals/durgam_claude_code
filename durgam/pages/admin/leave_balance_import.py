@@ -3,9 +3,9 @@
 import reflex as rx
 
 from durgam.pages.components import (
+    app_shell,
     config_toast,
     form_modal,
-    nav_shell,
     primary_btn,
     secondary_btn,
 )
@@ -47,8 +47,11 @@ def _ay_banner() -> rx.Component:
                 ),
                 rx.text(
                     rx.text.span("(ID: ", color="var(--color-muted)"),
-                    rx.text.span(LeaveBalanceImportState.resolved_ay_id,
-                                 color="var(--color-muted)", font_size="0.75rem"),
+                    rx.text.span(
+                        LeaveBalanceImportState.resolved_ay_id,
+                        color="var(--color-muted)",
+                        font_size="0.75rem",
+                    ),
                     rx.text.span(")", color="var(--color-muted)"),
                     font_size="0.75rem",
                 ),
@@ -66,8 +69,7 @@ def _ay_banner() -> rx.Component:
             rx.hstack(
                 rx.text("⚠", font_size="1.1rem", color="var(--color-warning-border)"),
                 rx.text(
-                    "No unlocked academic year found. "
-                    "Create or unlock an AY before importing.",
+                    "No unlocked academic year found. Create or unlock an AY before importing.",
                     font_size="0.875rem",
                     color="var(--color-warning-border)",
                 ),
@@ -135,8 +137,7 @@ def _preview_valid_table() -> rx.Component:
         rx.vstack(
             rx.hstack(
                 rx.badge(
-                    LeaveBalanceImportState.preview_valid.length().to_string()
-                    + " valid row(s)",
+                    LeaveBalanceImportState.preview_valid.length().to_string() + " valid row(s)",
                     color_scheme="green",
                 ),
                 padding_bottom="0.25rem",
@@ -397,87 +398,71 @@ def _single_form_modal() -> rx.Component:
 def admin_leave_balance_import() -> rx.Component:
     return rx.cond(
         LeaveBalanceImportState.admin_authorized,
-        rx.vstack(
-            nav_shell(),
-            rx.box(
-                rx.vstack(
-                    rx.heading(
-                        "Leave Balance Import",
-                        size="6",
-                        font_family="var(--font-sans)",
-                        font_weight="700",
-                        color="var(--color-primary)",
-                    ),
-                    rx.text(
-                        "Import legacy leave balances from a CSV file, or enter records manually.",
-                        font_size="0.9rem",
-                        color="var(--color-muted)",
-                    ),
-
-                    # AY status banner
-                    _ay_banner(),
-
-                    # ── CSV Bulk Import section ────────────────────────────────
-                    rx.heading(
-                        "CSV Bulk Import",
-                        size="4",
-                        font_family="var(--font-sans)",
-                        font_weight="600",
-                        margin_top="0.5rem",
-                    ),
-                    rx.text(
-                        "Upload a 7-column CSV: employee_username, leave_type, "
-                        "opening_balance, credited, availed, forfeited, encashed.",
-                        font_size="0.85rem",
-                        color="var(--color-muted)",
-                    ),
-
-                    file_upload_zone(
-                        on_drop=LeaveBalanceImportState.upload_csv,
-                        accept={"text/csv": [".csv"], "application/vnd.ms-excel": [".csv"]},
-                        label="Drag & drop CSV file here, or click to browse",
-                    ),
-
-                    _preview_area(),
-                    _import_complete_banner(),
-
-                    # ── Per-employee section ───────────────────────────────────
-                    rx.divider(margin_y="0.5rem"),
-                    rx.heading(
-                        "Per-Employee Entry",
-                        size="4",
-                        font_family="var(--font-sans)",
-                        font_weight="600",
-                    ),
-                    rx.text(
-                        "Set or update a single employee's leave balance for the active AY.",
-                        font_size="0.85rem",
-                        color="var(--color-muted)",
-                    ),
-                    primary_btn(
-                        "+ Add / Update Balance",
-                        on_click=LeaveBalanceImportState.open_single_form,
-                    ),
-
-                    _single_form_modal(),
-
-                    config_toast(
-                        LeaveBalanceImportState.flash,
-                        LeaveBalanceImportState.flash_type,
-                        LeaveBalanceImportState.dismiss_flash,
-                    ),
-
-                    gap="1rem",
-                    align="start",
-                    width="100%",
-                    max_width="960px",
+        app_shell(
+            rx.vstack(
+                rx.heading(
+                    "Leave Balance Import",
+                    size="6",
+                    font_family="var(--font-sans)",
+                    font_weight="700",
+                    color="var(--color-primary)",
                 ),
-                padding="2rem",
+                rx.text(
+                    "Import legacy leave balances from a CSV file, or enter records manually.",
+                    font_size="0.9rem",
+                    color="var(--color-muted)",
+                ),
+                # AY status banner
+                _ay_banner(),
+                # ── CSV Bulk Import section ────────────────────────────────
+                rx.heading(
+                    "CSV Bulk Import",
+                    size="4",
+                    font_family="var(--font-sans)",
+                    font_weight="600",
+                    margin_top="0.5rem",
+                ),
+                rx.text(
+                    "Upload a 7-column CSV: employee_username, leave_type, "
+                    "opening_balance, credited, availed, forfeited, encashed.",
+                    font_size="0.85rem",
+                    color="var(--color-muted)",
+                ),
+                file_upload_zone(
+                    on_drop=LeaveBalanceImportState.upload_csv,
+                    accept={"text/csv": [".csv"], "application/vnd.ms-excel": [".csv"]},
+                    label="Drag & drop CSV file here, or click to browse",
+                ),
+                _preview_area(),
+                _import_complete_banner(),
+                # ── Per-employee section ───────────────────────────────────
+                rx.divider(margin_y="0.5rem"),
+                rx.heading(
+                    "Per-Employee Entry",
+                    size="4",
+                    font_family="var(--font-sans)",
+                    font_weight="600",
+                ),
+                rx.text(
+                    "Set or update a single employee's leave balance for the active AY.",
+                    font_size="0.85rem",
+                    color="var(--color-muted)",
+                ),
+                primary_btn(
+                    "+ Add / Update Balance",
+                    on_click=LeaveBalanceImportState.open_single_form,
+                ),
+                _single_form_modal(),
+                config_toast(
+                    LeaveBalanceImportState.flash,
+                    LeaveBalanceImportState.flash_type,
+                    LeaveBalanceImportState.dismiss_flash,
+                ),
+                gap="1rem",
+                align="start",
                 width="100%",
             ),
-            align="start",
-            width="100%",
-            min_height="100vh",
+            container="md",
         ),
         rx.fragment(),
     )

@@ -3,9 +3,8 @@
 import reflex as rx
 
 from durgam.pages.components import (
+    app_shell,
     config_toast,
-    nav_shell,
-    page_footer,
     primary_btn,
     secondary_btn,
 )
@@ -14,9 +13,9 @@ from durgam.states.auth import AuthState
 from durgam.states.leave_admin import LateAttendanceAdminState
 
 _COLUMNS: list[TableColumn] = [
-    TableColumn(key="employee",    label="Employee"),
+    TableColumn(key="employee", label="Employee"),
     TableColumn(key="occurred_on", label="Date"),
-    TableColumn(key="notes",       label="Notes",       hidden_on_card=True),
+    TableColumn(key="notes", label="Notes", hidden_on_card=True),
     TableColumn(key="recorded_at", label="Recorded On", hidden_on_card=True),
 ]
 
@@ -137,9 +136,8 @@ def _filter_bar() -> rx.Component:
 
 
 def admin_late_attendance() -> rx.Component:
-    page_content = rx.vstack(
-        nav_shell(),
-        rx.box(
+    page_content = app_shell(
+        rx.vstack(
             rx.heading(
                 "Late Attendance Markers",
                 size="5",
@@ -182,15 +180,10 @@ def admin_late_attendance() -> rx.Component:
                 width="100%",
                 flex_wrap="wrap",
             ),
-            padding="2rem",
-            max_width="1200px",
+            align="start",
             width="100%",
         ),
-        page_footer(),
-        align="start",
-        width="100%",
-        min_height="100vh",
-        background="var(--color-background, #f5f0eb)",
+        container="lg",
     )
 
     return rx.cond(
